@@ -9,7 +9,7 @@ This repository currently contains the first executable SwiftUI foundation:
 - `agentLLMAPI` client for OpenAI-compatible chat completions.
 - Orchestrator that composes system prompt + memory context + active work state.
 - Plugin manifest registry with built-in workspace, AgentLLM media, and vibe-plugin creator capabilities.
-- `SOUL.md` / `INFINITI.md` prompt loading inspired by Infiniti Agent.
+- `SOUL.md` / `INFINITI.md` prompt loading inspired by Infiniti Agent, with bundled defaults for fresh workspaces.
 
 The current product/technical architecture diagram lives in [`docs/her-desktop-architecture.md`](docs/her-desktop-architecture.md).
 
@@ -107,6 +107,7 @@ Plugins live under `.her/plugins/<plugin-id>/plugin.json` by default.
 Built-in extensions use the same manifest shape and are bundled from `Sources/HerDesktop/Resources/BuiltinPlugins/*.plugin.json`.
 Built-in skill resources, such as `workspace-plan.SKILL.md` and `partner-brief.SKILL.md`, live in `Sources/HerDesktop/Resources/` and are read through the same `skillFile` adapter contract as installed plugins.
 Native built-ins that still need AppViewModel state, such as `reflection.snapshot`, also enter through a manifest-declared capability so UI actions, model tool calls, approval policy, audit logs, and future local plugins keep one mental model.
+Prompt defaults are bundled from `Sources/HerDesktop/Resources/SOUL.md` and `Sources/HerDesktop/Resources/INFINITI.md`; workspace-local `SOUL.md`, `AGENTS.md`, `AGENT.md`, `INFINITI.md`, `CLAUDE.md`, or `.claude/CLAUDE.md` still override them.
 
 When adding a new built-in extension, keep it plugin-first:
 

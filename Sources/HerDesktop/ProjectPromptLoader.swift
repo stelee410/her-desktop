@@ -11,13 +11,13 @@ enum ProjectPromptLoader {
             cwd.appendingPathComponent("SOUL.md"),
             cwd.appendingPathComponent("AGENTS.md"),
             cwd.appendingPathComponent("AGENT.md")
-        ]) ?? fallbackSoul
+        ] + bundledResources(named: "SOUL", extension: "md")) ?? fallbackSoul
 
         let project = firstReadable([
             cwd.appendingPathComponent("INFINITI.md"),
             cwd.appendingPathComponent("CLAUDE.md"),
             cwd.appendingPathComponent(".claude/CLAUDE.md")
-        ]) ?? ""
+        ] + bundledResources(named: "INFINITI", extension: "md")) ?? ""
 
         return ProjectPromptDocs(soul: soul, project: project)
     }
@@ -30,6 +30,11 @@ enum ProjectPromptLoader {
             }
         }
         return nil
+    }
+
+    private static func bundledResources(named name: String, extension ext: String) -> [URL] {
+        guard let url = Bundle.module.url(forResource: name, withExtension: ext) else { return [] }
+        return [url]
     }
 
     private static let fallbackSoul = """
