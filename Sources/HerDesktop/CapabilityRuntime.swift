@@ -1247,11 +1247,18 @@ final class CapabilityExecutor {
                     ]
                 )
             }
+            let taskStatus = try? await agentMemClient.waitForTaskStatus(
+                taskID: response.taskID,
+                maxAttempts: 2,
+                delayNanoseconds: 500_000_000
+            )
             return CapabilityResult(
                 title: "AgentMem Add Result",
                 content: """
                 status: \(response.status)
                 task_id: \(response.taskID)
+                task_status: \(taskStatus?.status ?? "unverified")
+                task_type: \(taskStatus?.taskType ?? "unknown")
                 source: \(source)
                 mode: \(mode)
                 user_input_characters: \(userInput.count)

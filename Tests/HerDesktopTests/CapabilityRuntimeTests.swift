@@ -2225,6 +2225,12 @@ final class CapabilityRuntimeTests: XCTestCase {
         let userInput = "User wants concise implementation reviews."
         let agentResponse = "Save as a working preference."
         let session = mockSession { request in
+            if request.url?.path == "/v1/tasks/task_123" {
+                XCTAssertEqual(request.httpMethod, "GET")
+                XCTAssertEqual(request.value(forHTTPHeaderField: "X-Memory-API-Key"), "mem_test_key")
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                return (response, Data(#"{"task_id":"task_123","task_type":"memory_add","status":"succeeded","created_at":"2026-07-01T00:00:00Z","duration_ms":12.5}"#.utf8))
+            }
             XCTAssertEqual(request.httpMethod, "POST")
             XCTAssertEqual(request.url?.absoluteString, "https://agentmem.test/v1/memory/add")
             XCTAssertEqual(request.value(forHTTPHeaderField: "X-Memory-API-Key"), "mem_test_key")
@@ -2267,6 +2273,8 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(result.title, "AgentMem Add Result")
         XCTAssertTrue(result.content.contains("status: queued"))
         XCTAssertTrue(result.content.contains("task_id: task_123"))
+        XCTAssertTrue(result.content.contains("task_status: succeeded"))
+        XCTAssertTrue(result.content.contains("task_type: memory_add"))
         XCTAssertTrue(result.content.contains("user_input_characters: \(userInput.count)"))
         XCTAssertFalse(result.content.contains("mem_test_key"))
         XCTAssertFalse(result.requiresUserApproval)
@@ -2284,6 +2292,12 @@ final class CapabilityRuntimeTests: XCTestCase {
         config.userID = "user-test"
         let summary = "User prefers concise implementation reviews; unresolved work is the desktop AgentMem integration."
         let session = mockSession { request in
+            if request.url?.path == "/v1/tasks/task_summary" {
+                XCTAssertEqual(request.httpMethod, "GET")
+                XCTAssertEqual(request.value(forHTTPHeaderField: "X-Memory-API-Key"), "mem_test_key")
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                return (response, Data(#"{"task_id":"task_summary","task_type":"memory_add","status":"processing","created_at":"2026-07-01T00:00:00Z"}"#.utf8))
+            }
             XCTAssertEqual(request.httpMethod, "POST")
             XCTAssertEqual(request.url?.absoluteString, "https://agentmem.test/v1/memory/add")
             XCTAssertEqual(request.value(forHTTPHeaderField: "X-Memory-API-Key"), "mem_test_key")
@@ -2328,6 +2342,8 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(result.title, "AgentMem Add Result")
         XCTAssertTrue(result.content.contains("status: queued"))
         XCTAssertTrue(result.content.contains("task_id: task_summary"))
+        XCTAssertTrue(result.content.contains("task_status: processing"))
+        XCTAssertTrue(result.content.contains("task_type: memory_add"))
         XCTAssertTrue(result.content.contains("mode: summary"))
         XCTAssertTrue(result.content.contains("summary_characters: \(summary.count)"))
         XCTAssertFalse(result.content.contains("mem_test_key"))

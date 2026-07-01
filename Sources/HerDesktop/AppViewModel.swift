@@ -2828,6 +2828,15 @@ final class AppViewModel: ObservableObject {
                     "taskID": response.taskID
                 ]
             )
+            await auditAgentMemTaskStatus(
+                taskID: response.taskID,
+                eventType: "memory.writeback_task_status",
+                failureType: "memory.writeback_task_check_failed",
+                metadata: [
+                    "sessionID": sessionID,
+                    "mode": mode
+                ]
+            )
         } catch {
             audit(
                 type: "memory.writeback_failed",
@@ -2942,6 +2951,16 @@ final class AppViewModel: ObservableObject {
                     "functionName": invocation.functionName
                 ]
             )
+            await auditAgentMemTaskStatus(
+                taskID: response.taskID,
+                eventType: "memory.capability_writeback_task_status",
+                failureType: "memory.capability_writeback_task_check_failed",
+                metadata: [
+                    "sessionID": sessionID,
+                    "capabilityID": invocation.capabilityID,
+                    "functionName": invocation.functionName
+                ]
+            )
         } catch {
             audit(
                 type: "memory.capability_writeback_failed",
@@ -2951,6 +2970,37 @@ final class AppViewModel: ObservableObject {
                     "capabilityID": invocation.capabilityID,
                     "functionName": invocation.functionName
                 ]
+            )
+        }
+    }
+
+    private func auditAgentMemTaskStatus(
+        taskID: String,
+        eventType: String,
+        failureType: String,
+        metadata: [String: String]
+    ) async {
+        do {
+            let status = try await agentMem.waitForTaskStatus(taskID: taskID)
+            var statusMetadata = metadata
+            statusMetadata["taskID"] = status.taskID
+            statusMetadata["taskType"] = status.taskType
+            statusMetadata["taskStatus"] = status.status
+            if let durationMs = status.durationMs {
+                statusMetadata["durationMs"] = "\(durationMs)"
+            }
+            audit(
+                type: eventType,
+                summary: status.auditSummary,
+                metadata: statusMetadata
+            )
+        } catch {
+            var failureMetadata = metadata
+            failureMetadata["taskID"] = taskID
+            audit(
+                type: failureType,
+                summary: error.localizedDescription,
+                metadata: failureMetadata
             )
         }
     }

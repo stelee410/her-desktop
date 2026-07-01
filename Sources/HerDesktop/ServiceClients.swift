@@ -49,6 +49,45 @@ struct AgentMemAddResponse: Codable {
     }
 }
 
+struct AgentMemTaskStatus: Codable {
+    var taskID: String
+    var taskType: String
+    var status: String
+    var createdAt: String?
+    var startedAt: String?
+    var finishedAt: String?
+    var result: [String: JSONValue]?
+    var error: String?
+    var durationMs: Double?
+
+    var isTerminal: Bool {
+        status == "succeeded" || status == "failed"
+    }
+
+    var auditSummary: String {
+        var parts = ["AgentMem task \(status)"]
+        if let durationMs {
+            parts.append("\(durationMs)ms")
+        }
+        if let error, !error.isEmpty {
+            parts.append(SecretRedactor.redact(error))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case taskID = "task_id"
+        case taskType = "task_type"
+        case status
+        case createdAt = "created_at"
+        case startedAt = "started_at"
+        case finishedAt = "finished_at"
+        case result
+        case error
+        case durationMs = "duration_ms"
+    }
+}
+
 @MainActor
 final class AgentMemClient {
     private let config: HerAppConfig
@@ -122,6 +161,44 @@ final class AgentMemClient {
         )
     }
 
+    func taskStatus(taskID: String) async throws -> AgentMemTaskStatus {
+        guard config.hasMemKey else { throw ServiceError.missingAPIKey("AgentMem") }
+        return try await getJSON(
+            url: config.agentMemBaseURL.appending(path: "/v1/tasks/\(taskID)"),
+            headers: memoryHeaders()
+        )
+    }
+
+    func waitForTaskStatus(
+        taskID: String,
+        maxAttempts: Int = 6,
+        delayNanoseconds: UInt64 = 1_000_000_000
+    ) async throws -> AgentMemTaskStatus {
+        let attempts = max(maxAttempts, 1)
+        var lastStatus: AgentMemTaskStatus?
+        for attempt in 1...attempts {
+            let status = try await taskStatus(taskID: taskID)
+            lastStatus = status
+            if status.isTerminal {
+                return status
+            }
+            if attempt < attempts {
+                try await Task.sleep(nanoseconds: delayNanoseconds)
+            }
+        }
+        return lastStatus ?? AgentMemTaskStatus(
+            taskID: taskID,
+            taskType: "unknown",
+            status: "unknown",
+            createdAt: nil,
+            startedAt: nil,
+            finishedAt: nil,
+            result: nil,
+            error: nil,
+            durationMs: nil
+        )
+    }
+
     private func postJSON<T: Decodable>(url: URL, body: [String: Any], headers: [String: String]) async throws -> T {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -146,6 +223,19 @@ final class AgentMemClient {
         try validate(response: response, data: data)
         let object = try JSONSerialization.jsonObject(with: data)
         return object as? [String: Any] ?? [:]
+    }
+
+    private func getJSON<T: Decodable>(url: URL, headers: [String: String]) async throws -> T {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 12
+        headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
+        let (data, response) = try await data(for: request)
+        try validate(response: response, data: data)
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            throw ServiceError.decoding(error.localizedDescription)
+        }
     }
 
     private func data(for request: URLRequest, attempts: Int = 3) async throws -> (Data, URLResponse) {

@@ -115,6 +115,62 @@ final class AgentMemClientTests: XCTestCase {
         XCTAssertEqual(response.taskID, "task-summary")
     }
 
+    func testTaskStatusUsesMemoryKeyTaskEndpoint() async throws {
+        var config = HerAppConfig.empty
+        config.agentMemBaseURL = URL(string: "https://agentmem.test")!
+        config.agentMemAPIKey = "mem_test"
+
+        let session = mockSession { request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.url?.absoluteString, "https://agentmem.test/v1/tasks/task_123")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Memory-API-Key"), "mem_test")
+            XCTAssertNil(request.value(forHTTPHeaderField: "X-Agent-API-Key"))
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (
+                response,
+                Data(#"{"task_id":"task_123","task_type":"memory_add","status":"succeeded","created_at":"2026-07-01T00:00:00Z","started_at":"2026-07-01T00:00:01Z","finished_at":"2026-07-01T00:00:02Z","result":{"facts_added":2,"timings_ms":{"total_ms":42.5}},"duration_ms":1000.0}"#.utf8)
+            )
+        }
+        let client = AgentMemClient(config: config, session: session)
+
+        let status = try await client.taskStatus(taskID: "task_123")
+
+        XCTAssertEqual(status.taskID, "task_123")
+        XCTAssertEqual(status.taskType, "memory_add")
+        XCTAssertEqual(status.status, "succeeded")
+        XCTAssertEqual(status.durationMs, 1000.0)
+        XCTAssertEqual(status.result?["facts_added"], .number(2))
+        XCTAssertTrue(status.isTerminal)
+    }
+
+    func testWaitForTaskStatusPollsUntilTerminalStatus() async throws {
+        var config = HerAppConfig.empty
+        config.agentMemBaseURL = URL(string: "https://agentmem.test")!
+        config.agentMemAPIKey = "mem_test"
+
+        var attempt = 0
+        let session = mockSession { request in
+            attempt += 1
+            XCTAssertEqual(request.url?.path, "/v1/tasks/task_poll")
+            let status = attempt == 1 ? "processing" : "succeeded"
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (
+                response,
+                Data(#"{"task_id":"task_poll","task_type":"memory_add","status":"\#(status)","created_at":"2026-07-01T00:00:00Z"}"#.utf8)
+            )
+        }
+        let client = AgentMemClient(config: config, session: session)
+
+        let status = try await client.waitForTaskStatus(
+            taskID: "task_poll",
+            maxAttempts: 3,
+            delayNanoseconds: 1_000
+        )
+
+        XCTAssertEqual(status.status, "succeeded")
+        XCTAssertEqual(attempt, 2)
+    }
+
     func testQueryReadsKeyBoundMemoryContext() async throws {
         var config = HerAppConfig.empty
         config.agentMemBaseURL = URL(string: "https://agentmem.test")!

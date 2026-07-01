@@ -372,6 +372,9 @@ sequenceDiagram
         VM->>MEM: add(summary, session_id, metadata)
     end
     MEM-->>VM: queued async memory task
+    VM->>MEM: get task status(/v1/tasks/{task_id})
+    MEM-->>VM: task status/result metadata
+    VM->>APP: append memory task audit event
     VM-->>UI: concise answer + visible activity state
 ```
 

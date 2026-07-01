@@ -236,6 +236,11 @@ final class AppViewModelTests: XCTestCase {
                 let object = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
                 addBodies.append(object)
                 return (response, Data(#"{"status":"queued","task_id":"task-write"}"#.utf8))
+            case "/v1/tasks/task-write":
+                return (
+                    response,
+                    Data(#"{"task_id":"task-write","task_type":"memory_add","status":"succeeded","created_at":"2026-07-01T00:00:00Z","duration_ms":64.0}"#.utf8)
+                )
             default:
                 throw URLError(.badURL)
             }
@@ -272,6 +277,13 @@ final class AppViewModelTests: XCTestCase {
             event.type == "memory.writeback_succeeded"
                 && event.metadata["mode"] == "summary"
         })
+        try await waitUntil {
+            model.auditEvents.contains { event in
+                event.type == "memory.writeback_task_status"
+                    && event.metadata["taskStatus"] == "succeeded"
+                    && event.metadata["taskType"] == "memory_add"
+            }
+        }
     }
 
     func testSendIncludesQuickCaptureInboxInActiveWorkPrompt() async throws {
