@@ -80,6 +80,15 @@ private struct LaunchReadinessStrip: View {
 
             Spacer(minLength: 8)
 
+            Button {
+                perform(.runDiagnostics)
+            } label: {
+                Image(systemName: "stethoscope")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.mini)
+            .help("Run product diagnostics")
+
             ForEach(actions) { item in
                 if let action = item.action, let title = item.actionTitle {
                     Button(title) {

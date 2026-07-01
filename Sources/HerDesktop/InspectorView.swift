@@ -119,6 +119,16 @@ private struct ProductReadinessCard: View {
                     Spacer(minLength: 0)
                 }
 
+                Button {
+                    perform(.runDiagnostics)
+                } label: {
+                    Label("Diagnostics", systemImage: "stethoscope")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppTheme.coral)
+                .controlSize(.small)
+                .help("Run read-only product diagnostics")
+
                 VStack(spacing: 7) {
                     ForEach(summary.items) { item in
                         HStack(alignment: .top, spacing: 8) {

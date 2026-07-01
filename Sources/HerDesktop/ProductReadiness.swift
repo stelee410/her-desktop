@@ -15,6 +15,7 @@ enum ProductReadinessAction: String, Codable, Equatable {
     case openProjectsWorkspace
     case generateReflection
     case startInboxBridge
+    case runDiagnostics
 }
 
 struct ProductReadinessItem: Identifiable, Equatable {

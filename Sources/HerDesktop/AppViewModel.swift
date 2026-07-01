@@ -237,6 +237,10 @@ final class AppViewModel: ObservableObject {
         openDirectory(HerWorkspacePaths.pluginDirectory(config: config, cwd: runtimeCwd), eventType: "workspace.open_plugin_directory")
     }
 
+    func runProductDiagnostics() async {
+        await runCapability(capabilityID: "product.diagnostics", arguments: [:])
+    }
+
     var productReadinessSummary: ProductReadinessSummary {
         ProductReadinessBuilder.build(
             config: config,
@@ -269,6 +273,8 @@ final class AppViewModel: ObservableObject {
             generateReflectionSnapshot()
         case .startInboxBridge:
             startLocalInboxBridge()
+        case .runDiagnostics:
+            Task { await runProductDiagnostics() }
         }
     }
 

@@ -106,7 +106,7 @@ final class AppViewModelTests: XCTestCase {
             .appendingPathComponent("her-view-model-product-diagnostics-\(UUID().uuidString)", isDirectory: true)
         let model = AppViewModel(config: .empty, cwd: root.path)
 
-        await model.runCapability(capabilityID: "product.diagnostics", arguments: [:])
+        await model.runProductDiagnostics()
 
         XCTAssertTrue(model.pendingApprovals.isEmpty)
         let message = try XCTUnwrap(model.messages.last { $0.content.contains("Product Diagnostics") })
@@ -115,6 +115,18 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(message.content.contains("agentmem_memory_key_configured: false"))
         XCTAssertTrue(message.content.contains("builtin.product-diagnostics"))
         XCTAssertTrue(message.content.contains("secret_policy"))
+    }
+
+    func testProductReadinessDiagnosticsActionRunsDiagnosticsCapability() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-product-diagnostics-action-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(config: .empty, cwd: root.path)
+
+        model.performProductReadinessAction(.runDiagnostics)
+
+        let message = try await waitForMessage(containing: "Product Diagnostics", in: model)
+        XCTAssertTrue(message.content.contains("product_readiness: Setup Needed"))
+        XCTAssertTrue(model.pendingApprovals.isEmpty)
     }
 
     func testDictationUpdatesDraftAndStopsWithoutSending() async throws {
@@ -2668,6 +2680,17 @@ final class AppViewModelTests: XCTestCase {
             try await Task.sleep(nanoseconds: 25_000_000)
         }
         XCTFail("Timed out waiting for condition")
+    }
+
+    private func waitForMessage(
+        containing text: String,
+        in model: AppViewModel,
+        timeout: TimeInterval = 2
+    ) async throws -> ChatMessage {
+        try await waitUntil(timeout: timeout) {
+            model.messages.contains { $0.content.contains(text) }
+        }
+        return try XCTUnwrap(model.messages.last { $0.content.contains(text) })
     }
 
     private static func bodyData(from request: URLRequest) -> Data? {
