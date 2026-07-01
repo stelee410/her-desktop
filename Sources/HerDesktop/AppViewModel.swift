@@ -960,12 +960,14 @@ final class AppViewModel: ObservableObject {
         }
         do {
             let object = try await agentMem.relationship()
+            let emotion = try? await agentMem.emotion()
             let profile = AgentProfile.fromRelationshipPayload(object, fallbackUserID: config.userID)
             agentProfile = profile
-            memorySignal.relationshipSummary = profile.relationship
-            if profile.known {
-                memorySignal.moodLabel = "Familiar"
-            }
+            memorySignal = MemorySignal.fromAgentMemV7(
+                relationship: object,
+                emotion: emotion,
+                fallback: memorySignal
+            )
             rebuildRunningTasks()
         } catch {
             lastError = "Could not refresh AgentMem profile: \(error.localizedDescription)"
@@ -2260,11 +2262,9 @@ final class AppViewModel: ObservableObject {
         guard config.hasMemKey else { return "" }
         let response = try await agentMem.query(text, sessionID: sessionID)
         if let first = response.retrievedMemories.first {
-            memorySignal = MemorySignal(
-                trust: min(0.98, max(0.48, first.score)),
-                confidence: min(0.96, max(0.42, 0.68 + Double(response.retrievedMemories.count) * 0.03)),
-                moodLabel: "Grounded",
-                relationshipSummary: "\(response.retrievedMemories.count) memories nearby"
+            memorySignal = memorySignal.mergedWithRetrieval(
+                count: response.retrievedMemories.count,
+                firstScore: first.score
             )
         }
         return response.injectedContext

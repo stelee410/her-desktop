@@ -178,6 +178,31 @@ final class AgentMemClientTests: XCTestCase {
         XCTAssertEqual(response["stage"] as? String, "companion")
     }
 
+    func testEmotionUsesMemoryKeyBoundEmotionEndpoint() async throws {
+        var config = HerAppConfig.empty
+        config.agentMemBaseURL = URL(string: "https://agentmem.test")!
+        config.agentMemAPIKey = "mem_test"
+
+        let session = mockSession { request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(request.url?.path, "/v1/memory/emotion")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Memory-API-Key"), "mem_test")
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data(#"{"memory_id":"mem_123","mood":{"label":"焦虑警觉","mean_valence":-1.8,"mean_arousal":6.4},"state":{"current":"Anxiety","label":"焦虑"}}"#.utf8))
+        }
+        let client = AgentMemClient(config: config, session: session)
+
+        let response = try await client.emotion()
+
+        let mood = response["mood"] as? [String: Any]
+        XCTAssertEqual(mood?["label"] as? String, "焦虑警觉")
+    }
+
     func testAddFallsBackToScopedPayloadWhenDevAgentMemRequiresUserID() async throws {
         var config = HerAppConfig.empty
         config.agentMemBaseURL = URL(string: "https://agentmem.test")!

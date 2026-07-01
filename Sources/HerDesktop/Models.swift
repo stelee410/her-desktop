@@ -262,6 +262,116 @@ struct MemorySignal: Codable, Equatable {
         moodLabel: "Calm",
         relationshipSummary: "Warming up"
     )
+
+    static func fromAgentMemV7(
+        relationship: [String: Any],
+        emotion: [String: Any]?,
+        fallback: MemorySignal = .empty
+    ) -> MemorySignal {
+        let bond = relationship["bond"] as? [String: Any]
+        let trust = normalizedScore(doubleValue(bond?["trust"])) ?? fallback.trust
+        let familiarity = normalizedScore(doubleValue(bond?["familiarity"])) ?? fallback.confidence
+        let mood = emotionMoodLabel(emotion) ?? fallback.moodLabel
+        let summary = relationshipSummary(relationship: relationship, emotion: emotion)
+            ?? fallback.relationshipSummary
+        return MemorySignal(
+            trust: trust,
+            confidence: familiarity,
+            moodLabel: mood,
+            relationshipSummary: summary
+        )
+    }
+
+    func mergedWithRetrieval(count: Int, firstScore: Double) -> MemorySignal {
+        let memoryPrefix = "\(count) memories nearby"
+        let summary: String
+        if relationshipSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            summary = memoryPrefix
+        } else if relationshipSummary.contains(memoryPrefix) {
+            summary = relationshipSummary
+        } else {
+            summary = "\(memoryPrefix) · \(relationshipSummary)"
+        }
+        return MemorySignal(
+            trust: min(0.98, max(trust, max(0.48, firstScore))),
+            confidence: min(0.96, max(confidence, 0.68 + Double(count) * 0.03)),
+            moodLabel: moodLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Grounded" : moodLabel,
+            relationshipSummary: summary
+        )
+    }
+
+    private static func relationshipSummary(relationship: [String: Any], emotion: [String: Any]?) -> String? {
+        var pieces: [String] = []
+        if let stageLabel = stringValue(relationship["stage_label"]) {
+            pieces.append("relationship \(stageLabel)")
+        } else if let stage = stringValue(relationship["stage"]) {
+            pieces.append("relationship \(stage)")
+        }
+        if let bond = relationship["bond"] as? [String: Any],
+           let affection = doubleValue(bond["affection"]) {
+            pieces.append("affection \(formatScore(affection))/10")
+        }
+        if let mood = emotion?["mood"] as? [String: Any],
+           let label = stringValue(mood["label"]) {
+            var moodPiece = "recent mood \(label)"
+            if let valence = doubleValue(mood["mean_valence"]) {
+                moodPiece += " · valence \(formatScore(valence))"
+            }
+            if let arousal = doubleValue(mood["mean_arousal"]) {
+                moodPiece += " · arousal \(formatScore(arousal))"
+            }
+            pieces.append(moodPiece)
+        }
+        return pieces.isEmpty ? nil : pieces.joined(separator: " · ")
+    }
+
+    private static func emotionMoodLabel(_ emotion: [String: Any]?) -> String? {
+        guard let emotion else { return nil }
+        if let mood = emotion["mood"] as? [String: Any],
+           let label = stringValue(mood["label"]) {
+            return label
+        }
+        if let state = emotion["state"] as? [String: Any] {
+            return stringValue(state["label"]) ?? stringValue(state["current"])
+        }
+        return nil
+    }
+
+    private static func normalizedScore(_ raw: Double?) -> Double? {
+        guard let raw else { return nil }
+        if raw > 1 {
+            return min(1, max(0, raw / 10))
+        }
+        return min(1, max(0, raw))
+    }
+
+    private static func stringValue(_ raw: Any?) -> String? {
+        guard let raw else { return nil }
+        if let string = raw as? String {
+            let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        return String(describing: raw)
+    }
+
+    private static func doubleValue(_ raw: Any?) -> Double? {
+        switch raw {
+        case let double as Double:
+            return double
+        case let int as Int:
+            return Double(int)
+        case let number as NSNumber:
+            return number.doubleValue
+        case let string as String:
+            return Double(string)
+        default:
+            return nil
+        }
+    }
+
+    private static func formatScore(_ value: Double) -> String {
+        String(format: "%.2f", value)
+    }
 }
 
 struct AgentProfile: Codable, Equatable {

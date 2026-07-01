@@ -69,9 +69,9 @@ scripts/smoke-services.sh
 The helper uses the same config precedence as the app: `HER_CONFIG_PATH`, then
 the project-local config, then the Application Support config. Environment
 variables still win. It checks AgentLLM health, runs one chat completion, reads
-AgentMem identity, and performs an AgentMem V7 Memory-Key query. To also verify
-live AgentMem writeback, set `HER_SMOKE_WRITE_MEMORY=1`; the script sends a
-small smoke-test turn with a deterministic idempotency key.
+AgentMem identity, relationship, emotion, and performs an AgentMem V7 Memory-Key
+query. To also verify live AgentMem writeback, set `HER_SMOKE_WRITE_MEMORY=1`;
+the script sends a small smoke-test turn with a deterministic idempotency key.
 
 AgentMem V7 compatibility note: data-plane calls are routed by
 `X-Memory-API-Key`, so Her Desktop does not send `agent_code` or `user_id` to
@@ -170,7 +170,7 @@ Web service JSON responses that include image generation fields such as `data[].
 
 Conversation continuity is rooted in `.her/session.json`, which stores the local transcript and a stable `session_id` used for AgentMem query/add calls.
 Work continuity is rooted in `.her/workspace/work-plan.json`, which stores the current goal, ordered steps, risks, and verification checks. The built-in `workspace.plan` capability can update it from model tool calls or the Plugin Library; Projects shows it as Current Plan, Inspector uses it for Active Plan, Agent Loop uses it for the Plan phase, and Active Work State injects it as state data, not trusted instructions.
-AgentMem V7 requests are scoped by the Memory API key: query/add send only conversation fields such as `session_id`, `query`, `user_input`, and `agent_response`, while relationship refresh reads `/v1/memory/relationship`.
+AgentMem V7 requests are scoped by the Memory API key: query/add send only conversation fields such as `session_id`, `query`, `user_input`, and `agent_response`, while relationship and emotion refresh read `/v1/memory/relationship` and `/v1/memory/emotion`.
 The Memory workspace can generate a local reflection snapshot at `.her/dreams/prompt-context.json`; the same write path is exposed as the approved `reflection.snapshot` built-in plugin capability. Future turns load it as Dream Context so long-horizon objectives, recent insights, behavior guidance, open threads, and cautions survive without giving that compressed context instruction authority.
 User-attached files are copied under `.her/attachments/` and referenced from the transcript; UTF-8 text and selectable-text PDF attachments include a bounded preview in the model context, and image attachments include lightweight visual metadata such as dimensions, color model, alpha, and DPI when available. Video, audio, and other files are represented with reliable metadata until a media/plugin processor is invoked.
 Spoken replies can be enabled from the toolbar or configuration panel; this uses local macOS speech synthesis. The composer mic button uses local macOS speech recognition to fill draft text and does not auto-send. Explicit speech tool calls are also exposed as the approved `native.speak` plugin capability.

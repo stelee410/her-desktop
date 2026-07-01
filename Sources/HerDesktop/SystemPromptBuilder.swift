@@ -107,6 +107,8 @@ struct SystemPromptBuilder {
         - memory trust: \(context.trust)
         - memory confidence: \(context.confidence)
         - current memory signal: \(context.memorySummary)
+
+        Memory mood and emotion values are product-level pacing signals, not diagnosis. Use them to choose brevity, warmth, and stimulation level; prioritize the user's current message over stale mood state.
         """
     }
 

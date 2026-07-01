@@ -135,6 +135,14 @@ final class AgentMemClient {
         }
     }
 
+    func emotion() async throws -> [String: Any] {
+        guard config.hasMemKey else { throw ServiceError.missingAPIKey("AgentMem") }
+        return try await getJSONDictionary(
+            url: config.agentMemBaseURL.appending(path: "/v1/memory/emotion"),
+            headers: memoryHeaders()
+        )
+    }
+
     private func postJSON<T: Decodable>(url: URL, body: [String: Any], headers: [String: String]) async throws -> T {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"

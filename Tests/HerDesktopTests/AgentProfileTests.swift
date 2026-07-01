@@ -49,4 +49,43 @@ final class AgentProfileTests: XCTestCase {
         XCTAssertEqual(profile.relationship, "Stage: companion · trust 1.50 · familiarity 2.25 · affection 3.00")
         XCTAssertTrue(profile.known)
     }
+
+    func testBuildsMemorySignalFromAgentMemV7RelationshipAndEmotion() {
+        let signal = MemorySignal.fromAgentMemV7(
+            relationship: [
+                "memory_id": "mem_123",
+                "stage": "acquaintance",
+                "stage_label": "相识",
+                "bond": [
+                    "trust": 3.1,
+                    "familiarity": 5.6,
+                    "affection": 4.2
+                ]
+            ],
+            emotion: [
+                "mood": [
+                    "label": "焦虑警觉",
+                    "mean_valence": -1.8,
+                    "mean_arousal": 6.4
+                ],
+                "state": [
+                    "current": "Anxiety",
+                    "label": "焦虑"
+                ]
+            ]
+        )
+
+        XCTAssertEqual(signal.trust, 0.31, accuracy: 0.001)
+        XCTAssertEqual(signal.confidence, 0.56, accuracy: 0.001)
+        XCTAssertEqual(signal.moodLabel, "焦虑警觉")
+        XCTAssertEqual(
+            signal.relationshipSummary,
+            "relationship 相识 · affection 4.20/10 · recent mood 焦虑警觉 · valence -1.80 · arousal 6.40"
+        )
+
+        let merged = signal.mergedWithRetrieval(count: 2, firstScore: 0.82)
+        XCTAssertEqual(merged.trust, 0.82, accuracy: 0.001)
+        XCTAssertEqual(merged.moodLabel, "焦虑警觉")
+        XCTAssertTrue(merged.relationshipSummary.hasPrefix("2 memories nearby · relationship 相识"))
+    }
 }

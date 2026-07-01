@@ -179,6 +179,18 @@ curl_retry --http1.1 --connect-timeout 10 --max-time 30 --retry 3 --retry-all-er
   -H "X-Agent-API-Key: $HER_AGENT_MEM_API_KEY" \
   | python3 -c 'import json,sys; j=json.load(sys.stdin); print({"known": j.get("known"), "display_name": j.get("display_name"), "memory_id": j.get("memory_id")})'
 
+echo "AgentMem relationship"
+curl_retry --http1.1 --connect-timeout 10 --max-time 30 --retry 3 --retry-all-errors --retry-delay 1 -fsS "$MEM_BASE/v1/memory/relationship" \
+  -H "X-Memory-API-Key: $HER_AGENT_MEM_API_KEY" \
+  -H "X-Agent-API-Key: $HER_AGENT_MEM_API_KEY" \
+  | python3 -c 'import json,sys; j=json.load(sys.stdin); print({"memory_id": j.get("memory_id"), "stage": j.get("stage"), "stage_label": j.get("stage_label"), "bond": j.get("bond")})'
+
+echo "AgentMem emotion"
+curl_retry --http1.1 --connect-timeout 10 --max-time 30 --retry 3 --retry-all-errors --retry-delay 1 -fsS "$MEM_BASE/v1/memory/emotion" \
+  -H "X-Memory-API-Key: $HER_AGENT_MEM_API_KEY" \
+  -H "X-Agent-API-Key: $HER_AGENT_MEM_API_KEY" \
+  | python3 -c 'import json,sys; j=json.load(sys.stdin); print({"memory_id": j.get("memory_id"), "status": j.get("status"), "mood": j.get("mood"), "state": j.get("state")})'
+
 echo "AgentMem query"
 query_body_file="$(mktemp)"
 query_http_code="$(curl_retry --http1.1 --connect-timeout 10 --max-time 45 --retry 5 --retry-all-errors --retry-delay 2 -sS -o "$query_body_file" -w "%{http_code}" "$MEM_BASE/v1/memory/query" \

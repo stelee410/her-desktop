@@ -348,6 +348,8 @@ sequenceDiagram
     MEM-->>VM: injected_context + retrieved memories
     VM->>MEM: relationship() with X-Memory-API-Key
     MEM-->>VM: stage / bond / affection / profile signals
+    VM->>MEM: emotion() with X-Memory-API-Key
+    MEM-->>VM: recent mood / valence / arousal signals
     VM->>PB: build(SOUL, INFINITI, runtime, memory, plugins, companion state)
     VM->>LLM: chat.completions(messages, tools)
     alt model asks for a capability
