@@ -70,6 +70,32 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(catalog.tools.count, 1)
     }
 
+    func testCatalogDisambiguatesCollidingFunctionNames() {
+        let manifest = PluginManifest(
+            id: "local.collision",
+            name: "Collision",
+            version: "0.1.0",
+            description: "Collision plugin",
+            author: nil,
+            systemPromptAddendum: nil,
+            capabilities: [
+                .init(id: "local.same.run", title: "Run Dot", kind: "skill", invocation: "local.same.run", requiresApproval: false),
+                .init(id: "local_same_run", title: "Run Underscore", kind: "skill", invocation: "local_same_run", requiresApproval: false)
+            ]
+        )
+
+        let catalog = CapabilityToolCatalog.build(from: [manifest])
+        let names = catalog.tools.compactMap { tool in
+            (tool["function"] as? [String: Any])?["name"] as? String
+        }
+
+        XCTAssertEqual(names.count, 2)
+        XCTAssertEqual(Set(names).count, 2)
+        XCTAssertTrue(names.allSatisfy { $0.hasPrefix("local_same_run_") })
+        XCTAssertTrue(names.allSatisfy { $0.count <= 64 })
+        XCTAssertEqual(Set(catalog.functionToCapability.values), ["local.same.run", "local_same_run"])
+    }
+
     func testDraftPluginSchemaIncludesMCPToolName() {
         let manifest = PluginRegistry(config: .empty)
             .loadPlugins()

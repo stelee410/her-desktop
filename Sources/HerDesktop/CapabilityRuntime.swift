@@ -39,9 +39,18 @@ struct CapabilityToolCatalog {
     static func build(from manifests: [PluginManifest]) -> CapabilityToolCatalog {
         var tools: [[String: Any]] = []
         var mapping: [String: String] = [:]
+        var usedNames = Set<String>()
+        let capabilities = manifests.flatMap(\.capabilities)
+        let baseNameCounts = Dictionary(
+            grouping: capabilities,
+            by: { functionName(for: $0.id) }
+        ).mapValues(\.count)
 
-        for capability in manifests.flatMap(\.capabilities) {
-            let name = functionName(for: capability.id)
+        for capability in capabilities {
+            let baseName = functionName(for: capability.id)
+            let name = baseNameCounts[baseName, default: 0] > 1
+                ? uniqueFunctionName(baseName: baseName, capabilityID: capability.id, usedNames: &usedNames)
+                : uniqueFunctionName(baseName: baseName, capabilityID: nil, usedNames: &usedNames)
             mapping[name] = capability.id
             tools.append([
                 "type": "function",
@@ -61,7 +70,39 @@ struct CapabilityToolCatalog {
             with: "_",
             options: .regularExpression
         )
-        return String(sanitized.prefix(64))
+        let clipped = String(sanitized.prefix(64))
+        return clipped.isEmpty ? "capability" : clipped
+    }
+
+    private static func uniqueFunctionName(baseName: String, capabilityID: String?, usedNames: inout Set<String>) -> String {
+        let resolved: String
+        if let capabilityID {
+            let suffix = "_" + stableHexDigest(capabilityID).prefix(8)
+            let prefix = baseName.prefix(max(1, 64 - suffix.count))
+            resolved = "\(prefix)\(suffix)"
+        } else {
+            resolved = baseName
+        }
+
+        var candidate = String(resolved.prefix(64))
+        var counter = 2
+        while usedNames.contains(candidate) {
+            let suffix = "_\(counter)"
+            let prefix = resolved.prefix(max(1, 64 - suffix.count))
+            candidate = "\(prefix)\(suffix)"
+            counter += 1
+        }
+        usedNames.insert(candidate)
+        return candidate
+    }
+
+    private static func stableHexDigest(_ text: String) -> String {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in text.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return String(hash, radix: 16)
     }
 
     private static func defaultSchema(for capability: PluginManifest.Capability) -> [String: Any] {

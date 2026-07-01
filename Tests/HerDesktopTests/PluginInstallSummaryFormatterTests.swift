@@ -81,4 +81,32 @@ final class PluginInstallSummaryFormatterTests: XCTestCase {
         XCTAssertTrue(content.contains(#"local_freeform_run {"request":"<request>"}"#))
         XCTAssertTrue(content.contains("no approval"))
     }
+
+    func testContentUsesDisambiguatedFunctionNamesForCollidingCapabilities() {
+        let package = PluginPackage(
+            manifest: PluginManifest(
+                id: "local.collision",
+                name: "Collision",
+                version: "0.1.0",
+                description: "Collision helper.",
+                author: "Test",
+                systemPromptAddendum: nil,
+                capabilities: [
+                    .init(id: "local.same.run", title: "Run Dot", kind: "skill", invocation: "local.same.run", requiresApproval: false),
+                    .init(id: "local_same_run", title: "Run Underscore", kind: "skill", invocation: "local_same_run", requiresApproval: false)
+                ]
+            ),
+            files: []
+        )
+
+        let content = PluginInstallSummaryFormatter().content(package: package, source: "test")
+        let callableLines = content
+            .components(separatedBy: .newlines)
+            .filter { $0.hasPrefix("- local_same_run_") }
+
+        XCTAssertEqual(callableLines.count, 2)
+        XCTAssertEqual(Set(callableLines).count, 2)
+        XCTAssertTrue(content.contains("local.same.run as local_same_run_"))
+        XCTAssertTrue(content.contains("local_same_run as local_same_run_"))
+    }
 }

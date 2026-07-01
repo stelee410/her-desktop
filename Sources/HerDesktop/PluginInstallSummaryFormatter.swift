@@ -7,14 +7,20 @@ struct PluginInstallSummaryFormatter {
         title: String = "Plugin Installed",
         verb: String = "Installed"
     ) -> String {
+        let catalog = CapabilityToolCatalog.build(from: [package.manifest])
+        let functionNamesByCapabilityID = Dictionary(
+            uniqueKeysWithValues: catalog.functionToCapability.map { functionName, capabilityID in
+                (capabilityID, functionName)
+            }
+        )
         let capabilities = package.manifest.capabilities
-            .map(capabilityLine)
+            .map { capabilityLine($0, functionName: functionNamesByCapabilityID[$0.id] ?? CapabilityToolCatalog.functionName(for: $0.id)) }
             .joined(separator: "\n")
         let quickStart = package.manifest.capabilities
-            .map(quickStartLine)
+            .map { quickStartLine($0, functionName: functionNamesByCapabilityID[$0.id] ?? CapabilityToolCatalog.functionName(for: $0.id)) }
             .joined(separator: "\n")
         let toolArguments = package.manifest.capabilities
-            .map(toolArgumentLine)
+            .map { toolArgumentLine($0, functionName: functionNamesByCapabilityID[$0.id] ?? CapabilityToolCatalog.functionName(for: $0.id)) }
             .joined(separator: "\n")
 
         return """
@@ -34,21 +40,18 @@ struct PluginInstallSummaryFormatter {
         """
     }
 
-    private func capabilityLine(_ capability: PluginManifest.Capability) -> String {
-        let functionName = CapabilityToolCatalog.functionName(for: capability.id)
+    private func capabilityLine(_ capability: PluginManifest.Capability, functionName: String) -> String {
         let approval = capability.requiresApproval ? "approval required" : "no approval"
         let adapter = capability.adapter?.type ?? capability.kind
         return "- \(capability.title): \(capability.id) as \(functionName) [\(adapter), \(approval)]"
     }
 
-    private func quickStartLine(_ capability: PluginManifest.Capability) -> String {
-        let functionName = CapabilityToolCatalog.functionName(for: capability.id)
+    private func quickStartLine(_ capability: PluginManifest.Capability, functionName: String) -> String {
         let approval = capability.requiresApproval ? "approval required" : "no approval"
         return "- \(capability.title): run from Plugin Library or call \(functionName); inputs: \(inputSummary(for: capability)); \(approval)."
     }
 
-    private func toolArgumentLine(_ capability: PluginManifest.Capability) -> String {
-        let functionName = CapabilityToolCatalog.functionName(for: capability.id)
+    private func toolArgumentLine(_ capability: PluginManifest.Capability, functionName: String) -> String {
         return "- \(functionName) \(sampleArgumentsJSON(for: capability))"
     }
 
