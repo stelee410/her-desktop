@@ -144,9 +144,30 @@ private struct ToolbarView: View {
 
             Spacer()
 
-            ToolbarChip(icon: "waveform", title: "Voice", active: model.connectionState == .listening || model.connectionState == .speaking)
-            ToolbarChip(icon: "scope", title: "Focus")
-            ToolbarChip(icon: "shippingbox", title: "Tools")
+            ToolbarChip(
+                icon: "waveform",
+                title: model.connectionState == .listening ? "Listening" : "Voice",
+                active: model.connectionState == .listening || model.connectionState == .speaking,
+                help: "Start or stop voice input"
+            ) {
+                model.toggleDictation()
+            }
+            ToolbarChip(
+                icon: "scope",
+                title: "Focus",
+                active: model.selectedSection == .projects,
+                help: "Open projects and focus"
+            ) {
+                model.selectedSection = .projects
+            }
+            ToolbarChip(
+                icon: "shippingbox",
+                title: "Tools",
+                active: model.selectedSection == .tools,
+                help: "Open tools and plugins"
+            ) {
+                model.selectedSection = .tools
+            }
 
             Spacer()
 
@@ -184,14 +205,24 @@ private struct ToolbarChip: View {
     var icon: String
     var title: String
     var active: Bool = false
+    var help: String
+    var action: () -> Void
 
     var body: some View {
-        HStack(spacing: 7) {
-            Image(systemName: icon)
-            Text(title)
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: icon)
+                Text(title)
+            }
+            .font(.subheadline)
+            .foregroundStyle(active ? AppTheme.coral : AppTheme.ink)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(active ? AppTheme.coral.opacity(0.10) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-        .font(.subheadline)
-        .foregroundStyle(active ? AppTheme.coral : AppTheme.ink)
+        .buttonStyle(.plain)
+        .help(help)
     }
 }
 
