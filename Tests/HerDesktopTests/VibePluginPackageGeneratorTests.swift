@@ -64,6 +64,36 @@ final class VibePluginPackageGeneratorTests: XCTestCase {
         XCTAssertTrue(messages.last?.content?.contains("reusable research assistant extension") == true)
     }
 
+    func testRepairPromptIncludesValidationErrorAndInvalidResponse() {
+        let messages = VibePluginPackagePromptBuilder().repair(
+            request: VibePluginPackageRequest(
+                name: "Research Scout",
+                description: "Summarize a research source through MCP.",
+                kind: "mcp",
+                requiresApproval: true,
+                webServiceURL: "",
+                webServiceMethod: "POST",
+                mcpEndpointURL: "http://localhost:8765/jsonrpc",
+                mcpMethodName: "tools/call",
+                mcpToolName: "research.summarize",
+                mcpInputSchemaJSON: "",
+                commandPath: "",
+                commandArguments: "",
+                vibeBrief: "Repair this package from the dialog."
+            ),
+            existingPluginIDs: ["builtin.workspace"],
+            invalidResponse: #"{"manifest":{"id":"local.bad","capabilities":[]}}"#,
+            errorMessage: "Plugin package is missing manifest.capabilities."
+        )
+
+        XCTAssertEqual(messages.map(\.role), ["system", "user", "assistant", "user"])
+        XCTAssertTrue(messages[2].content?.contains(#""capabilities":[]"#) == true)
+        XCTAssertTrue(messages[3].content?.contains("could not be installed") == true)
+        XCTAssertTrue(messages[3].content?.contains("Plugin package is missing manifest.capabilities.") == true)
+        XCTAssertTrue(messages[3].content?.contains("Return only JSON") == true)
+        XCTAssertTrue(messages[3].content?.contains("Previous invalid response") == true)
+    }
+
     func testExtractorDecodesPlainPluginPackageJSON() throws {
         let package = try PluginPackageJSONExtractor().decodePackage(from: samplePackageJSON())
 

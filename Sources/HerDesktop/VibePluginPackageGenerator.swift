@@ -73,6 +73,18 @@ struct VibePluginPackagePromptBuilder {
         ]
     }
 
+    func repair(
+        request: VibePluginPackageRequest,
+        existingPluginIDs: [String],
+        invalidResponse: String,
+        errorMessage: String
+    ) -> [AgentLLMMessage] {
+        build(request: request, existingPluginIDs: existingPluginIDs) + [
+            .assistant(content: clipped(invalidResponse, limit: 12_000)),
+            .user(repairPrompt(errorMessage: errorMessage, invalidResponse: invalidResponse))
+        ]
+    }
+
     private func systemPrompt(existingPluginIDs: [String]) -> String {
         """
         You generate Her Desktop PluginPackage JSON.
@@ -171,6 +183,30 @@ struct VibePluginPackagePromptBuilder {
         Command argument templates, one per line if relevant:
         \(request.commandArguments)
         """
+    }
+
+    private func repairPrompt(errorMessage: String, invalidResponse: String) -> String {
+        """
+        The PluginPackage you just returned could not be installed by Her Desktop.
+
+        Validation/decode error:
+        \(errorMessage)
+
+        Return a corrected complete PluginPackage JSON object now. Requirements:
+        - Return only JSON, no Markdown or commentary.
+        - Preserve the user's requested extension intent.
+        - Fix the validation error directly instead of removing useful capability behavior.
+        - Keep plugin ids local.*, safe relative file paths, README.md, SKILL.md, inputSchema, and explicit adapter contracts.
+        - Do not include secrets or realistic secret-looking placeholders.
+
+        Previous invalid response for reference:
+        \(clipped(invalidResponse, limit: 12_000))
+        """
+    }
+
+    private func clipped(_ text: String, limit: Int) -> String {
+        if text.count <= limit { return text }
+        return String(text.prefix(limit)) + "\n...[truncated]"
     }
 }
 

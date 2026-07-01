@@ -53,7 +53,8 @@ flowchart TB
             mcp["MCP Adapter<br/>local JSON-RPC bridge<br/>tools/call + toolName"]
             mcpDiscovery["MCP Discovery<br/>tools/list -> composer choices"]
             command["Command Adapter<br/>fixed executable + fixed args"]
-            vibe["Vibe Plugin Creator<br/>draft, validate, review, install"]
+        vibe["Vibe Plugin Creator<br/>draft, validate, review, install"]
+        repair["Validation Repair Loop<br/>one AgentLLM correction pass"]
         end
     end
 
@@ -123,13 +124,13 @@ flowchart TB
     policy --> mcpDiscovery
     policy --> command
     policy --> vibe
+    vibe --> repair --> drafts
 
     websvc --> gateway
     mcpDiscovery --> mcp
     mcp --> inbox
     command --> files
     native --> activity
-    vibe --> drafts
     registry --> plugins
 
     vm --> session
@@ -172,7 +173,7 @@ flowchart TB
         tools2["LLM Tool Schema<br/>capability id -> function"]
         exec2["Capability Executor"]
         adapters["Adapters<br/>skill / native / webservice / MCP / command"]
-        composer["Vibe Plugin Composer<br/>discover, draft, validate, install"]
+        composer["Vibe Plugin Composer<br/>discover, draft, repair, validate, install"]
     end
 
     subgraph L4["Layer 4 - Local Persistence"]

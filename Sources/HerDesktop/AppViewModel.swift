@@ -1104,19 +1104,32 @@ final class AppViewModel: ObservableObject {
             commandArguments: commandArguments,
             vibeBrief: vibeBrief
         )
-        let llmMessages = VibePluginPackagePromptBuilder().build(
+        let promptBuilder = VibePluginPackagePromptBuilder()
+        let existingPluginIDs = plugins.map(\.id)
+        let llmMessages = promptBuilder.build(
             request: request,
-            existingPluginIDs: plugins.map(\.id)
+            existingPluginIDs: existingPluginIDs
         )
 
         do {
             let response = try await agentLLM.chat(messages: llmMessages, tools: [])
             let content = response.content ?? ""
-            let decoded = try PluginPackageJSONExtractor().decodePackage(from: content)
-            let package = PluginPackageReviewDocumenter().documented(decoded)
+            let generation = try await validatedAIGeneratedPluginPackage(
+                content: content,
+                request: request,
+                existingPluginIDs: existingPluginIDs,
+                promptBuilder: promptBuilder
+            )
+            let package = generation.package
             let updatingExisting = plugins.contains { $0.id == package.manifest.id }
-            let existingIDs = plugins.map(\.id).filter { $0 != package.manifest.id }
-            try PluginPackageValidator().validate(package, existingPluginIDs: existingIDs)
+            if generation.repaired {
+                auditPluginEvent(
+                    type: "plugin.ai_generation_repaired",
+                    package: package,
+                    summary: "Repaired AgentLLM-generated plugin package after validation feedback.",
+                    metadata: ["source": "agentllm-vibe-composer"]
+                )
+            }
             if installImmediately {
                 try pluginRegistry.install(package: package, replacingExisting: updatingExisting)
                 messages.append(ChatMessage(
@@ -1139,7 +1152,9 @@ final class AppViewModel: ObservableObject {
                 stageGeneratedPluginPackage(package, source: "agentllm-vibe-composer")
                 messages.append(ChatMessage(
                     role: .tool,
-                    content: "AI Plugin Draft Created\nCreated \(package.manifest.name) (\(package.manifest.id)) for review."
+                    content: generation.repaired
+                        ? "AI Plugin Draft Created\nCreated \(package.manifest.name) (\(package.manifest.id)) for review after one repair pass."
+                        : "AI Plugin Draft Created\nCreated \(package.manifest.name) (\(package.manifest.id)) for review."
                 ))
             }
             connectionState = .ready
@@ -1151,6 +1166,42 @@ final class AppViewModel: ObservableObject {
             audit(type: "plugin.ai_generation_failed", summary: error.localizedDescription)
             saveSessionSnapshot()
         }
+    }
+
+    private func validatedAIGeneratedPluginPackage(
+        content: String,
+        request: VibePluginPackageRequest,
+        existingPluginIDs: [String],
+        promptBuilder: VibePluginPackagePromptBuilder
+    ) async throws -> AIGeneratedPluginPackage {
+        do {
+            return try AIGeneratedPluginPackage(package: validatedPluginPackage(from: content), repaired: false)
+        } catch let initialError {
+            let repairMessages = promptBuilder.repair(
+                request: request,
+                existingPluginIDs: existingPluginIDs,
+                invalidResponse: content,
+                errorMessage: initialError.localizedDescription
+            )
+            let repairedResponse = try await agentLLM.chat(messages: repairMessages, tools: [])
+            let repairedContent = repairedResponse.content ?? ""
+            do {
+                return try AIGeneratedPluginPackage(package: validatedPluginPackage(from: repairedContent), repaired: true)
+            } catch let repairError {
+                throw AIPluginGenerationRepairError(
+                    initialError: initialError.localizedDescription,
+                    repairError: repairError.localizedDescription
+                )
+            }
+        }
+    }
+
+    private func validatedPluginPackage(from content: String) throws -> PluginPackage {
+        let decoded = try PluginPackageJSONExtractor().decodePackage(from: content)
+        let package = PluginPackageReviewDocumenter().documented(decoded)
+        let existingIDs = plugins.map(\.id).filter { $0 != package.manifest.id }
+        try PluginPackageValidator().validate(package, existingPluginIDs: existingIDs)
+        return package
     }
 
     private func makeDraftPluginPackage(
@@ -2232,6 +2283,20 @@ final class AppViewModel: ObservableObject {
 private struct ToolCallHandlingResult {
     var content: String
     var needsApproval: Bool
+}
+
+private struct AIGeneratedPluginPackage {
+    var package: PluginPackage
+    var repaired: Bool
+}
+
+private struct AIPluginGenerationRepairError: LocalizedError {
+    var initialError: String
+    var repairError: String
+
+    var errorDescription: String? {
+        "Initial plugin package failed validation: \(initialError). Repair attempt also failed: \(repairError)"
+    }
 }
 
 private extension String {

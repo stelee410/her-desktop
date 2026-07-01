@@ -767,6 +767,55 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(model.generatedPluginDrafts.first?.manifest.id, "local.brief-plugin")
     }
 
+    func testAIVibePluginGenerationRepairsInvalidPackageOnce() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-ai-vibe-plugin-repair-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.agentLLMAPIKey = "test-key"
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        let invalidPackage = PluginPackage(
+            manifest: PluginManifest(
+                id: "local.repaired-plugin",
+                name: "Repaired Plugin",
+                version: "0.1.0",
+                description: "Missing capabilities on the first try.",
+                author: "Vibe coded",
+                systemPromptAddendum: nil,
+                capabilities: []
+            ),
+            files: [.init(path: "SKILL.md", content: "# Repaired Plugin")]
+        )
+        let repairedPackage = samplePackage(id: "local.repaired-plugin", name: "Repaired Plugin")
+        let invalidJSON = String(data: try JSONEncoder.pretty.encode(invalidPackage), encoding: .utf8)!
+        let repairedJSON = String(data: try JSONEncoder.pretty.encode(repairedPackage), encoding: .utf8)!
+        let fakeLLM = FakeLLM(responses: [
+            .assistantText(invalidJSON),
+            .assistantText(repairedJSON)
+        ])
+        let model = AppViewModel(config: config, cwd: cwd.path, agentLLM: fakeLLM)
+
+        await model.generateAIDraftPlugin(
+            named: "Repaired Plugin",
+            description: "Create a plugin that can recover from one bad model response.",
+            kind: "skill",
+            requiresApproval: true,
+            vibeBrief: "The first generated package might need correction."
+        )
+
+        XCTAssertEqual(fakeLLM.requests.count, 2)
+        let repairPrompt = try XCTUnwrap(fakeLLM.requests.last?.last?.content)
+        XCTAssertTrue(repairPrompt.contains("could not be installed"))
+        XCTAssertTrue(repairPrompt.contains("manifest.capabilities"))
+        XCTAssertEqual(model.generatedPluginDrafts.first?.manifest.id, "local.repaired-plugin")
+        XCTAssertTrue(model.messages.contains { $0.content.contains("after one repair pass") })
+        let audit = try AuditEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(audit.contains { event in
+            event.type == "plugin.ai_generation_repaired"
+            && event.metadata["pluginID"] == "local.repaired-plugin"
+        })
+    }
+
     func testGeneratedPluginDraftsPersistAcrossViewModelRestarts() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-persist-plugin-draft-\(UUID().uuidString)", isDirectory: true)
