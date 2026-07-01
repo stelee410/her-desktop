@@ -460,6 +460,7 @@ final class AppViewModel: ObservableObject {
         refreshWebServiceArtifacts()
         captureExternalInboxEventIfNeeded(invocation: invocation, result: result)
         captureGeneratedPluginDraft(from: result, source: toolCall.function.name)
+        captureInstalledPluginIfNeeded(invocation: invocation, result: result, approved: false)
         messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
         auditCapabilityExecution(invocation: invocation, result: result, approved: false)
         Task {
@@ -810,6 +811,7 @@ final class AppViewModel: ObservableObject {
         refreshWebServiceArtifacts()
         captureExternalInboxEventIfNeeded(invocation: invocation, result: result)
         captureGeneratedPluginDraft(from: result, source: invocation.functionName)
+        captureInstalledPluginIfNeeded(invocation: invocation, result: result, approved: false)
         messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
         auditCapabilityExecution(invocation: invocation, result: result, approved: false)
         Task {
@@ -1596,6 +1598,7 @@ final class AppViewModel: ObservableObject {
         finishCapabilityActivity(activityID, result: result)
         refreshWebServiceArtifacts()
         captureExternalInboxEventIfNeeded(invocation: approval.invocation, result: result)
+        captureInstalledPluginIfNeeded(invocation: approval.invocation, result: result, approved: true)
         messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
         audit(
             type: "approval.approved",
@@ -1830,6 +1833,54 @@ final class AppViewModel: ObservableObject {
             return
         }
         stageGeneratedPluginPackage(package, source: source)
+    }
+
+    private func captureInstalledPluginIfNeeded(
+        invocation: CapabilityInvocation,
+        result: CapabilityResult,
+        approved: Bool
+    ) {
+        guard invocation.capabilityID == "plugin.install",
+              result.title == "Plugin Installed" || result.title == "Plugin Updated",
+              let package = pluginPackageArgument(from: invocation.arguments) else {
+            return
+        }
+
+        let documented = PluginPackageReviewDocumenter().documented(package)
+        let removedDrafts = generatedPluginDrafts.filter { $0.manifest.id == documented.manifest.id }
+        removedDrafts.forEach { try? pluginDraftStore.delete($0) }
+        generatedPluginDrafts.removeAll { $0.manifest.id == documented.manifest.id }
+        auditPluginEvent(
+            type: result.title == "Plugin Updated" ? "plugin.updated" : "plugin.installed",
+            package: documented,
+            summary: result.title == "Plugin Updated"
+                ? "Updated plugin through plugin.install capability."
+                : "Installed plugin through plugin.install capability.",
+            metadata: [
+                "source": "plugin.install capability",
+                "capabilityID": invocation.capabilityID,
+                "functionName": invocation.functionName,
+                "toolCallID": invocation.toolCallID,
+                "approved": String(approved),
+                "removedDrafts": String(removedDrafts.count)
+            ]
+        )
+        rebuildRunningTasks()
+    }
+
+    private func pluginPackageArgument(from arguments: [String: Any]) -> PluginPackage? {
+        let decoder = JSONDecoder()
+        if let raw = arguments["package_json"] as? String,
+           let data = raw.data(using: .utf8),
+           let package = try? decoder.decode(PluginPackage.self, from: data) {
+            return package
+        }
+        if let raw = arguments["manifest_json"] as? String,
+           let data = raw.data(using: .utf8),
+           let manifest = try? decoder.decode(PluginManifest.self, from: data) {
+            return PluginPackage(manifest: manifest, files: [])
+        }
+        return nil
     }
 
     private func captureExternalInboxEventIfNeeded(invocation: CapabilityInvocation, result: CapabilityResult) {

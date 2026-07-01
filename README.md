@@ -176,7 +176,7 @@ Generated plugin drafts awaiting review are persisted under `.her/plugin-drafts/
 Installed local plugins can be exported back to PluginPackage JSON under `.her/workspace/plugin-exports/` for backup, review, or reuse.
 Pasted or imported PluginPackage JSON is staged into the same generated-drafts review queue before installation.
 Successful plugin installs return a quick-start summary with each capability's function name, native form inputs, adapter type, and approval requirement, so vibe-coded extensions are immediately usable from the Plugin Library or model tool calls.
-Plugin lifecycle events are also written to `.her/logs/plugin-events.jsonl` and shown in the Inspector's Plugin Timeline, giving vibe-coded extensions an observable trail from draft to install, update, export, discard, or removal.
+Plugin lifecycle events are also written to `.her/logs/plugin-events.jsonl` and shown in the Inspector's Plugin Timeline, giving vibe-coded extensions an observable trail from draft to install, update, export, discard, or removal. Installs performed through the approved `plugin.install` capability enter the same timeline and clear matching generated drafts.
 
 ## Local Inbox Bridge
 

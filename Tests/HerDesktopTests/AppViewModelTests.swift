@@ -1100,6 +1100,62 @@ final class AppViewModelTests: XCTestCase {
         })
     }
 
+    func testApprovedPluginInstallCapabilityRecordsLifecycleAndClearsMatchingDraft() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-plugin-install-capability-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        let package = samplePackage(id: "local.capinstall", name: "Capability Install")
+        let packageJSON = String(data: try JSONEncoder.pretty.encode(package), encoding: .utf8)!
+        let model = AppViewModel(config: config, cwd: cwd.path)
+        model.stageGeneratedPluginPackage(package, source: "plugin.draft")
+        let draftID = try XCTUnwrap(model.generatedPluginDrafts.first?.id)
+
+        let approval = PendingApproval(
+            title: "Install generated plugin",
+            detail: "Install local.capinstall",
+            invocation: CapabilityInvocation(
+                toolCallID: "call-plugin-install",
+                functionName: "plugin_install",
+                capabilityID: "plugin.install",
+                arguments: [
+                    "confirmed": true,
+                    "package_json": packageJSON
+                ]
+            ),
+            activityID: nil
+        )
+
+        await model.approve(approval)
+
+        XCTAssertTrue(model.generatedPluginDrafts.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: cwd.appendingPathComponent(".her/plugin-drafts/\(draftID.uuidString).json").path
+        ))
+        XCTAssertTrue(model.plugins.contains { $0.id == "local.capinstall" })
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: URL(fileURLWithPath: config.pluginDirectory)
+                .appendingPathComponent("local.capinstall/plugin.json")
+                .path
+        ))
+        let audit = try AuditEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(audit.contains { event in
+            event.type == "plugin.installed"
+            && event.metadata["pluginID"] == "local.capinstall"
+            && event.metadata["source"] == "plugin.install capability"
+            && event.metadata["approved"] == "true"
+            && event.metadata["removedDrafts"] == "1"
+        })
+        let pluginEvents = try PluginEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(pluginEvents.contains { event in
+            event.action == .installed
+            && event.pluginID == "local.capinstall"
+            && event.source == "plugin.install capability"
+            && event.metadata["removedDrafts"] == "1"
+        })
+    }
+
     func testGeneratedPluginDraftCanUpdateExistingLocalPlugin() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-generated-plugin-update-\(UUID().uuidString)", isDirectory: true)
