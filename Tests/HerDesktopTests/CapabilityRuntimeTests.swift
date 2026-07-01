@@ -136,6 +136,14 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual((discardDraftProperties["draft_id"] as? [String: Any])?["type"] as? String, "string")
         XCTAssertEqual(discardDraftParameters["required"] as? [String], ["confirmed"])
 
+        let export = try XCTUnwrap(toolFunction(named: "plugin_export", in: catalog))
+        let exportParameters = try XCTUnwrap(export["parameters"] as? [String: Any])
+        let exportProperties = try XCTUnwrap(exportParameters["properties"] as? [String: Any])
+
+        XCTAssertEqual((exportProperties["plugin_id"] as? [String: Any])?["type"] as? String, "string")
+        XCTAssertEqual((exportProperties["confirmed"] as? [String: Any])?["type"] as? String, "boolean")
+        XCTAssertEqual(exportParameters["required"] as? [String], ["plugin_id", "confirmed"])
+
         let remove = try XCTUnwrap(toolFunction(named: "plugin_remove", in: catalog))
         let removeParameters = try XCTUnwrap(remove["parameters"] as? [String: Any])
         let removeProperties = try XCTUnwrap(removeParameters["properties"] as? [String: Any])
@@ -549,6 +557,19 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(capability?.adapter?.type, "native")
         XCTAssertEqual(capability?.requiresApproval, false)
         XCTAssertTrue(CapabilityInputSchema.fields(for: capability!).isEmpty)
+    }
+
+    func testBuiltInPluginExportRequiresApproval() {
+        let registry = PluginRegistry(config: .empty)
+        let capability = registry.capability(id: "plugin.export")
+
+        XCTAssertEqual(capability?.kind, "native")
+        XCTAssertEqual(capability?.adapter?.type, "native")
+        XCTAssertEqual(capability?.requiresApproval, true)
+        XCTAssertEqual(CapabilityInputSchema.fields(for: capability!).map(\.name), [
+            "plugin_id",
+            "confirmed"
+        ])
     }
 
     func testBuiltInNativeSpeakRequiresApproval() {

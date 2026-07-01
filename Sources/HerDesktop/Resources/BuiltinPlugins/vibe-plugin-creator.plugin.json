@@ -76,6 +76,34 @@
       "adapter" : {
         "type" : "native"
       },
+      "description" : "Export an installed local plugin package into the workspace after explicit user approval.",
+      "id" : "plugin.export",
+      "inputSchema" : {
+        "properties" : {
+          "confirmed" : {
+            "description" : "True only after the user explicitly confirms export.",
+            "type" : "boolean"
+          },
+          "plugin_id" : {
+            "description" : "Installed local plugin id to export, such as local.example.",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "plugin_id",
+          "confirmed"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "plugin.export",
+      "kind" : "native",
+      "requiresApproval" : true,
+      "title" : "Export local plugin"
+    },
+    {
+      "adapter" : {
+        "type" : "native"
+      },
       "description" : "List generated plugin drafts waiting in Her Desktop's local review queue.",
       "id" : "plugin.listDrafts",
       "inputSchema" : {

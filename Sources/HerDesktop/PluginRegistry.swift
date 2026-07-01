@@ -402,6 +402,15 @@ final class PluginRegistry {
                         adapter: .init(type: "native")
                     ),
                     .init(
+                        id: "plugin.export",
+                        title: "Export local plugin",
+                        kind: "native",
+                        invocation: "plugin.export",
+                        requiresApproval: true,
+                        description: "Export an installed local plugin package into the workspace after explicit user approval.",
+                        adapter: .init(type: "native")
+                    ),
+                    .init(
                         id: "plugin.remove",
                         title: "Remove local plugin",
                         kind: "native",
@@ -719,6 +728,11 @@ final class PluginRegistry {
                 "draft_id": field("string", "Generated draft UUID to discard. Optional alternative to plugin_id."),
                 "confirmed": field("boolean", "True only after the user explicitly confirms discarding the staged draft.")
             ], required: ["confirmed"])
+        case "plugin.export":
+            return objectSchema([
+                "plugin_id": field("string", "Installed local plugin id to export, such as local.example."),
+                "confirmed": field("boolean", "True only after the user explicitly confirms export.")
+            ], required: ["plugin_id", "confirmed"])
         case "plugin.remove":
             return objectSchema([
                 "plugin_id": field("string", "Installed local plugin id to remove, such as local.example."),

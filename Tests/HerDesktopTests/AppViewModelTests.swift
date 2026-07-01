@@ -743,6 +743,58 @@ final class AppViewModelTests: XCTestCase {
         ))
     }
 
+    func testApprovedPluginExportCapabilityWritesPluginPackageToWorkspace() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-plugin-export-capability-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+
+        let model = AppViewModel(config: config, cwd: cwd.path)
+        await model.installDraftPlugin(
+            named: "Exported Capability",
+            description: "A plugin exported through capability.",
+            kind: "skill"
+        )
+
+        let approval = PendingApproval(
+            title: "Export local plugin",
+            detail: "Export local.exported-capability",
+            invocation: CapabilityInvocation(
+                toolCallID: "call-plugin-export",
+                functionName: "plugin_export",
+                capabilityID: "plugin.export",
+                arguments: [
+                    "confirmed": true,
+                    "plugin_id": "local.exported-capability"
+                ]
+            ),
+            activityID: nil
+        )
+
+        await model.approve(approval)
+
+        let exportURL = cwd
+            .appendingPathComponent(".her/workspace/plugin-exports/local.exported-capability.plugin-package.json")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: exportURL.path))
+        let package = try JSONDecoder().decode(PluginPackage.self, from: Data(contentsOf: exportURL))
+        XCTAssertEqual(package.manifest.id, "local.exported-capability")
+        XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Exported") })
+        let audit = try AuditEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(audit.contains { event in
+            event.type == "plugin.exported"
+            && event.metadata["pluginID"] == "local.exported-capability"
+            && event.metadata["path"] == exportURL.path
+            && event.metadata["source"] == "plugin.export capability"
+        })
+        let pluginEvents = try PluginEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(pluginEvents.contains { event in
+            event.action == .exported
+            && event.pluginID == "local.exported-capability"
+            && event.source == "plugin.export capability"
+        })
+    }
+
     func testRemovePluginKeepsBuiltInPackagesReadOnly() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-remove-builtin-\(UUID().uuidString)", isDirectory: true)

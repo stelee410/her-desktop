@@ -78,6 +78,7 @@ final class BuiltInPluginContractTests: XCTestCase {
         XCTAssertTrue(skill.contains("plugin.listDrafts"))
         XCTAssertTrue(skill.contains("plugin.installDraft"))
         XCTAssertTrue(skill.contains("plugin.discardDraft"))
+        XCTAssertTrue(skill.contains("plugin.export"))
     }
 
     func testFallbackWorkspacePlanMatchesNativeContract() throws {

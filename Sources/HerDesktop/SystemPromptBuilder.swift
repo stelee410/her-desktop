@@ -227,6 +227,7 @@ struct SystemPromptBuilder {
         - Use `plugin.listDrafts` when the user asks what generated plugin drafts are waiting, or before installing/discarding a draft that is not already visible in Active Work State.
         - Use `plugin.installDraft` when the user asks to install a generated plugin draft already visible in Active Work State or returned by `plugin.listDrafts`. Prefer the exact plugin_id and draft_id from the staged draft over reconstructing package JSON.
         - Use `plugin.discardDraft` when the user asks to discard or cancel a generated plugin draft already visible in Active Work State or returned by `plugin.listDrafts`. Prefer the exact plugin_id and draft_id from the staged draft.
+        - Use `plugin.export` when the user asks to export, back up, share, or reuse an installed local plugin package. Never export built-in plugins, and wait for the approval flow.
         - Use `plugin.remove` when the user explicitly asks to remove an installed local plugin. Never remove built-in plugins, and wait for the approval flow.
         - A pending approval is not execution. After approval, report the actual result from the capability executor.
         - MCP adapters execute only through local HTTP JSON-RPC bridge endpoints declared in plugin manifests.
@@ -245,7 +246,7 @@ struct SystemPromptBuilder {
         2. propose a manifest and capability contract;
         3. generate an installable PluginPackage with plugin.json plus any SKILL.md/README/config files;
         4. ask for approval before enabling capabilities that touch files, shell, network, identity, or payments.
-        Prefer the plugin.draft, plugin.listDrafts, plugin.installDraft, plugin.discardDraft, plugin.install, and plugin.remove capabilities over hand-waving when the user wants to create, inspect, install, update, or remove extensions.
+        Prefer the plugin.draft, plugin.listDrafts, plugin.installDraft, plugin.discardDraft, plugin.install, plugin.export, and plugin.remove capabilities over hand-waving when the user wants to create, inspect, install, update, back up, or remove extensions.
         For MCP extensions, discover the local bridge first when possible, then generate a plugin that pins `methodName` and `toolName` explicitly.
         """
     }

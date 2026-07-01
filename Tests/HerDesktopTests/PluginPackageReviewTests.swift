@@ -189,6 +189,38 @@ final class PluginPackageReviewTests: XCTestCase {
         XCTAssertEqual(review.riskLevel, .low)
     }
 
+    func testPluginExportPermissionIsExplicit() {
+        let package = PluginPackage(
+            manifest: PluginManifest(
+                id: "local.plugin-exporter",
+                name: "Plugin Exporter",
+                version: "0.1.0",
+                description: "Plugin export package.",
+                author: "Test",
+                systemPromptAddendum: nil,
+                capabilities: [
+                    .init(
+                        id: "plugin.export",
+                        title: "Export Plugin",
+                        kind: "native",
+                        invocation: "plugin.export",
+                        requiresApproval: true,
+                        adapter: .init(type: "native")
+                    )
+                ]
+            ),
+            files: []
+        )
+
+        let review = PluginPackageReview(package: package)
+
+        XCTAssertEqual(review.permissionSummaries.first?.title, "Plugin Package Export")
+        XCTAssertEqual(review.permissionSummaries.first?.detail, "Exports an installed local plugin package into the workspace.")
+        XCTAssertEqual(review.permissionSummaries.first?.systemImage, "square.and.arrow.up")
+        XCTAssertEqual(review.permissionSummaries.first?.requiresApproval, true)
+        XCTAssertEqual(review.riskLevel, .medium)
+    }
+
     func testCapabilitySummaryIncludesInputFields() {
         let review = PluginPackageReview(package: package(
             kind: "webservice",

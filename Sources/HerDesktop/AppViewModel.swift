@@ -1078,6 +1078,43 @@ final class AppViewModel: ObservableObject {
     }
 
     func exportPlugin(pluginID: String) {
+        let result = exportPluginResult(
+            pluginID: pluginID,
+            eventSource: "plugin-library",
+            summary: "Exported local plugin package."
+        )
+        messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
+        saveSessionSnapshot()
+    }
+
+    private func exportPluginCapability(arguments: [String: Any]) -> CapabilityResult {
+        guard arguments["confirmed"] as? Bool == true else {
+            return CapabilityResult(
+                title: "Plugin Export Needs Confirmation",
+                content: "Exporting a local plugin package needs explicit confirmation. Set confirmed=true only after the user approves.",
+                requiresUserApproval: true
+            )
+        }
+        let pluginID = stringArgument(arguments, keys: ["plugin_id", "pluginID"], fallback: "")
+        guard !pluginID.isEmpty else {
+            return CapabilityResult(
+                title: "Plugin Export Failed",
+                content: "plugin_id is required.",
+                requiresUserApproval: false
+            )
+        }
+        return exportPluginResult(
+            pluginID: pluginID,
+            eventSource: "plugin.export capability",
+            summary: "Exported local plugin package through plugin.export capability."
+        )
+    }
+
+    private func exportPluginResult(
+        pluginID: String,
+        eventSource: String,
+        summary: String
+    ) -> CapabilityResult {
         do {
             let package = try pluginRegistry.package(pluginID: pluginID)
             let directory = HerWorkspacePaths.pluginExportDirectory(cwd: runtimeCwd)
@@ -1085,29 +1122,35 @@ final class AppViewModel: ObservableObject {
             let fileName = "\(package.manifest.id).plugin-package.json"
             let destination = directory.appendingPathComponent(fileName)
             try JSONEncoder.pretty.encode(package).write(to: destination, options: .atomic)
-            messages.append(ChatMessage(
-                role: .tool,
-                content: "Plugin Exported\n\(package.manifest.name) (\(package.manifest.id)) was exported to \(destination.path)."
-            ))
             auditPluginEvent(
                 type: "plugin.exported",
                 package: package,
-                summary: "Exported local plugin package.",
+                summary: summary,
                 metadata: [
                     "path": destination.path,
-                    "source": "plugin-library"
+                    "source": eventSource
                 ]
             )
-            saveSessionSnapshot()
+            return CapabilityResult(
+                title: "Plugin Exported",
+                content: "\(package.manifest.name) (\(package.manifest.id)) was exported to \(destination.path).",
+                requiresUserApproval: false
+            )
         } catch {
             lastError = error.localizedDescription
-            messages.append(ChatMessage(role: .tool, content: "Plugin Export Failed\n\(error.localizedDescription)"))
             audit(
                 type: "plugin.export_failed",
                 summary: error.localizedDescription,
-                metadata: ["pluginID": pluginID]
+                metadata: [
+                    "pluginID": pluginID,
+                    "source": eventSource
+                ]
             )
-            saveSessionSnapshot()
+            return CapabilityResult(
+                title: "Plugin Export Failed",
+                content: error.localizedDescription,
+                requiresUserApproval: false
+            )
         }
     }
 
@@ -1865,6 +1908,9 @@ final class AppViewModel: ObservableObject {
         }
         if invocation.capabilityID == "plugin.discardDraft" {
             return discardGeneratedPluginDraftCapability(arguments: invocation.arguments)
+        }
+        if invocation.capabilityID == "plugin.export" {
+            return exportPluginCapability(arguments: invocation.arguments)
         }
         return await capabilityExecutor.execute(invocation)
     }

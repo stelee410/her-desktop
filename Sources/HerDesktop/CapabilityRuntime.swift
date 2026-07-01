@@ -143,6 +143,12 @@ final class CapabilityExecutor {
                 content: "Staged draft discard is handled by the Her Desktop app state because drafts live in the generated review queue.",
                 requiresUserApproval: false
             )
+        case "plugin.export":
+            return CapabilityResult(
+                title: "Plugin Export Failed",
+                content: "Plugin package export is handled by the Her Desktop app state so it can write to the workspace export directory and record plugin lifecycle events.",
+                requiresUserApproval: false
+            )
         case "plugin.remove":
             return removePlugin(arguments: invocation.arguments)
         case "native.notify":

@@ -353,6 +353,15 @@ struct PluginPackageReview: Equatable {
                 requiresApproval: approval
             )
         }
+        if id == "plugin.export" {
+            return PermissionSummary(
+                id: id,
+                title: "Plugin Package Export",
+                detail: "Exports an installed local plugin package into the workspace.",
+                systemImage: "square.and.arrow.up",
+                requiresApproval: approval
+            )
+        }
         if id == "mcp.discover" {
             return PermissionSummary(
                 id: id,
