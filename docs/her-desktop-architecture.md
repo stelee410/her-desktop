@@ -344,12 +344,12 @@ sequenceDiagram
     U->>UI: 输入文本 / 语音 / 附件 / 外部消息
     UI->>VM: send(text, attachments)
     VM->>APP: append user message + normalize interaction event
-    VM->>MEM: query(session_id, text) with X-Memory-API-Key
-    MEM-->>VM: injected_context + retrieved memories
     VM->>MEM: relationship() with X-Memory-API-Key
     MEM-->>VM: stage / bond / affection / profile signals
     VM->>MEM: emotion() with X-Memory-API-Key
     MEM-->>VM: recent mood / valence / arousal signals
+    VM->>MEM: query(session_id, text) with X-Memory-API-Key
+    MEM-->>VM: injected_context + retrieved memories
     VM->>PB: build(SOUL, INFINITI, runtime, memory, plugins, companion state)
     VM->>LLM: chat.completions(messages, tools)
     alt model asks for a capability

@@ -289,7 +289,8 @@ final class AppViewModel: ObservableObject {
         lastError = nil
 
         do {
-            let memContext = try await retrieveMemory(for: normalized.contextText)
+            await refreshAgentMemTurnSignals()
+            let memContext = await retrieveMemory(for: normalized.contextText)
             let prompt = SystemPromptBuilder(pluginManifests: plugins).build(
                 memoryContext: memContext,
                 activeTaskSummary: activeTaskSummary(),
@@ -2283,16 +2284,71 @@ final class AppViewModel: ObservableObject {
         }
     }
 
-    private func retrieveMemory(for text: String) async throws -> String {
-        guard config.hasMemKey else { return "" }
-        let response = try await agentMem.query(text, sessionID: sessionID)
-        if let first = response.retrievedMemories.first {
-            memorySignal = memorySignal.mergedWithRetrieval(
-                count: response.retrievedMemories.count,
-                firstScore: first.score
+    private func refreshAgentMemTurnSignals() async {
+        guard config.hasMemKey else { return }
+        var relationship: [String: Any]?
+        var emotion: [String: Any]?
+        var failures: [String] = []
+
+        do {
+            relationship = try await agentMem.relationship()
+        } catch {
+            failures.append("relationship: \(error.localizedDescription)")
+        }
+
+        do {
+            emotion = try await agentMem.emotion()
+        } catch {
+            failures.append("emotion: \(error.localizedDescription)")
+        }
+
+        if let relationship {
+            agentProfile = AgentProfile.fromRelationshipPayload(relationship, fallbackUserID: config.userID)
+            memorySignal = MemorySignal.fromAgentMemV7(
+                relationship: relationship,
+                emotion: emotion,
+                fallback: memorySignal
+            )
+            rebuildRunningTasks()
+        } else if let emotion {
+            memorySignal = MemorySignal.fromAgentMemV7(
+                relationship: [:],
+                emotion: emotion,
+                fallback: memorySignal
             )
         }
-        return response.injectedContext
+
+        if failures.isEmpty {
+            audit(
+                type: "memory.turn_signals_refreshed",
+                summary: "AgentMem relationship and emotion signals refreshed before generation."
+            )
+        } else {
+            audit(
+                type: "memory.turn_signals_partial",
+                summary: failures.joined(separator: " · ")
+            )
+        }
+    }
+
+    private func retrieveMemory(for text: String) async -> String {
+        guard config.hasMemKey else { return "" }
+        do {
+            let response = try await agentMem.query(text, sessionID: sessionID)
+            if let first = response.retrievedMemories.first {
+                memorySignal = memorySignal.mergedWithRetrieval(
+                    count: response.retrievedMemories.count,
+                    firstScore: first.score
+                )
+            }
+            return response.injectedContext
+        } catch {
+            audit(
+                type: "memory.query_failed",
+                summary: error.localizedDescription
+            )
+            return ""
+        }
     }
 
     private func activeTaskSummary() -> String {

@@ -214,6 +214,104 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(systemPrompt.contains("- Plan: Thinking - Building the next response or tool plan."))
     }
 
+    func testSendRefreshesAgentMemSignalsBeforeBuildingPrompt() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-turn-signals-\(UUID().uuidString)", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.agentMemBaseURL = URL(string: "https://agentmem.test")!
+        config.agentMemAPIKey = "mem_test"
+        config.userID = "fallback-user"
+        let fakeLLM = FakeLLM(responses: [
+            .assistantText("我会用更新后的关系和情绪节奏来回答。")
+        ])
+        var requests: [String] = []
+        let session = mockSession { request in
+            let path = request.url?.path ?? ""
+            requests.append("\(request.httpMethod ?? "GET") \(path)")
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            switch path {
+            case "/v1/memory/relationship":
+                return (response, Data(#"{"known":true,"display_name":"Her","user_display_name":"Tester","relationship":"Stage: collaborator","memory_id":"mem_test","stage_label":"协作","bond":{"trust":4.0,"familiarity":5.0,"affection":2.0}}"#.utf8))
+            case "/v1/memory/emotion":
+                return (response, Data(#"{"memory_id":"mem_test","mood":{"label":"专注稳定","mean_valence":1.2,"mean_arousal":3.4},"state":{"current":"Focus","label":"专注"}}"#.utf8))
+            case "/v1/memory/query":
+                return (response, Data(#"{"injected_context":"用户正在推进 Her Desktop。","retrieved_memories":[{"fact":"Her Desktop","score":0.82,"layer":"fact"}],"timing_ms":1.0}"#.utf8))
+            case "/v1/memory/add":
+                return (response, Data(#"{"status":"queued","task_id":"task-turn"}"#.utf8))
+            case "/v1/tasks/task-turn":
+                return (
+                    response,
+                    Data(#"{"task_id":"task-turn","task_type":"memory_add","status":"succeeded","created_at":"2026-07-01T00:00:00Z"}"#.utf8)
+                )
+            default:
+                throw URLError(.badURL)
+            }
+        }
+        let model = AppViewModel(config: config, cwd: root.path, agentLLM: fakeLLM, urlSession: session)
+
+        await model.send("继续做架构")
+
+        let systemPrompt = try XCTUnwrap(fakeLLM.requests.first?.first?.content)
+        XCTAssertTrue(systemPrompt.contains("relationship: Stage: collaborator"))
+        XCTAssertTrue(systemPrompt.contains("memory mood: 专注稳定"))
+        XCTAssertTrue(systemPrompt.contains("memory trust: 0.82"))
+        XCTAssertTrue(systemPrompt.contains("memory confidence: 0.71"))
+        XCTAssertTrue(systemPrompt.contains("current memory signal: 1 memories nearby · relationship 协作"))
+        XCTAssertTrue(systemPrompt.contains("用户正在推进 Her Desktop。"))
+        let turnRequests = requests.filter { !$0.contains("/v1/tasks/") }
+        XCTAssertEqual(Array(turnRequests.prefix(3)), [
+            "GET /v1/memory/relationship",
+            "GET /v1/memory/emotion",
+            "POST /v1/memory/query"
+        ])
+        XCTAssertTrue(model.auditEvents.contains { $0.type == "memory.turn_signals_refreshed" })
+        try await waitUntil {
+            model.auditEvents.contains { $0.type == "memory.writeback_task_status" }
+        }
+    }
+
+    func testSendContinuesWhenAgentMemQueryFails() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-memory-query-fail-\(UUID().uuidString)", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.agentMemBaseURL = URL(string: "https://agentmem.test")!
+        config.agentMemAPIKey = "mem_test"
+        let fakeLLM = FakeLLM(responses: [
+            .assistantText("我先不用长期记忆，也可以继续。")
+        ])
+        let session = mockSession { request in
+            let path = request.url?.path ?? ""
+            let response = HTTPURLResponse(url: request.url!, statusCode: path == "/v1/memory/query" ? 500 : 200, httpVersion: nil, headerFields: nil)!
+            switch path {
+            case "/v1/memory/relationship":
+                return (response, Data(#"{"known":true,"relationship":"Stage: collaborator","bond":{"trust":3.0,"familiarity":4.0}}"#.utf8))
+            case "/v1/memory/emotion":
+                return (response, Data(#"{"mood":{"label":"平稳中性"}}"#.utf8))
+            case "/v1/memory/query":
+                return (response, Data(#"{"error":"temporary outage"}"#.utf8))
+            case "/v1/memory/add":
+                return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(#"{"status":"queued","task_id":"task-failover"}"#.utf8))
+            case "/v1/tasks/task-failover":
+                return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data(#"{"task_id":"task-failover","task_type":"memory_add","status":"succeeded","created_at":"2026-07-01T00:00:00Z"}"#.utf8))
+            default:
+                throw URLError(.badURL)
+            }
+        }
+        let model = AppViewModel(config: config, cwd: root.path, agentLLM: fakeLLM, urlSession: session)
+
+        await model.send("AgentMem query 如果失败也要继续")
+
+        XCTAssertEqual(model.connectionState, .ready)
+        XCTAssertEqual(model.messages.last?.role, .assistant)
+        XCTAssertEqual(model.messages.last?.content, "我先不用长期记忆，也可以继续。")
+        let systemPrompt = try XCTUnwrap(fakeLLM.requests.first?.first?.content)
+        XCTAssertTrue(systemPrompt.contains("No relevant long-term memory was retrieved for this turn."))
+        XCTAssertTrue(model.auditEvents.contains { $0.type == "memory.query_failed" })
+        try await waitUntil {
+            model.auditEvents.contains { $0.type == "memory.writeback_task_status" }
+        }
+    }
+
     func testPostTurnMemoryWritebackUsesSummaryAfterSessionThreshold() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-memory-summary-\(UUID().uuidString)", isDirectory: true)
