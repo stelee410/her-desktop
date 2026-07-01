@@ -422,7 +422,7 @@ final class CapabilityRuntimeTests: XCTestCase {
         let pluginRoot = root.appendingPathComponent("local.toolinstall", isDirectory: true)
         XCTAssertEqual(result.title, "Plugin Updated")
         XCTAssertTrue(result.content.contains("Updated Tool Install"))
-        XCTAssertTrue(result.content.contains("Available in the next turn"))
+        XCTAssertTrue(result.content.contains("Available after plugin reload"))
         XCTAssertTrue(result.content.contains("Quick start"))
         XCTAssertTrue(result.content.contains("local_toolinstall_run"))
         XCTAssertTrue(result.content.contains("inputs: free text request"))

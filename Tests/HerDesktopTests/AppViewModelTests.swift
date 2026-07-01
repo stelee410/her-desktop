@@ -6,6 +6,8 @@ final class AppViewModelTests: XCTestCase {
     final class FakeLLM: AgentLLMChatting {
         var responses: [AgentLLMChatResponse.Choice.Message]
         var requests: [[AgentLLMMessage]] = []
+        var toolRequests: [[[String: Any]]] = []
+        var onChat: (() async throws -> Void)?
 
         init(responses: [AgentLLMChatResponse.Choice.Message]) {
             self.responses = responses
@@ -13,6 +15,8 @@ final class AppViewModelTests: XCTestCase {
 
         func chat(messages: [AgentLLMMessage], tools: [[String: Any]]) async throws -> AgentLLMChatResponse.Choice.Message {
             requests.append(messages)
+            toolRequests.append(tools)
+            try await onChat?()
             return responses.removeFirst()
         }
     }
@@ -181,6 +185,36 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertFalse(toolResult.content?.contains(#""manifest""#) == true)
         XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Package Draft") })
         XCTAssertEqual(model.messages.last?.content, "草稿已经进入 review queue，我可以等你确认后安装。")
+    }
+
+    func testToolLoopRefreshesCatalogAfterPluginDirectoryChanges() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-refresh-catalog-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        try FileManager.default.createDirectory(at: cwd, withIntermediateDirectories: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        let fakeLLM = FakeLLM(responses: [
+            .toolCall(id: "call_inspect", name: "workspace_inspect", arguments: #"{"max_files":1}"#),
+            .assistantText("我现在能看到新安装的扩展工具。")
+        ])
+        fakeLLM.onChat = { [config] in
+            guard fakeLLM.requests.count == 1 else { return }
+            try PluginRegistry(config: config).install(
+                package: self.samplePackage(id: "local.fresh-tool", name: "Fresh Tool")
+            )
+        }
+        let model = AppViewModel(config: config, cwd: cwd.path, agentLLM: fakeLLM)
+
+        await model.send("刷新工具目录")
+
+        XCTAssertEqual(fakeLLM.toolRequests.count, 2)
+        let firstToolNames = toolNames(in: fakeLLM.toolRequests[0])
+        let secondToolNames = toolNames(in: fakeLLM.toolRequests[1])
+        XCTAssertFalse(firstToolNames.contains("local_fresh-tool_run"))
+        XCTAssertTrue(secondToolNames.contains("local_fresh-tool_run"))
+        XCTAssertTrue(model.plugins.contains { $0.id == "local.fresh-tool" })
+        XCTAssertEqual(model.messages.last?.content, "我现在能看到新安装的扩展工具。")
     }
 
     func testSendRecordsNormalizedInteractionEventAndAudit() async throws {
@@ -1686,7 +1720,7 @@ final class AppViewModelTests: XCTestCase {
                 .path
         ))
         let installMessage = try XCTUnwrap(model.messages.last { $0.content.contains("Plugin Installed") })
-        XCTAssertTrue(installMessage.content.contains("Available in the next turn"))
+        XCTAssertTrue(installMessage.content.contains("Available after plugin reload"))
         XCTAssertTrue(installMessage.content.contains("local.generated.run"))
         XCTAssertTrue(installMessage.content.contains("local_generated_run"))
         XCTAssertTrue(installMessage.content.contains("Quick start"))
@@ -2515,6 +2549,12 @@ final class AppViewModelTests: XCTestCase {
             ),
             files: [.init(path: "SKILL.md", content: skillContent ?? "# \(name)")]
         )
+    }
+
+    private func toolNames(in tools: [[String: Any]]) -> [String] {
+        tools.compactMap { tool in
+            (tool["function"] as? [String: Any])?["name"] as? String
+        }
     }
 
     private func mockSession(

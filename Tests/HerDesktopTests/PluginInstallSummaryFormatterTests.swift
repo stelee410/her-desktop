@@ -43,7 +43,7 @@ final class PluginInstallSummaryFormatterTests: XCTestCase {
         let content = PluginInstallSummaryFormatter().content(package: package, source: "test")
 
         XCTAssertTrue(content.contains("Plugin Installed"))
-        XCTAssertTrue(content.contains("Available in the next turn"))
+        XCTAssertTrue(content.contains("Available after plugin reload"))
         XCTAssertTrue(content.contains("local.image-helper.run as local_image-helper_run"))
         XCTAssertTrue(content.contains("Quick start"))
         XCTAssertTrue(content.contains("run from Plugin Library or call local_image-helper_run"))

@@ -457,8 +457,9 @@ final class AppViewModel: ObservableObject {
         catalog: CapabilityToolCatalog,
         maxToolRounds: Int = 5
     ) async throws -> String {
+        var currentCatalog = catalog
         for round in 0...maxToolRounds {
-            let message = try await agentLLM.chat(messages: llmMessages, tools: catalog.tools)
+            let message = try await agentLLM.chat(messages: llmMessages, tools: currentCatalog.tools)
             let toolCalls = message.toolCalls ?? []
             guard !toolCalls.isEmpty else {
                 return message.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -471,7 +472,7 @@ final class AppViewModel: ObservableObject {
             llmMessages.append(.assistant(content: message.content, toolCalls: toolCalls))
             var needsApproval = false
             for toolCall in toolCalls {
-                let result = await handleToolCall(toolCall, catalog: catalog)
+                let result = await handleToolCall(toolCall, catalog: currentCatalog)
                 llmMessages.append(.toolResult(
                     id: toolCall.id,
                     name: toolCall.function.name,
@@ -480,6 +481,7 @@ final class AppViewModel: ObservableObject {
                 needsApproval = needsApproval || result.needsApproval
             }
             await reloadPlugins()
+            currentCatalog = CapabilityToolCatalog.build(from: plugins)
 
             if needsApproval {
                 return "我已经把需要你批准的操作放进审批队列里。你批准后，我会基于工具结果继续推进。"

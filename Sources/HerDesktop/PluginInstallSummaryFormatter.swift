@@ -21,7 +21,7 @@ struct PluginInstallSummaryFormatter {
         \(title)
         \(verb) \(package.manifest.name) (\(package.manifest.id)) from \(source).
 
-        Available in the next turn:
+        Available after plugin reload:
         \(capabilities.isEmpty ? "- No capabilities declared." : capabilities)
 
         Quick start:
