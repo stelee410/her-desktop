@@ -76,6 +76,24 @@
       "adapter" : {
         "type" : "native"
       },
+      "description" : "List generated plugin drafts waiting in Her Desktop's local review queue.",
+      "id" : "plugin.listDrafts",
+      "inputSchema" : {
+        "properties" : {
+        },
+        "required" : [
+        ],
+        "type" : "object"
+      },
+      "invocation" : "plugin.listDrafts",
+      "kind" : "native",
+      "requiresApproval" : false,
+      "title" : "List staged plugin drafts"
+    },
+    {
+      "adapter" : {
+        "type" : "native"
+      },
       "id" : "plugin.install",
       "inputSchema" : {
         "properties" : {

@@ -375,6 +375,15 @@ final class PluginRegistry {
                         adapter: .init(type: "native")
                     ),
                     .init(
+                        id: "plugin.listDrafts",
+                        title: "List staged plugin drafts",
+                        kind: "native",
+                        invocation: "plugin.listDrafts",
+                        requiresApproval: false,
+                        description: "List generated plugin drafts waiting in Her Desktop's local review queue.",
+                        adapter: .init(type: "native")
+                    ),
+                    .init(
                         id: "plugin.installDraft",
                         title: "Install staged plugin draft",
                         kind: "native",
@@ -696,6 +705,8 @@ final class PluginRegistry {
                 "manifest_json": field("string", "A complete plugin manifest JSON object."),
                 "confirmed": field("boolean", "True only after the user explicitly confirms installation.")
             ], required: ["confirmed"])
+        case "plugin.listDrafts":
+            return objectSchema([:], required: [])
         case "plugin.installDraft":
             return objectSchema([
                 "plugin_id": field("string", "Generated draft plugin id to install, such as local.example. Optional when exactly one draft is waiting."),

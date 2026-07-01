@@ -113,6 +113,13 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual((replaceProperties["expected_replacements"] as? [String: Any])?["type"] as? String, "integer")
         XCTAssertEqual(replaceParameters["required"] as? [String], ["path", "search", "replacement"])
 
+        let listDrafts = try XCTUnwrap(toolFunction(named: "plugin_listDrafts", in: catalog))
+        let listDraftsParameters = try XCTUnwrap(listDrafts["parameters"] as? [String: Any])
+        let listDraftsProperties = try XCTUnwrap(listDraftsParameters["properties"] as? [String: Any])
+
+        XCTAssertTrue(listDraftsProperties.isEmpty)
+        XCTAssertEqual(listDraftsParameters["required"] as? [String], [])
+
         let installDraft = try XCTUnwrap(toolFunction(named: "plugin_installDraft", in: catalog))
         let installDraftParameters = try XCTUnwrap(installDraft["parameters"] as? [String: Any])
         let installDraftProperties = try XCTUnwrap(installDraftParameters["properties"] as? [String: Any])
@@ -532,6 +539,16 @@ final class CapabilityRuntimeTests: XCTestCase {
             "expected_replacements",
             "replace_all"
         ])
+    }
+
+    func testBuiltInPluginListDraftsDoesNotRequireApproval() {
+        let registry = PluginRegistry(config: .empty)
+        let capability = registry.capability(id: "plugin.listDrafts")
+
+        XCTAssertEqual(capability?.kind, "native")
+        XCTAssertEqual(capability?.adapter?.type, "native")
+        XCTAssertEqual(capability?.requiresApproval, false)
+        XCTAssertTrue(CapabilityInputSchema.fields(for: capability!).isEmpty)
     }
 
     func testBuiltInNativeSpeakRequiresApproval() {

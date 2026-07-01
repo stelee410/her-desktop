@@ -75,6 +75,7 @@ final class BuiltInPluginContractTests: XCTestCase {
         XCTAssertTrue(skill.contains("PluginPackage"))
         XCTAssertTrue(skill.contains("MCP"))
         XCTAssertTrue(skill.contains("Never include API keys"))
+        XCTAssertTrue(skill.contains("plugin.listDrafts"))
         XCTAssertTrue(skill.contains("plugin.installDraft"))
         XCTAssertTrue(skill.contains("plugin.discardDraft"))
     }
@@ -107,7 +108,8 @@ final class BuiltInPluginContractTests: XCTestCase {
                 "workspace.plan",
                 "agentmem.query",
                 "mcp.discover",
-                "inbox.capture"
+                "inbox.capture",
+                "plugin.listDrafts"
             ].contains(capability.id)
         }
         return false

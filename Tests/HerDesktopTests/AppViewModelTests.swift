@@ -1321,6 +1321,30 @@ final class AppViewModelTests: XCTestCase {
         })
     }
 
+    func testPluginListDraftsCapabilityReportsStagedDraftActions() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-plugin-list-drafts-capability-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        let package = samplePackage(id: "local.waiting-draft", name: "Waiting Draft")
+        let model = AppViewModel(config: config, cwd: cwd.path)
+        model.stageGeneratedPluginPackage(package, source: "plugin.draft")
+        let draftID = try XCTUnwrap(model.generatedPluginDrafts.first?.id.uuidString)
+
+        await model.runCapability(capabilityID: "plugin.listDrafts", arguments: [:])
+
+        let lastMessage = try XCTUnwrap(model.messages.last?.content)
+        XCTAssertTrue(lastMessage.contains("Plugin Drafts"))
+        XCTAssertTrue(lastMessage.contains("staged_drafts: 1"))
+        XCTAssertTrue(lastMessage.contains("Waiting Draft (local.waiting-draft)"))
+        XCTAssertTrue(lastMessage.contains("draft_id: \(draftID)"))
+        XCTAssertTrue(lastMessage.contains("callable_functions: local_waiting-draft_run"))
+        XCTAssertTrue(lastMessage.contains("\"plugin_id\":\"local.waiting-draft\""))
+        XCTAssertTrue(lastMessage.contains("\"draft_id\":\"\(draftID)\""))
+        XCTAssertTrue(lastMessage.contains("\"confirmed\":true"))
+    }
+
     func testApprovedPluginDiscardDraftCapabilityRemovesStagedDraftByPluginID() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-plugin-discard-draft-capability-\(UUID().uuidString)", isDirectory: true)

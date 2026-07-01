@@ -67,6 +67,15 @@ struct PluginPackageReview: Equatable {
     var fileCount: Int { fileSummaries.count }
     var permissionCount: Int { permissionSummaries.count }
 
+    private static let lowRiskNativeCapabilityIDs: Set<String> = [
+        "workspace.inspect",
+        "workspace.plan",
+        "agentmem.query",
+        "mcp.discover",
+        "inbox.capture",
+        "plugin.listDrafts"
+    ]
+
     private static func capabilitySummary(_ capability: PluginManifest.Capability) -> CapabilitySummary {
         let adapter = capability.adapter
         let adapterType = adapter?.type ?? capability.kind
@@ -317,6 +326,15 @@ struct PluginPackageReview: Equatable {
                 requiresApproval: approval
             )
         }
+        if id == "plugin.listDrafts" {
+            return PermissionSummary(
+                id: id,
+                title: "Plugin Draft Review Queue",
+                detail: "Lists generated plugin drafts waiting for local review.",
+                systemImage: "list.bullet.clipboard",
+                requiresApproval: approval
+            )
+        }
         if id == "plugin.installDraft" {
             return PermissionSummary(
                 id: id,
@@ -384,11 +402,14 @@ struct PluginPackageReview: Equatable {
             case "webservice":
                 items.append("Calls a web service: \(adapter?.method ?? "POST") \(adapter?.url ?? capability.id)")
             case "native":
-                items.append("Uses a native macOS capability: \(capability.id)")
+                if !lowRiskNativeCapabilityIDs.contains(capability.id) {
+                    items.append("Uses a native macOS capability: \(capability.id)")
+                }
             default:
                 break
             }
-            if !capability.requiresApproval, ["command", "mcp", "webservice", "native"].contains(type) {
+            let lowRiskNative = type == "native" && lowRiskNativeCapabilityIDs.contains(capability.id)
+            if !capability.requiresApproval, ["command", "mcp", "webservice", "native"].contains(type), !lowRiskNative {
                 items.append("Runs \(capability.id) without explicit user approval.")
             }
         }
@@ -405,6 +426,9 @@ struct PluginPackageReview: Equatable {
         }
         if capabilities.contains(where: { capability in
             let type = capability.adapter?.type ?? capability.kind
+            if type == "native", lowRiskNativeCapabilityIDs.contains(capability.id) {
+                return false
+            }
             return ["mcp", "webservice", "native"].contains(type) || !capability.requiresApproval
         }) {
             return .medium

@@ -156,6 +156,39 @@ final class PluginPackageReviewTests: XCTestCase {
         XCTAssertEqual(review.riskLevel, .medium)
     }
 
+    func testPluginListDraftsPermissionIsExplicitAndLowRisk() {
+        let package = PluginPackage(
+            manifest: PluginManifest(
+                id: "local.plugin-drafts",
+                name: "Plugin Drafts",
+                version: "0.1.0",
+                description: "Plugin draft package.",
+                author: "Test",
+                systemPromptAddendum: nil,
+                capabilities: [
+                    .init(
+                        id: "plugin.listDrafts",
+                        title: "List Drafts",
+                        kind: "native",
+                        invocation: "plugin.listDrafts",
+                        requiresApproval: false,
+                        adapter: .init(type: "native")
+                    )
+                ]
+            ),
+            files: [
+                .init(path: "README.md", content: "# Plugin Drafts\n\nLists staged plugin drafts.")
+            ]
+        )
+
+        let review = PluginPackageReview(package: package)
+
+        XCTAssertEqual(review.permissionSummaries.first?.title, "Plugin Draft Review Queue")
+        XCTAssertEqual(review.permissionSummaries.first?.detail, "Lists generated plugin drafts waiting for local review.")
+        XCTAssertEqual(review.permissionSummaries.first?.systemImage, "list.bullet.clipboard")
+        XCTAssertEqual(review.riskLevel, .low)
+    }
+
     func testCapabilitySummaryIncludesInputFields() {
         let review = PluginPackageReview(package: package(
             kind: "webservice",

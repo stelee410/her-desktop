@@ -1857,6 +1857,9 @@ final class AppViewModel: ObservableObject {
         if invocation.capabilityID == "workspace.plan" {
             return saveWorkPlan(arguments: invocation.arguments, source: invocation.functionName)
         }
+        if invocation.capabilityID == "plugin.listDrafts" {
+            return listGeneratedPluginDraftsCapability()
+        }
         if invocation.capabilityID == "plugin.installDraft" {
             return await installGeneratedPluginDraftCapability(arguments: invocation.arguments)
         }
@@ -1864,6 +1867,49 @@ final class AppViewModel: ObservableObject {
             return discardGeneratedPluginDraftCapability(arguments: invocation.arguments)
         }
         return await capabilityExecutor.execute(invocation)
+    }
+
+    private func listGeneratedPluginDraftsCapability() -> CapabilityResult {
+        guard !generatedPluginDrafts.isEmpty else {
+            return CapabilityResult(
+                title: "Plugin Drafts",
+                content: "No generated plugin drafts are waiting for review.",
+                requiresUserApproval: false
+            )
+        }
+
+        let summaries = generatedPluginDrafts.map { draft in
+            let review = PluginPackageReview(package: draft.package)
+            let functions = draft.manifest.capabilities
+                .map { CapabilityToolCatalog.functionName(for: $0.id) }
+                .joined(separator: ", ")
+            let installArguments = """
+            {"plugin_id":"\(draft.manifest.id)","draft_id":"\(draft.id.uuidString)","confirmed":true}
+            """
+            let discardArguments = """
+            {"plugin_id":"\(draft.manifest.id)","draft_id":"\(draft.id.uuidString)","confirmed":true}
+            """
+            return """
+            - \(draft.manifest.name) (\(draft.manifest.id))
+              draft_id: \(draft.id.uuidString)
+              source: \(draft.source)
+              risk: \(review.riskLevel.rawValue)
+              capabilities: \(review.capabilityCount)
+              permissions: \(review.permissionCount)
+              callable_functions: \(functions.isEmpty ? "none" : functions)
+              install_arguments: \(installArguments)
+              discard_arguments: \(discardArguments)
+            """
+        }
+
+        return CapabilityResult(
+            title: "Plugin Drafts",
+            content: """
+            staged_drafts: \(generatedPluginDrafts.count)
+            \(summaries.joined(separator: "\n"))
+            """,
+            requiresUserApproval: false
+        )
     }
 
     private func retrieveMemory(for text: String) async throws -> String {
