@@ -154,17 +154,13 @@ final class ServiceHealthVerifier {
 
         do {
             let data = try await getData(
-                url: config.agentMemBaseURL.appending(path: "/v1/me"),
-                headers: [
-                    "X-Memory-API-Key": config.agentMemAPIKey
-                ]
+                url: config.agentMemBaseURL.appending(path: "/v1/memory/relationship"),
+                headers: memoryHeaders()
             )
             let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-            let known = Self.boolSummary(object?["known"]) ?? object?["known"].map { "\($0)" } ?? "known"
-            let displayName = object?["display_name"] as? String
-            let identitySummary = [displayName, known].compactMap { $0 }.joined(separator: " · ")
+            let relationshipSummary = Self.relationshipSummary(from: object)
             let querySummary = try await checkAgentMemQueryDataPlane()
-            let summary = [identitySummary.isEmpty ? "Identity OK" : identitySummary, querySummary]
+            let summary = [relationshipSummary, querySummary]
                 .joined(separator: " · ")
             return .init(
                 id: "agentmem",
@@ -256,5 +252,22 @@ final class ServiceHealthVerifier {
             return number.boolValue ? "true" : "false"
         }
         return nil
+    }
+
+    private static func relationshipSummary(from object: [String: Any]?) -> String {
+        guard let object else { return "Relationship OK" }
+        if let stageLabel = object["stage_label"] as? String, !stageLabel.isEmpty {
+            return "relationship \(stageLabel)"
+        }
+        if let stage = object["stage"] as? String, !stage.isEmpty {
+            return "relationship \(stage)"
+        }
+        if let memoryID = object["memory_id"] as? String, !memoryID.isEmpty {
+            return "memory \(memoryID)"
+        }
+        if let known = boolSummary(object["known"]) {
+            return "relationship known \(known)"
+        }
+        return "Relationship OK"
     }
 }

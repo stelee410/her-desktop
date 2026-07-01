@@ -139,18 +139,10 @@ final class AgentMemClient {
 
     func relationship() async throws -> [String: Any] {
         guard config.hasMemKey else { throw ServiceError.missingAPIKey("AgentMem") }
-        do {
-            return try await getJSONDictionary(
-                url: config.agentMemBaseURL.appending(path: "/v1/memory/relationship"),
-                headers: memoryHeaders()
-            )
-        } catch {
-            guard Self.shouldRetryRelationshipIdentity(error) else { throw error }
-            return try await getJSONDictionary(
-                url: config.agentMemBaseURL.appending(path: "/v1/me"),
-                headers: memoryHeaders()
-            )
-        }
+        return try await getJSONDictionary(
+            url: config.agentMemBaseURL.appending(path: "/v1/memory/relationship"),
+            headers: memoryHeaders()
+        )
     }
 
     func emotion() async throws -> [String: Any] {
@@ -297,18 +289,6 @@ final class AgentMemClient {
         return body
     }
 
-    private static func shouldRetryRelationshipIdentity(_ error: Error) -> Bool {
-        guard case ServiceError.httpStatus(let status, let body) = error else {
-            return false
-        }
-        if status == 404 { return true }
-        if status == 422 {
-            return body.contains("extra_forbidden")
-                || body.contains("agent_code")
-                || body.contains("not found")
-        }
-        return false
-    }
 }
 
 struct AgentLLMChatResponse: Codable {

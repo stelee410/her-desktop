@@ -265,13 +265,13 @@ final class AgentMemClientTests: XCTestCase {
                 httpVersion: nil,
                 headerFields: nil
             )!
-            return (response, Data(#"{"user_id":"stelee","stage":"companion","bond":{"trust":1.5,"familiarity":2.25,"affection":3.0}}"#.utf8))
+            return (response, Data(#"{"memory_id":"mem_123","stage":"companion","stage_label":"陪伴","bond":{"trust":1.5,"familiarity":2.25,"affection":3.0}}"#.utf8))
         }
         let client = AgentMemClient(config: config, session: session)
 
         let response = try await client.relationship()
 
-        XCTAssertEqual(response["user_id"] as? String, "stelee")
+        XCTAssertEqual(response["memory_id"] as? String, "mem_123")
         XCTAssertEqual(response["stage"] as? String, "companion")
     }
 
@@ -338,33 +338,6 @@ final class AgentMemClientTests: XCTestCase {
         }
 
         XCTAssertEqual(attempt, 1)
-    }
-
-    func testRelationshipFallsBackToIdentityForLegacyAgentMem() async throws {
-        var config = HerAppConfig.empty
-        config.agentMemBaseURL = URL(string: "https://agentmem.test")!
-        config.agentMemAPIKey = "mem_test"
-        config.agentCode = "her-desktop"
-        config.userID = "stelee"
-
-        var paths: [String] = []
-        let session = mockSession { request in
-            paths.append(request.url?.path ?? "")
-            if request.url?.path == "/v1/memory/relationship" {
-                let response = HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!
-                return (response, Data(#"{"detail":"not found"}"#.utf8))
-            }
-            XCTAssertEqual(request.url?.path, "/v1/me")
-            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
-            return (response, Data(#"{"known":true,"display_name":"her","memory_id":"mem_123"}"#.utf8))
-        }
-        let client = AgentMemClient(config: config, session: session)
-
-        let response = try await client.relationship()
-
-        XCTAssertEqual(paths, ["/v1/memory/relationship", "/v1/me"])
-        XCTAssertEqual(response["display_name"] as? String, "her")
-        XCTAssertEqual(response["memory_id"] as? String, "mem_123")
     }
 
     private func mockSession(

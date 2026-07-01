@@ -2218,8 +2218,6 @@ final class AppViewModelTests: XCTestCase {
                 return (response, Data("ready".utf8))
             case "/v1/chat/completions":
                 return (response, Data(#"{"choices":[{"message":{"role":"assistant","content":"OK"}}]}"#.utf8))
-            case "/v1/me":
-                return (response, Data(#"{"known":true,"display_name":"her","memory_id":"mem_test"}"#.utf8))
             case "/v1/memory/query":
                 return (response, Data(#"{"injected_context":"","retrieved_memories":[],"timing_ms":1.0}"#.utf8))
             case "/v1/memory/relationship":
@@ -2245,7 +2243,7 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(requests, [
             "GET /health",
             "POST /v1/chat/completions",
-            "GET /v1/me",
+            "GET /v1/memory/relationship",
             "POST /v1/memory/query",
             "GET /v1/memory/relationship",
             "GET /v1/memory/emotion"

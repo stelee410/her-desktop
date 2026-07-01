@@ -30,8 +30,6 @@ export HER_AGENT_LLM_API_KEY="sk-..."
 export HER_AGENT_LLM_MODEL="linkyun-default"
 export HER_AGENT_MEM_BASE_URL="https://agentmem.oyii.ai"
 export HER_AGENT_MEM_API_KEY="mem_..."
-export HER_AGENT_CODE="her-desktop"
-export HER_USER_ID="stelee"
 ```
 
 `HER_` variables take priority. The loader also accepts service aliases such as
@@ -40,7 +38,7 @@ export HER_USER_ID="stelee"
 tool output and artifact manifests redact recognized tokens before display.
 
 For the packaged Mac app, saved configuration defaults to `~/Library/Application Support/Her Desktop/config.json`.
-You can also edit the same values from the native macOS Settings window after launch; the main Inspector and Settings share the same save path and immediately re-check AgentLLM health plus chat data-plane readiness, AgentMem identity/query readiness, and plugin runtime health after saving.
+You can also edit the same values from the native macOS Settings window after launch; the main Inspector and Settings share the same save path and immediately re-check AgentLLM health plus chat data-plane readiness, AgentMem relationship/query readiness, and plugin runtime health after saving.
 
 ## Run
 
@@ -69,8 +67,8 @@ scripts/smoke-services.sh
 The helper uses the same config precedence as the app: `HER_CONFIG_PATH`, then
 the project-local config, then the Application Support config. Environment
 variables still win. It checks AgentLLM health, runs one chat completion, reads
-AgentMem identity, relationship, emotion, and performs an AgentMem V7 Memory-Key
-query. To also verify live AgentMem writeback, set `HER_SMOKE_WRITE_MEMORY=1`;
+AgentMem relationship and emotion signals, and performs an AgentMem V7
+Memory-Key query. To also verify live AgentMem writeback, set `HER_SMOKE_WRITE_MEMORY=1`;
 the script sends a small smoke-test turn with a deterministic idempotency key.
 
 AgentMem V7 compatibility note: data-plane calls are routed by
@@ -78,9 +76,7 @@ AgentMem V7 compatibility note: data-plane calls are routed by
 `/v1/memory/query` or `/v1/memory/add`. Post-turn writeback uses single-turn
 `user_input` plus `agent_response` for short exchanges, then switches to the
 recommended V7 `summary` mode once a session has enough confirmed context.
-`agentCode` and `userID` remain local Her Desktop labels and can be used by
-platform-side mapping or generated plugins, but the Memory-Key itself is the
-runtime memory identity.
+The Memory-Key itself is the runtime memory identity.
 
 ## Build A Mac App Bundle
 
@@ -161,7 +157,7 @@ Vibe-coded installs use a package shape so the assistant can generate both a man
 ```
 
 Plugin file paths must be relative and cannot contain `..`; installation is gated by the approval queue when a capability declares `requiresApproval`.
-Plugin adapters can use safe runtime config placeholders such as `{{agent_llm_base_url}}`, `{{agent_llm_api_key}}`, `{{agent_llm_model}}`, `{{agent_mem_base_url}}`, `{{agent_mem_api_key}}`, `{{agent_code}}`, and `{{user_id}}`; Her Desktop renders them at execution time so generated packages do not store real secrets.
+Plugin adapters can use safe runtime config placeholders such as `{{agent_llm_base_url}}`, `{{agent_llm_api_key}}`, `{{agent_llm_model}}`, `{{agent_mem_base_url}}`, and `{{agent_mem_api_key}}`; Her Desktop renders them at execution time so generated packages do not store real secrets. AgentMem V7 adapters must use `X-Memory-API-Key` from `{{agent_mem_api_key}}` and must not include `agent_code` or `user_id` in query/add bodies.
 Web service `bodyTemplate` values can use `{{json:field}}` or `{{json:field|default}}` to produce escaped JSON literals for user-provided text.
 MCP adapters call only local HTTP JSON-RPC bridges. For standard MCP tool calls, set `methodName` to `tools/call` and `toolName` to the exact bridge tool; Her Desktop sends `params` as `{"name": toolName, "arguments": {...capability arguments...}}`.
 The Vibe Plugin Composer can call `tools/list` on a local MCP bridge, show discovered tools and input fields, fill `methodName=tools/call` plus `toolName` from a selected tool, directly draft or install a local MCP plugin from a discovered tool, and carry supported discovered schema fields into the generated plugin `inputSchema`.

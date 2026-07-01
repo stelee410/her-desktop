@@ -103,12 +103,12 @@ final class ServiceHealthVerifierTests: XCTestCase {
         var requests: [String] = []
         let verifier = ServiceHealthVerifier(config: config, session: mockSession { request in
             requests.append("\(request.httpMethod ?? "GET") \(request.url?.path ?? "")")
-            if request.url?.path == "/v1/me" {
+            if request.url?.path == "/v1/memory/relationship" {
                 XCTAssertEqual(request.timeoutInterval, 12)
                 XCTAssertEqual(request.value(forHTTPHeaderField: "X-Memory-API-Key"), "mem_test")
                 XCTAssertNil(request.value(forHTTPHeaderField: "X-Agent-API-Key"))
                 let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
-                return (response, Data(#"{"known":true,"display_name":"her","memory_id":"mem_123"}"#.utf8))
+                return (response, Data(#"{"memory_id":"mem_123","stage":"companion","stage_label":"陪伴","bond":{"trust":3.0,"familiarity":4.0,"affection":2.0}}"#.utf8))
             }
 
             XCTAssertEqual(request.httpMethod, "POST")
@@ -126,26 +126,26 @@ final class ServiceHealthVerifierTests: XCTestCase {
         let agentMem = try XCTUnwrap(checked.first { $0.id == "agentmem" })
 
         XCTAssertEqual(agentMem.state, .online)
-        XCTAssertEqual(agentMem.summary, "her · true · Memory query OK")
-        XCTAssertEqual(requests, ["GET /v1/me", "POST /v1/memory/query"])
+        XCTAssertEqual(agentMem.summary, "relationship 陪伴 · Memory query OK")
+        XCTAssertEqual(requests, ["GET /v1/memory/relationship", "POST /v1/memory/query"])
     }
 
-    func testAgentMemHealthRetriesTransientIdentityNetworkFailure() async throws {
+    func testAgentMemHealthRetriesTransientRelationshipNetworkFailure() async throws {
         var config = HerAppConfig.empty
         config.agentMemBaseURL = URL(string: "https://agentmem.test")!
         config.agentMemAPIKey = "mem_test"
         config.agentCode = "her-desktop"
         config.userID = "stelee"
 
-        var identityAttempt = 0
+        var relationshipAttempt = 0
         let verifier = ServiceHealthVerifier(config: config, session: mockSession { request in
-            if request.url?.path == "/v1/me" {
-                identityAttempt += 1
-                if identityAttempt == 1 {
+            if request.url?.path == "/v1/memory/relationship" {
+                relationshipAttempt += 1
+                if relationshipAttempt == 1 {
                     throw URLError(.networkConnectionLost)
                 }
                 let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
-                return (response, Data(#"{"known":true,"display_name":"her"}"#.utf8))
+                return (response, Data(#"{"memory_id":"mem_123","stage":"companion"}"#.utf8))
             }
 
             XCTAssertEqual(request.url?.path, "/v1/memory/query")
@@ -156,9 +156,9 @@ final class ServiceHealthVerifierTests: XCTestCase {
         let checked = await verifier.checkAll(pluginCount: 4)
         let agentMem = try XCTUnwrap(checked.first { $0.id == "agentmem" })
 
-        XCTAssertEqual(identityAttempt, 2)
+        XCTAssertEqual(relationshipAttempt, 2)
         XCTAssertEqual(agentMem.state, .online)
-        XCTAssertEqual(agentMem.summary, "her · true · Memory query OK")
+        XCTAssertEqual(agentMem.summary, "relationship companion · Memory query OK")
     }
 
     private func mockSession(
