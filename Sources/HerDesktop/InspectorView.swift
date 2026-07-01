@@ -671,6 +671,12 @@ private struct GeneratedPluginDraftsCard: View {
                                     .foregroundStyle(AppTheme.muted)
                                     .lineLimit(1)
                                 }
+                                ForEach(review.installStepSummaries.prefix(2)) { step in
+                                    Label(step.detail, systemImage: step.systemImage)
+                                        .font(.caption2)
+                                        .foregroundStyle(AppTheme.muted)
+                                        .lineLimit(1)
+                                }
                             }
 
                             HStack {
@@ -770,6 +776,26 @@ private struct PluginDraftReviewSheet: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    reviewSection(title: "Install Preview", icon: "shippingbox") {
+                        ForEach(review.installStepSummaries) { step in
+                            Label {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(step.title)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(AppTheme.ink)
+                                    Text(step.detail)
+                                        .font(.caption2)
+                                        .foregroundStyle(AppTheme.muted)
+                                        .textSelection(.enabled)
+                                }
+                            } icon: {
+                                Image(systemName: step.systemImage)
+                                    .foregroundStyle(AppTheme.coral)
+                            }
+                            .labelStyle(.titleAndIcon)
+                        }
+                    }
+
                     reviewSection(title: "Permissions", icon: "key.viewfinder") {
                         ForEach(review.permissionSummaries) { permission in
                             PermissionSummaryRow(permission: permission)

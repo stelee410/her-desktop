@@ -417,9 +417,22 @@ struct PluginPackageReviewDocumenter {
         }
         .joined(separator: "\n\n")
         let permissions = permissionSection(for: package)
-        guard !permissions.isEmpty else { return capabilityContracts }
+        let installPreview = installPreviewSection(for: package)
+        if permissions.isEmpty {
+            return """
+            \(capabilityContracts)
+
+            ## Install Preview
+
+            \(installPreview)
+            """
+        }
         return """
         \(capabilityContracts)
+
+        ## Install Preview
+
+        \(installPreview)
 
         ## Permission Summary
 
@@ -431,6 +444,14 @@ struct PluginPackageReviewDocumenter {
         let review = PluginPackageReview(package: package)
         return review.permissionSummaries.map { permission in
             "- \(permission.title): \(permission.detail) (\(permission.requiresApproval ? "approval required" : "fast run"))"
+        }
+        .joined(separator: "\n")
+    }
+
+    private func installPreviewSection(for package: PluginPackage) -> String {
+        let review = PluginPackageReview(package: package)
+        return review.installStepSummaries.map { step in
+            "- \(step.title): \(step.detail)"
         }
         .joined(separator: "\n")
     }

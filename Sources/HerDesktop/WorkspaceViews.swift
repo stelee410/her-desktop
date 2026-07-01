@@ -370,6 +370,15 @@ private struct ToolsWorkspaceView: View {
                                 }
                                 .controlSize(.small)
                                 .padding(.horizontal, 2)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    ForEach(review.installStepSummaries.prefix(2)) { step in
+                                        Label(step.detail, systemImage: step.systemImage)
+                                            .font(.caption2)
+                                            .foregroundStyle(AppTheme.muted)
+                                            .lineLimit(1)
+                                    }
+                                }
+                                .padding(.horizontal, 2)
                             }
                             .padding(9)
                             .background(Color.white.opacity(0.34))

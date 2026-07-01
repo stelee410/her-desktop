@@ -21,6 +21,16 @@ final class PluginPackageReviewTests: XCTestCase {
         XCTAssertEqual(review.capabilitySummaries.first?.inputFieldCount, 0)
         XCTAssertEqual(review.fileSummaries.first?.path, "SKILL.md")
         XCTAssertEqual(review.fileSummaries.first?.lineCount, 2)
+        XCTAssertEqual(review.installStepSummaries.first?.title, "Install Target")
+        XCTAssertTrue(review.installStepSummaries.first?.detail.contains("local.review") == true)
+        XCTAssertTrue(review.installStepSummaries.contains { step in
+            step.title == "Callable Functions"
+            && step.detail.contains("local_review_run")
+        })
+        XCTAssertTrue(review.installStepSummaries.contains { step in
+            step.title == "Approval Posture"
+            && step.detail.contains("Every capability asks for approval")
+        })
     }
 
     func testCommandPackageIsHighRisk() {
@@ -106,6 +116,27 @@ final class PluginPackageReviewTests: XCTestCase {
         XCTAssertEqual(review.capabilitySummaries.first?.inputFields.map(\.name), ["prompt", "size"])
         XCTAssertEqual(review.capabilitySummaries.first?.inputFields.first?.required, true)
         XCTAssertEqual(review.capabilitySummaries.first?.inputFields.last?.enumValues, ["1024x1024", "1536x1024"])
+    }
+
+    func testInstallPreviewExplainsFastRunCapabilitiesAndPackageFiles() {
+        let review = PluginPackageReview(package: package(
+            kind: "webservice",
+            requiresApproval: false,
+            adapter: .init(type: "webservice", url: "https://example.com/run", method: "POST"),
+            files: [
+                .init(path: "README.md", content: "# Review"),
+                .init(path: "SKILL.md", content: "# Skill")
+            ]
+        ))
+
+        XCTAssertTrue(review.installStepSummaries.contains { step in
+            step.title == "Approval Posture"
+            && step.detail.contains("execute immediately")
+        })
+        XCTAssertTrue(review.installStepSummaries.contains { step in
+            step.title == "Package Files"
+            && step.detail.contains("2 supporting file(s)")
+        })
     }
 
     private func package(

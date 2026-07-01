@@ -33,11 +33,19 @@ struct PluginPackageReview: Equatable {
         var requiresApproval: Bool
     }
 
+    struct InstallStepSummary: Identifiable, Equatable {
+        var id: String
+        var title: String
+        var detail: String
+        var systemImage: String
+    }
+
     var riskLevel: RiskLevel
     var riskItems: [String]
     var permissionSummaries: [PermissionSummary]
     var capabilitySummaries: [CapabilitySummary]
     var fileSummaries: [FileSummary]
+    var installStepSummaries: [InstallStepSummary]
 
     init(package: PluginPackage) {
         self.capabilitySummaries = package.manifest.capabilities.map(Self.capabilitySummary)
@@ -50,6 +58,7 @@ struct PluginPackageReview: Equatable {
             )
         }
         self.permissionSummaries = Self.permissionSummaries(for: package)
+        self.installStepSummaries = Self.installStepSummaries(for: package)
         self.riskItems = Self.riskItems(for: package)
         self.riskLevel = Self.riskLevel(for: package, riskItems: riskItems)
     }
@@ -104,6 +113,55 @@ struct PluginPackageReview: Equatable {
 
     private static func inputFields(for capability: PluginManifest.Capability) -> [CapabilityInputField] {
         CapabilityInputSchema.fields(for: capability)
+    }
+
+    private static func installStepSummaries(for package: PluginPackage) -> [InstallStepSummary] {
+        let manifest = package.manifest
+        let functionNames = manifest.capabilities
+            .map { CapabilityToolCatalog.functionName(for: $0.id) }
+            .joined(separator: ", ")
+        let approvalDetail: String
+        if manifest.capabilities.isEmpty {
+            approvalDetail = "No capabilities are declared, so installing this package will not expose runnable tools."
+        } else if manifest.capabilities.allSatisfy({ $0.requiresApproval }) {
+            approvalDetail = "Every capability asks for approval before execution."
+        } else if manifest.capabilities.contains(where: { $0.requiresApproval }) {
+            approvalDetail = "Some capabilities ask for approval; fast-run capabilities can execute immediately from chat or the Plugin Library."
+        } else {
+            approvalDetail = "Capabilities can execute immediately from chat or the Plugin Library."
+        }
+        let fileDetail = package.files.isEmpty
+            ? "No supporting files will be installed with this package."
+            : "\(package.files.count) supporting file(s) will be installed inside this plugin package."
+
+        return [
+            InstallStepSummary(
+                id: "install-target",
+                title: "Install Target",
+                detail: "\(manifest.name) installs as \(manifest.id) in the local plugin registry; an existing local plugin with the same id is updated.",
+                systemImage: "shippingbox"
+            ),
+            InstallStepSummary(
+                id: "callable-functions",
+                title: "Callable Functions",
+                detail: functionNames.isEmpty
+                    ? "No model-callable functions are declared."
+                    : "Adds \(functionNames) for chat tool calls and Plugin Library runs.",
+                systemImage: "function"
+            ),
+            InstallStepSummary(
+                id: "approval-posture",
+                title: "Approval Posture",
+                detail: approvalDetail,
+                systemImage: manifest.capabilities.contains(where: { $0.requiresApproval }) ? "hand.raised" : "bolt"
+            ),
+            InstallStepSummary(
+                id: "package-files",
+                title: "Package Files",
+                detail: fileDetail,
+                systemImage: "doc.on.doc"
+            )
+        ]
     }
 
     private static func permissionSummaries(for package: PluginPackage) -> [PermissionSummary] {
