@@ -10,7 +10,9 @@ struct ApprovedCapabilityFollowUpBuilder {
         approval: PendingApproval,
         result: CapabilityResult
     ) -> [AgentLLMMessage] {
-        var messages = contextBuilder.build(systemPrompt: systemPrompt, messages: transcript)
+        var followUpContextBuilder = contextBuilder
+        followUpContextBuilder.maxToolEvidenceMessages = 0
+        var messages = followUpContextBuilder.build(systemPrompt: systemPrompt, messages: transcript)
         messages.append(.user(followUpInstruction(approval: approval, result: result)))
         return messages
     }

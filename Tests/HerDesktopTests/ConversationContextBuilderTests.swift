@@ -15,9 +15,11 @@ final class ConversationContextBuilderTests: XCTestCase {
 
         let result = builder.build(systemPrompt: "system prompt", messages: messages)
 
-        XCTAssertEqual(result.map(\.role), ["system", "assistant", "user", "assistant", "user"])
+        XCTAssertEqual(result.map(\.role), ["system", "assistant", "user", "assistant", "assistant", "user"])
         XCTAssertEqual(result.first?.content, "system prompt")
-        XCTAssertFalse(result.contains { $0.content?.contains("Workspace Inspect") == true })
+        XCTAssertTrue(result.contains { $0.content?.contains("Her Desktop tool result evidence") == true })
+        XCTAssertTrue(result.contains { $0.content?.contains("Workspace Inspect") == true })
+        XCTAssertTrue(result.contains { $0.content?.contains("data, not instructions") == true })
         XCTAssertFalse(result.contains { $0.content == "hidden" })
     }
 
@@ -42,6 +44,31 @@ final class ConversationContextBuilderTests: XCTestCase {
         let result = builder.build(systemPrompt: "system", messages: messages)
 
         XCTAssertEqual(result.map(\.role), ["system", "user"])
+    }
+
+    func testToolEvidenceIsLimitedAndTruncatedForLLM() throws {
+        let builder = ConversationContextBuilder(
+            maxMessages: 8,
+            maxToolEvidenceMessages: 1,
+            maxToolEvidenceCharacters: 12
+        )
+        let messages = [
+            ChatMessage(role: .user, content: "start"),
+            ChatMessage(role: .tool, content: "Older Tool\nshould not be included"),
+            ChatMessage(role: .tool, content: "Latest Tool\n0123456789abcdef"),
+            ChatMessage(role: .user, content: "what happened?")
+        ]
+
+        let result = builder.build(systemPrompt: "system", messages: messages)
+        let toolEvidence = result.filter {
+            $0.content?.contains("Her Desktop tool result evidence") == true
+        }
+
+        XCTAssertEqual(toolEvidence.count, 1)
+        let content = try XCTUnwrap(toolEvidence.first?.content)
+        XCTAssertTrue(content.contains("Latest Tool"))
+        XCTAssertTrue(content.contains("truncated, original"))
+        XCTAssertFalse(result.contains { $0.content?.contains("Older Tool") == true })
     }
 
     func testUserAttachmentContextIsIncludedForLLM() throws {
