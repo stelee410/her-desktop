@@ -2,6 +2,17 @@ import AppKit
 import Foundation
 import SwiftUI
 
+private enum PluginImportError: LocalizedError {
+    case emptySkillFile(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .emptySkillFile(let fileName):
+            return "\(fileName.isEmpty ? "Skill file" : fileName) is empty."
+        }
+    }
+}
+
 @MainActor
 final class AppViewModel: ObservableObject {
     @Published var config: HerAppConfig
@@ -1626,6 +1637,64 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    @discardableResult
+    func stageSkillFilePlugin(
+        _ url: URL,
+        name: String = "",
+        description: String = "",
+        requiresApproval: Bool = true,
+        source: String = "skill-file"
+    ) -> Bool {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer {
+            if scoped {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        do {
+            let content = try String(contentsOf: url, encoding: .utf8)
+            let cleanContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !cleanContent.isEmpty else {
+                throw PluginImportError.emptySkillFile(url.lastPathComponent)
+            }
+            let sourceLabel = "\(source):\(url.lastPathComponent)"
+            let package = makeImportedSkillPluginPackage(
+                skillContent: cleanContent,
+                fileName: url.deletingPathExtension().lastPathComponent,
+                name: name,
+                description: description,
+                requiresApproval: requiresApproval
+            )
+            let documented = PluginPackageReviewDocumenter().documented(package)
+            try PluginPackageValidator().validate(documented, existingPluginIDs: plugins.map(\.id))
+            recordInteractionEvent(interactionEventBus.event(
+                surface: .pluginLibrary,
+                kind: .pluginPackageImported,
+                summary: "Imported skill file as plugin package.",
+                payload: [
+                    "source": sourceLabel,
+                    "pluginID": documented.manifest.id,
+                    "file": url.lastPathComponent
+                ]
+            ))
+            let draft = stageGeneratedPluginPackage(documented, source: sourceLabel)
+            messages.append(ChatMessage(
+                role: .tool,
+                content: pluginDraftReviewContent(
+                    title: "Skill File Imported",
+                    draft: draft,
+                    summary: "Imported \(url.lastPathComponent) as \(documented.manifest.name) (\(documented.manifest.id)) for review."
+                )
+            ))
+            saveSessionSnapshot()
+            return true
+        } catch {
+            reportSkillFileImportError(error, source: source, fileName: url.lastPathComponent)
+            return false
+        }
+    }
+
     func reportPluginPackageImportError(_ error: Error, source: String, fileName: String = "") {
         lastError = error.localizedDescription
         var metadata = ["source": source]
@@ -1640,6 +1709,24 @@ final class AppViewModel: ObservableObject {
         messages.append(ChatMessage(
             role: .tool,
             content: "Plugin Package Import Failed\n\(error.localizedDescription)"
+        ))
+        saveSessionSnapshot()
+    }
+
+    func reportSkillFileImportError(_ error: Error, source: String, fileName: String = "") {
+        lastError = error.localizedDescription
+        var metadata = ["source": source]
+        if !fileName.isEmpty {
+            metadata["file"] = fileName
+        }
+        audit(
+            type: "plugin.skill_import_failed",
+            summary: error.localizedDescription,
+            metadata: metadata
+        )
+        messages.append(ChatMessage(
+            role: .tool,
+            content: "Skill File Import Failed\n\(error.localizedDescription)"
         ))
         saveSessionSnapshot()
     }
@@ -1975,6 +2062,59 @@ final class AppViewModel: ObservableObject {
                     \(contract)
                     """
                 )
+            ]
+        )
+    }
+
+    private func makeImportedSkillPluginPackage(
+        skillContent: String,
+        fileName: String,
+        name: String,
+        description: String,
+        requiresApproval: Bool
+    ) -> PluginPackage {
+        let fallbackName = fileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Imported Skill"
+            : fileName
+                .replacingOccurrences(of: "[-_]+", with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .capitalized
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? fallbackName
+            : name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanDescription = description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Imported skill instructions from \(fileName.isEmpty ? "a local file" : fileName)."
+            : description.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedSlug = PluginIdentifierBuilder.makeSlug(
+            name: cleanName,
+            description: cleanDescription,
+            existingPluginIDs: Set(plugins.map(\.id) + generatedPluginDrafts.map(\.manifest.id))
+        )
+        let pluginID = "local.\(resolvedSlug)"
+        let capabilityID = "\(pluginID).run"
+        return PluginPackage(
+            manifest: PluginManifest(
+                id: pluginID,
+                name: cleanName,
+                version: "0.1.0",
+                description: cleanDescription,
+                author: "Imported skill file",
+                systemPromptAddendum: "This plugin was imported from a local skill file. Treat the skill file as package instructions and keep side effects inside Her Desktop's approval gates.",
+                capabilities: [
+                    .init(
+                        id: capabilityID,
+                        title: "Run \(cleanName)",
+                        kind: "skill",
+                        invocation: capabilityID,
+                        requiresApproval: requiresApproval,
+                        description: cleanDescription,
+                        inputSchema: defaultDraftInputSchema(kind: "skill"),
+                        adapter: .init(type: "skill", skillFile: "SKILL.md")
+                    )
+                ]
+            ),
+            files: [
+                .init(path: "SKILL.md", content: skillContent)
             ]
         )
     }

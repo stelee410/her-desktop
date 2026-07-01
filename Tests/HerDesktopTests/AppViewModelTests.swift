@@ -1535,6 +1535,55 @@ final class AppViewModelTests: XCTestCase {
         })
     }
 
+    func testStageSkillFileImportsSkillAsPluginDraftForReview() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-import-skill-file-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        let skillURL = root.appendingPathComponent("research-scout.md")
+        try """
+        # Research Scout
+
+        Compare sources, name uncertainty, and keep the answer compact.
+        """
+        .write(to: skillURL, atomically: true, encoding: .utf8)
+
+        let model = AppViewModel(config: config, cwd: cwd.path)
+        let imported = model.stageSkillFilePlugin(
+            skillURL,
+            name: "Research Scout",
+            description: "Use a local skill file to compare sources.",
+            requiresApproval: false,
+            source: "test-skill-file"
+        )
+
+        XCTAssertTrue(imported)
+        let draft = try XCTUnwrap(model.generatedPluginDrafts.first)
+        XCTAssertEqual(draft.source, "test-skill-file:research-scout.md")
+        XCTAssertEqual(draft.manifest.id, "local.research-scout")
+        XCTAssertEqual(draft.manifest.name, "Research Scout")
+        XCTAssertEqual(draft.manifest.capabilities.first?.kind, "skill")
+        XCTAssertEqual(draft.manifest.capabilities.first?.adapter?.skillFile, "SKILL.md")
+        XCTAssertEqual(draft.manifest.capabilities.first?.requiresApproval, false)
+        let skill = try XCTUnwrap(draft.package.files.first { $0.path == "SKILL.md" }?.content)
+        XCTAssertTrue(skill.contains("Compare sources, name uncertainty"))
+        XCTAssertTrue(skill.contains("## Adapter Contract"))
+        let readme = try XCTUnwrap(draft.package.files.first { $0.path == "README.md" }?.content)
+        XCTAssertTrue(readme.contains("## Capability Contract"))
+        XCTAssertTrue(model.messages.contains { $0.content.contains("Skill File Imported") })
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: cwd.appendingPathComponent(".her/plugin-drafts/\(draft.id.uuidString).json").path
+        ))
+        let audit = try AuditEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(audit.contains { event in
+            event.type == "plugin.draft_staged"
+            && event.metadata["pluginID"] == "local.research-scout"
+            && event.metadata["source"] == "test-skill-file:research-scout.md"
+        })
+    }
+
     func testStagePluginPackageJSONRejectsInvalidPayload() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-import-plugin-package-invalid-\(UUID().uuidString)", isDirectory: true)

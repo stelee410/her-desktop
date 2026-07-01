@@ -2108,6 +2108,7 @@ private struct VibePluginComposerSheet: View {
     @Binding var pluginExistingPackageContext: String
     @State private var vibeBrief = ""
     @State private var isPackageImporterPresented = false
+    @State private var isSkillImporterPresented = false
 
     private let kinds = ["skill", "webservice", "mcp", "command", "native"]
     private let methods = ["POST", "GET"]
@@ -2310,6 +2311,15 @@ private struct VibePluginComposerSheet: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(isBusy)
+
+                Button {
+                    isSkillImporterPresented = true
+                } label: {
+                    Label("Import Skill File", systemImage: "doc.text")
+                }
+                .buttonStyle(.bordered)
+                .disabled(isBusy || isUpdatingPlugin)
+                .help(isUpdatingPlugin ? "Clear update mode before importing a standalone skill file." : "Wrap a local text or Markdown skill file as a reviewable plugin draft")
             }
 
             HStack {
@@ -2447,6 +2457,26 @@ private struct VibePluginComposerSheet: View {
                 isPresented = false
             } else if case let .failure(error) = result {
                 model.reportPluginPackageImportError(error, source: "composer-file")
+            }
+        }
+        .fileImporter(
+            isPresented: $isSkillImporterPresented,
+            allowedContentTypes: [.plainText, .text],
+            allowsMultipleSelection: false
+        ) { result in
+            if case let .success(urls) = result,
+               let url = urls.first,
+               model.stageSkillFilePlugin(
+                   url,
+                   name: pluginName,
+                   description: effectiveDescription,
+                   requiresApproval: pluginRequiresApproval,
+                   source: "composer-skill-file"
+               ) {
+                reset()
+                isPresented = false
+            } else if case let .failure(error) = result {
+                model.reportSkillFileImportError(error, source: "composer-skill-file")
             }
         }
     }
