@@ -33,6 +33,7 @@ struct InspectorView: View {
                     pluginCommandArguments: $pluginCommandArguments,
                     pluginPackageJSON: $pluginPackageJSON
                 )
+                ProductReadinessCard()
                 ActivePlanCard()
                 ConnectedToolsCard()
                 ServiceHealthCard()
@@ -69,6 +70,96 @@ struct InspectorView: View {
             .padding(18)
         }
         .background(Color.white.opacity(0.24))
+    }
+}
+
+private struct ProductReadinessCard: View {
+    @EnvironmentObject private var model: AppViewModel
+
+    private var summary: ProductReadinessSummary {
+        ProductReadinessBuilder.build(
+            config: model.config,
+            serviceHealth: model.serviceHealth,
+            plugins: model.plugins,
+            localInboxBridgeState: model.localInboxBridgeState,
+            pendingApprovals: model.pendingApprovals,
+            generatedDrafts: model.generatedPluginDrafts,
+            workPlan: model.workPlan,
+            dreamContext: model.dreamContext
+        )
+    }
+
+    var body: some View {
+        Panel(title: "Product Readiness", trailing: summary.score) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: summary.isReadyForCoreWork ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                        .font(.title3)
+                        .foregroundStyle(summary.isReadyForCoreWork ? .green : AppTheme.coral)
+                        .frame(width: 24)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(summary.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppTheme.ink)
+                        Text(summary.detail)
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.muted)
+                            .lineLimit(3)
+                    }
+                    Spacer(minLength: 0)
+                }
+
+                VStack(spacing: 7) {
+                    ForEach(summary.items) { item in
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: item.systemImage)
+                                .foregroundStyle(color(for: item.level))
+                                .frame(width: 18)
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 6) {
+                                    Text(item.title)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(AppTheme.ink)
+                                    Text(label(for: item))
+                                        .font(.caption2.weight(.medium))
+                                        .foregroundStyle(color(for: item.level))
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Color.white.opacity(0.54))
+                                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                                    Spacer(minLength: 0)
+                                }
+                                Text(item.detail)
+                                    .font(.caption2)
+                                    .foregroundStyle(AppTheme.muted)
+                                    .lineLimit(2)
+                                    .truncationMode(.middle)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                        .padding(8)
+                        .background(Color.white.opacity(item.required ? 0.48 : 0.34))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+            }
+        }
+    }
+
+    private func label(for item: ProductReadinessItem) -> String {
+        switch item.level {
+        case .ready: return item.required ? "Ready" : "Active"
+        case .attention: return item.required ? "Needed" : "Review"
+        case .optional: return "Optional"
+        }
+    }
+
+    private func color(for level: ProductReadinessLevel) -> Color {
+        switch level {
+        case .ready: return .green
+        case .attention: return AppTheme.coral
+        case .optional: return AppTheme.muted
+        }
     }
 }
 
