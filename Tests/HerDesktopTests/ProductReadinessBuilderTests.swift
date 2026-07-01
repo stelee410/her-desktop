@@ -15,14 +15,15 @@ final class ProductReadinessBuilderTests: XCTestCase {
         )
 
         XCTAssertEqual(summary.title, "Setup Needed")
-        XCTAssertEqual(summary.score, "2/4")
+        XCTAssertEqual(summary.score, "1/3")
         XCTAssertFalse(summary.isReadyForCoreWork)
         XCTAssertEqual(summary.items.first { $0.id == "agentllm" }?.level, .attention)
         XCTAssertEqual(summary.items.first { $0.id == "agentllm" }?.action, .openSettings)
         XCTAssertEqual(summary.items.first { $0.id == "agentmem" }?.level, .attention)
         XCTAssertEqual(summary.items.first { $0.id == "agentmem" }?.actionTitle, "Settings")
         XCTAssertEqual(summary.items.first { $0.id == "plugins" }?.level, .ready)
-        XCTAssertEqual(summary.items.first { $0.id == "identity" }?.level, .ready)
+        XCTAssertEqual(summary.items.first { $0.id == "labels" }?.level, .ready)
+        XCTAssertTrue(summary.items.first { $0.id == "labels" }?.detail.contains("local label only") == true)
     }
 
     func testOnlineServicesAndPluginRuntimeAreCoreReady() {
@@ -46,7 +47,7 @@ final class ProductReadinessBuilderTests: XCTestCase {
         )
 
         XCTAssertEqual(summary.title, "Ready")
-        XCTAssertEqual(summary.score, "4/4")
+        XCTAssertEqual(summary.score, "3/3")
         XCTAssertTrue(summary.isReadyForCoreWork)
         XCTAssertEqual(summary.items.first { $0.id == "inbox" }?.level, .ready)
         XCTAssertEqual(summary.items.first { $0.id == "workplan" }?.level, .ready)
@@ -108,6 +109,34 @@ final class ProductReadinessBuilderTests: XCTestCase {
         XCTAssertEqual(summary.items.first { $0.id == "reflection" }?.action, .generateReflection)
         XCTAssertEqual(summary.items.first { $0.id == "inbox" }?.action, .startInboxBridge)
         XCTAssertEqual(summary.items.first { $0.id == "voice" }?.action, .openSettings)
+    }
+
+    func testLocalLabelsAreOptionalBecauseAgentMemV7UsesMemoryKeyIdentity() {
+        var config = HerAppConfig.empty
+        config.agentLLMAPIKey = "llm-test"
+        config.agentMemAPIKey = "mem-test"
+        config.agentCode = ""
+        config.userID = ""
+
+        let summary = ProductReadinessBuilder.build(
+            config: config,
+            serviceHealth: [
+                health(id: "agentllm", state: .online),
+                health(id: "agentmem", state: .online)
+            ],
+            plugins: [plugin()],
+            localInboxBridgeState: LocalInboxBridgeState(),
+            pendingApprovals: [],
+            generatedDrafts: [],
+            workPlan: nil,
+            dreamContext: nil
+        )
+
+        XCTAssertEqual(summary.score, "3/3")
+        XCTAssertTrue(summary.isReadyForCoreWork)
+        XCTAssertEqual(summary.items.first { $0.id == "labels" }?.level, .optional)
+        XCTAssertFalse(summary.items.first { $0.id == "labels" }?.required == true)
+        XCTAssertTrue(summary.items.first { $0.id == "labels" }?.detail.contains("Memory-Key") == true)
     }
 
     func testSuggestedActionsReturnFirstNonReadyActionableItemsWithLimit() {

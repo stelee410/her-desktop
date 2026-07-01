@@ -62,7 +62,7 @@ enum ProductReadinessBuilder {
             agentLLMItem(config: config, serviceHealth: serviceHealth),
             agentMemItem(config: config, serviceHealth: serviceHealth),
             pluginRuntimeItem(plugins: plugins),
-            identityItem(config: config),
+            localLabelsItem(config: config),
             reviewQueueItem(pendingApprovals: pendingApprovals, generatedDrafts: generatedDrafts),
             workPlanItem(workPlan: workPlan),
             reflectionItem(dreamContext: dreamContext),
@@ -170,19 +170,29 @@ enum ProductReadinessBuilder {
         )
     }
 
-    private static func identityItem(config: HerAppConfig) -> ProductReadinessItem {
+    private static func localLabelsItem(config: HerAppConfig) -> ProductReadinessItem {
         let agentCode = config.agentCode.trimmingCharacters(in: .whitespacesAndNewlines)
         let userID = config.userID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let ready = !agentCode.isEmpty && !userID.isEmpty
+        let hasLabels = !agentCode.isEmpty || !userID.isEmpty
+        let detail: String
+        if agentCode.isEmpty && userID.isEmpty {
+            detail = "Optional display labels are unset; AgentMem data is scoped by the Memory-Key."
+        } else if userID.isEmpty {
+            detail = "\(agentCode) · Memory-Key scopes AgentMem data."
+        } else if agentCode.isEmpty {
+            detail = "\(userID) · Memory-Key scopes AgentMem data."
+        } else {
+            detail = "\(agentCode) for \(userID) · local label only."
+        }
         return item(
-            id: "identity",
-            title: "Memory Identity",
-            detail: ready ? "\(agentCode) for \(userID)" : "Set agent code and user id for stable memory scope.",
-            level: ready ? .ready : .attention,
+            id: "labels",
+            title: "Local Labels",
+            detail: detail,
+            level: hasLabels ? .ready : .optional,
             systemImage: "person.crop.circle.badge.checkmark",
-            required: true,
-            actionTitle: ready ? nil : "Settings",
-            action: ready ? nil : .openSettings
+            required: false,
+            actionTitle: hasLabels ? nil : "Settings",
+            action: hasLabels ? nil : .openSettings
         )
     }
 

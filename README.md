@@ -77,6 +77,7 @@ AgentMem V7 compatibility note: data-plane calls are routed by
 `user_input` plus `agent_response` for short exchanges, then switches to the
 recommended V7 `summary` mode once a session has enough confirmed context.
 The Memory-Key itself is the runtime memory identity.
+Product Readiness treats local agent/user labels as optional display or platform-mapping metadata; they do not gate AgentMem V7 memory scope.
 
 ## Build A Mac App Bundle
 
