@@ -75,8 +75,12 @@ struct CapabilityToolCatalog {
     }
 
     static func functionNamesByCapabilityID(for manifest: PluginManifest) -> [String: String] {
+        functionNamesByCapabilityID(for: [manifest])
+    }
+
+    static func functionNamesByCapabilityID(for manifests: [PluginManifest]) -> [String: String] {
         Dictionary(
-            uniqueKeysWithValues: build(from: [manifest]).functionToCapability.map { functionName, capabilityID in
+            uniqueKeysWithValues: build(from: manifests).functionToCapability.map { functionName, capabilityID in
                 (capabilityID, functionName)
             }
         )
@@ -1347,13 +1351,15 @@ final class CapabilityExecutor {
             let existingIDs = installedPlugins.map(\.id).filter { $0 != package.manifest.id }
             try PluginPackageValidator().validate(package, existingPluginIDs: existingIDs)
             try registry.install(package: package, replacingExisting: updatingExisting)
+            let catalogManifests = registry.loadPlugins()
             return CapabilityResult(
                 title: updatingExisting ? "Plugin Updated" : "Plugin Installed",
                 content: PluginInstallSummaryFormatter().content(
                     package: package,
                     source: "plugin.install capability",
                     title: updatingExisting ? "Plugin Updated" : "Plugin Installed",
-                    verb: updatingExisting ? "Updated" : "Installed"
+                    verb: updatingExisting ? "Updated" : "Installed",
+                    catalogManifests: catalogManifests
                 ),
                 requiresUserApproval: false
             )

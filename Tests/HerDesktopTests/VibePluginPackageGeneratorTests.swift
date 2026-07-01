@@ -337,6 +337,27 @@ final class VibePluginPackageGeneratorTests: XCTestCase {
         XCTAssertNoThrow(try PluginPackageValidator().validate(package))
     }
 
+    func testValidatorAcceptsAgentMemV7MemoryKeyPlaceholderForWebService() {
+        let package = agentMemWebServicePackage(
+            bodyTemplate: #"{"query":{{json:request}},"top_k":6}"#
+        )
+
+        XCTAssertNoThrow(try PluginPackageValidator().validate(package))
+    }
+
+    func testValidatorRejectsRetiredAgentMemScopedPlaceholdersInAdapterTemplates() {
+        let package = agentMemWebServicePackage(
+            bodyTemplate: #"{"query":{{json:request}},"user_id":"{{user_id}}"}"#
+        )
+
+        XCTAssertThrowsError(try PluginPackageValidator().validate(package)) { error in
+            XCTAssertEqual(
+                error as? PluginPackageValidator.ValidationError,
+                .invalidAdapter("capability.local.agentmem-query.run.adapter.bodyTemplate uses retired AgentMem V7 placeholder")
+            )
+        }
+    }
+
     func testValidatorAcceptsLocalMCPBridgeAdapter() {
         let package = mcpPackage(url: "http://localhost:8765/jsonrpc", methodName: "tools/call", toolName: "research.summarize")
 
@@ -453,6 +474,37 @@ final class VibePluginPackageGeneratorTests: XCTestCase {
           ]
         }
         """
+    }
+
+    private func agentMemWebServicePackage(bodyTemplate: String) -> PluginPackage {
+        PluginPackage(
+            manifest: PluginManifest(
+                id: "local.agentmem-query",
+                name: "AgentMem Query",
+                version: "0.1.0",
+                description: "Queries AgentMem through the V7 Memory-Key data plane.",
+                author: "Vibe coded",
+                systemPromptAddendum: nil,
+                capabilities: [
+                    .init(
+                        id: "local.agentmem-query.run",
+                        title: "Run AgentMem Query",
+                        kind: "webservice",
+                        invocation: "local.agentmem-query.run",
+                        requiresApproval: true,
+                        description: "Calls AgentMem query with safe runtime config placeholders.",
+                        adapter: .init(
+                            type: "webservice",
+                            url: "{{agent_mem_base_url}}/v1/memory/query",
+                            method: "POST",
+                            headers: ["X-Memory-API-Key": "{{agent_mem_api_key}}"],
+                            bodyTemplate: bodyTemplate
+                        )
+                    )
+                ]
+            ),
+            files: [.init(path: "SKILL.md", content: "# AgentMem Query")]
+        )
     }
 
     private func mcpPackage(url: String, methodName: String, toolName: String = "") -> PluginPackage {

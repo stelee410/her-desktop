@@ -460,6 +460,35 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: pluginRoot.appendingPathComponent("OLD.md").path))
     }
 
+    @MainActor
+    func testBuiltInPluginInstallSummaryUsesGlobalFunctionNameContext() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-plugin-install-global-collision-\(UUID().uuidString)", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.path
+        let registry = PluginRegistry(config: config)
+        try registry.install(package: package(id: "local.same", name: "Same", capabilityID: "local.same.run.x"))
+        let executor = CapabilityExecutor(registry: registry)
+        let packageJSON = String(
+            data: try JSONEncoder.pretty.encode(package(id: "local.same_run", name: "Same Underscore", capabilityID: "local.same_run.x")),
+            encoding: .utf8
+        )!
+
+        let result = await executor.execute(CapabilityInvocation(
+            toolCallID: "call_install_collision",
+            functionName: "plugin_install",
+            capabilityID: "plugin.install",
+            arguments: [
+                "confirmed": true,
+                "package_json": packageJSON
+            ]
+        ))
+
+        XCTAssertEqual(result.title, "Plugin Installed")
+        XCTAssertTrue(result.content.contains("local.same_run.x as local_same_run_x_"), result.content)
+        XCTAssertFalse(result.content.contains(#"local_same_run_x {"request":"<request>"}"#), result.content)
+    }
+
     func testRegistryLoadsBundledBuiltInPluginManifests() {
         let registry = PluginRegistry(config: .empty)
         let plugins = registry.loadPlugins()
@@ -2472,6 +2501,23 @@ final class CapabilityRuntimeTests: XCTestCase {
                     )
                 )
             ]
+        )
+    }
+
+    private func package(id: String, name: String, capabilityID: String) -> PluginPackage {
+        PluginPackage(
+            manifest: PluginManifest(
+                id: id,
+                name: name,
+                version: "0.1.0",
+                description: "\(name) helper.",
+                author: "Test",
+                systemPromptAddendum: nil,
+                capabilities: [
+                    .init(id: capabilityID, title: "Run \(name)", kind: "skill", invocation: capabilityID, requiresApproval: false)
+                ]
+            ),
+            files: []
         )
     }
 }

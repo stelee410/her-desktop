@@ -1962,6 +1962,30 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertFalse(lastMessage.contains("callable_functions: local_same_run\n"))
     }
 
+    func testPluginListDraftsUsesInstalledPluginContextForGlobalFunctionNameCollisions() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-plugin-list-drafts-global-collision-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        try PluginRegistry(config: config).install(
+            package: package(id: "local.same", name: "Same", capabilityID: "local.same.run")
+        )
+        let model = AppViewModel(config: config, cwd: cwd.path)
+        await model.reloadPlugins()
+        model.stageGeneratedPluginPackage(
+            package(id: "local.underscore", name: "Underscore", capabilityID: "local_same_run"),
+            source: "plugin.draft"
+        )
+
+        await model.runCapability(capabilityID: "plugin.listDrafts", arguments: [:])
+
+        let lastMessage = try XCTUnwrap(model.messages.last?.content)
+        XCTAssertTrue(lastMessage.contains("Underscore (local.underscore)"))
+        XCTAssertTrue(lastMessage.contains("callable_functions: local_same_run_"))
+        XCTAssertFalse(lastMessage.contains("callable_functions: local_same_run\n"))
+    }
+
     func testPluginInstallDraftFailureListsRetryArguments() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-plugin-install-draft-retry-\(UUID().uuidString)", isDirectory: true)
@@ -2580,6 +2604,23 @@ final class AppViewModelTests: XCTestCase {
                 capabilities: [
                     .init(id: "local.same.run", title: "Run Dot", kind: "skill", invocation: "local.same.run", requiresApproval: false),
                     .init(id: "local_same_run", title: "Run Underscore", kind: "skill", invocation: "local_same_run", requiresApproval: false)
+                ]
+            ),
+            files: []
+        )
+    }
+
+    private func package(id: String, name: String, capabilityID: String) -> PluginPackage {
+        PluginPackage(
+            manifest: PluginManifest(
+                id: id,
+                name: name,
+                version: "0.1.0",
+                description: "\(name) helper.",
+                author: "Test",
+                systemPromptAddendum: nil,
+                capabilities: [
+                    .init(id: capabilityID, title: "Run \(name)", kind: "skill", invocation: capabilityID, requiresApproval: false)
                 ]
             ),
             files: []

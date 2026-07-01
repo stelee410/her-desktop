@@ -494,7 +494,8 @@ private struct ToolsWorkspaceView: View {
                 } else {
                     VStack(spacing: 8) {
                         ForEach(model.generatedPluginDrafts.prefix(5)) { draft in
-                            let review = PluginPackageReview(package: draft.package)
+                            let catalogManifests = model.plugins.filter { $0.id != draft.manifest.id } + [draft.manifest]
+                            let review = PluginPackageReview(package: draft.package, catalogManifests: catalogManifests)
                             VStack(alignment: .leading, spacing: 8) {
                                 WorkspaceEventRow(
                                     icon: "shippingbox",

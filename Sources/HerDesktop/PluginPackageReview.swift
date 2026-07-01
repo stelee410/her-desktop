@@ -47,7 +47,7 @@ struct PluginPackageReview: Equatable {
     var fileSummaries: [FileSummary]
     var installStepSummaries: [InstallStepSummary]
 
-    init(package: PluginPackage) {
+    init(package: PluginPackage, catalogManifests: [PluginManifest]? = nil) {
         self.capabilitySummaries = package.manifest.capabilities.map(Self.capabilitySummary)
         self.fileSummaries = package.files.map { file in
             let data = file.content.data(using: .utf8) ?? Data()
@@ -58,7 +58,7 @@ struct PluginPackageReview: Equatable {
             )
         }
         self.permissionSummaries = Self.permissionSummaries(for: package)
-        self.installStepSummaries = Self.installStepSummaries(for: package)
+        self.installStepSummaries = Self.installStepSummaries(for: package, catalogManifests: catalogManifests)
         self.riskItems = Self.riskItems(for: package)
         self.riskLevel = Self.riskLevel(for: package, riskItems: riskItems)
     }
@@ -127,9 +127,9 @@ struct PluginPackageReview: Equatable {
         CapabilityInputSchema.fields(for: capability)
     }
 
-    private static func installStepSummaries(for package: PluginPackage) -> [InstallStepSummary] {
+    private static func installStepSummaries(for package: PluginPackage, catalogManifests: [PluginManifest]?) -> [InstallStepSummary] {
         let manifest = package.manifest
-        let functionNamesByCapabilityID = CapabilityToolCatalog.functionNamesByCapabilityID(for: manifest)
+        let functionNamesByCapabilityID = CapabilityToolCatalog.functionNamesByCapabilityID(for: catalogManifests ?? [manifest])
         let functionNames = manifest.capabilities
             .map { functionNamesByCapabilityID[$0.id] ?? CapabilityToolCatalog.functionName(for: $0.id) }
             .joined(separator: ", ")

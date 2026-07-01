@@ -710,7 +710,8 @@ private struct GeneratedPluginDraftsCard: View {
             } else {
                 VStack(spacing: 10) {
                     ForEach(model.generatedPluginDrafts) { draft in
-                        let review = PluginPackageReview(package: draft.package)
+                        let catalogManifests = model.plugins.filter { $0.id != draft.manifest.id } + [draft.manifest]
+                        let review = PluginPackageReview(package: draft.package, catalogManifests: catalogManifests)
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(spacing: 8) {
                                 Image(systemName: "shippingbox")
@@ -831,7 +832,8 @@ private struct PluginDraftReviewSheet: View {
     var draft: GeneratedPluginDraft
 
     private var review: PluginPackageReview {
-        PluginPackageReview(package: draft.package)
+        let catalogManifests = model.plugins.filter { $0.id != draft.manifest.id } + [draft.manifest]
+        return PluginPackageReview(package: draft.package, catalogManifests: catalogManifests)
     }
 
     var body: some View {

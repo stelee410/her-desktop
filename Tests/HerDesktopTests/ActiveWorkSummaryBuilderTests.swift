@@ -176,6 +176,25 @@ final class ActiveWorkSummaryBuilderTests: XCTestCase {
         XCTAssertFalse(summary.contains("functions: local_same_run."))
     }
 
+    func testBuildUsesInstalledPluginContextWhenDraftFunctionNamesCollideGlobally() {
+        let installed = package(id: "local.same", name: "Same", capabilityID: "local.same.run")
+        let draft = GeneratedPluginDraft(
+            package: package(id: "local.underscore", name: "Underscore", capabilityID: "local_same_run"),
+            source: "plugin.draft"
+        )
+
+        let summary = ActiveWorkSummaryBuilder(draftSummaryLimit: 260).build(
+            tasks: [],
+            activities: [],
+            generatedDrafts: [draft],
+            installedPlugins: [installed.manifest]
+        )
+
+        XCTAssertTrue(summary.contains("Underscore (local.underscore)"))
+        XCTAssertTrue(summary.contains("functions: local_same_run_"))
+        XCTAssertFalse(summary.contains("functions: local_same_run."))
+    }
+
     func testBuildIncludesCurrentWorkPlanAsStateData() {
         let plan = WorkPlan(
             goal: "Make workspace planning durable.",
@@ -213,6 +232,23 @@ final class ActiveWorkSummaryBuilderTests: XCTestCase {
                 capabilities: [
                     .init(id: "local.same.run", title: "Run Dot", kind: "skill", invocation: "local.same.run", requiresApproval: false),
                     .init(id: "local_same_run", title: "Run Underscore", kind: "skill", invocation: "local_same_run", requiresApproval: false)
+                ]
+            ),
+            files: []
+        )
+    }
+
+    private func package(id: String, name: String, capabilityID: String) -> PluginPackage {
+        PluginPackage(
+            manifest: PluginManifest(
+                id: id,
+                name: name,
+                version: "0.1.0",
+                description: "\(name) helper.",
+                author: "Test",
+                systemPromptAddendum: nil,
+                capabilities: [
+                    .init(id: capabilityID, title: "Run \(name)", kind: "skill", invocation: capabilityID, requiresApproval: false)
                 ]
             ),
             files: []

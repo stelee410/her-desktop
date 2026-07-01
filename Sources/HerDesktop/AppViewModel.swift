@@ -2087,8 +2087,9 @@ final class AppViewModel: ObservableObject {
         }
 
         let summaries = generatedPluginDrafts.map { draft in
-            let review = PluginPackageReview(package: draft.package)
-            let functionNamesByCapabilityID = CapabilityToolCatalog.functionNamesByCapabilityID(for: draft.manifest)
+            let catalogManifests = catalogManifestsAfterInstalling(draft.manifest)
+            let review = PluginPackageReview(package: draft.package, catalogManifests: catalogManifests)
+            let functionNamesByCapabilityID = CapabilityToolCatalog.functionNamesByCapabilityID(for: catalogManifests)
             let functions = draft.manifest.capabilities
                 .map { functionNamesByCapabilityID[$0.id] ?? CapabilityToolCatalog.functionName(for: $0.id) }
                 .joined(separator: ", ")
@@ -2135,7 +2136,7 @@ final class AppViewModel: ObservableObject {
         }
 
         let summaries = localPlugins.map { plugin in
-            let functionNamesByCapabilityID = CapabilityToolCatalog.functionNamesByCapabilityID(for: plugin)
+            let functionNamesByCapabilityID = installedFunctionNamesByCapabilityID()
             let functions = plugin.capabilities
                 .map { functionNamesByCapabilityID[$0.id] ?? CapabilityToolCatalog.functionName(for: $0.id) }
                 .joined(separator: ", ")
@@ -2178,8 +2179,9 @@ final class AppViewModel: ObservableObject {
 
         do {
             let package = try pluginRegistry.package(pluginID: pluginID)
-            let review = PluginPackageReview(package: package)
-            let functionNamesByCapabilityID = CapabilityToolCatalog.functionNamesByCapabilityID(for: package.manifest)
+            let catalogManifests = catalogManifestsAfterInstalling(package.manifest)
+            let review = PluginPackageReview(package: package, catalogManifests: catalogManifests)
+            let functionNamesByCapabilityID = CapabilityToolCatalog.functionNamesByCapabilityID(for: catalogManifests)
             let capabilityLines = package.manifest.capabilities.map { capability in
                 let functionName = functionNamesByCapabilityID[capability.id] ?? CapabilityToolCatalog.functionName(for: capability.id)
                 let adapter = capability.adapter?.type ?? capability.kind
@@ -2368,6 +2370,7 @@ final class AppViewModel: ObservableObject {
             activities: capabilityActivities,
             events: interactionEvents,
             generatedDrafts: generatedPluginDrafts,
+            installedPlugins: plugins,
             workPlan: workPlan
         )
     }
@@ -3143,7 +3146,8 @@ final class AppViewModel: ObservableObject {
             package: package,
             source: source,
             title: title,
-            verb: verb
+            verb: verb,
+            catalogManifests: catalogManifestsAfterInstalling(package.manifest)
         )
     }
 
@@ -3152,8 +3156,9 @@ final class AppViewModel: ObservableObject {
         draft: GeneratedPluginDraft,
         summary: String
     ) -> String {
-        let review = PluginPackageReview(package: draft.package)
-        let functionNamesByCapabilityID = CapabilityToolCatalog.functionNamesByCapabilityID(for: draft.manifest)
+        let catalogManifests = catalogManifestsAfterInstalling(draft.manifest)
+        let review = PluginPackageReview(package: draft.package, catalogManifests: catalogManifests)
+        let functionNamesByCapabilityID = CapabilityToolCatalog.functionNamesByCapabilityID(for: catalogManifests)
         let functions = draft.manifest.capabilities
             .map { functionNamesByCapabilityID[$0.id] ?? CapabilityToolCatalog.functionName(for: $0.id) }
             .joined(separator: ", ")
@@ -3178,6 +3183,14 @@ final class AppViewModel: ObservableObject {
         - Install after user confirmation with plugin.installDraft arguments: \(installArguments)
         - Discard after user confirmation with plugin.discardDraft arguments: \(discardArguments)
         """
+    }
+
+    private func installedFunctionNamesByCapabilityID() -> [String: String] {
+        CapabilityToolCatalog.functionNamesByCapabilityID(for: plugins)
+    }
+
+    private func catalogManifestsAfterInstalling(_ manifest: PluginManifest) -> [PluginManifest] {
+        plugins.filter { $0.id != manifest.id } + [manifest]
     }
 
     private func refreshPluginHealth() {

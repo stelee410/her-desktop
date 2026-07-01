@@ -5,13 +5,11 @@ struct PluginInstallSummaryFormatter {
         package: PluginPackage,
         source: String,
         title: String = "Plugin Installed",
-        verb: String = "Installed"
+        verb: String = "Installed",
+        catalogManifests: [PluginManifest]? = nil
     ) -> String {
-        let catalog = CapabilityToolCatalog.build(from: [package.manifest])
-        let functionNamesByCapabilityID = Dictionary(
-            uniqueKeysWithValues: catalog.functionToCapability.map { functionName, capabilityID in
-                (capabilityID, functionName)
-            }
+        let functionNamesByCapabilityID = CapabilityToolCatalog.functionNamesByCapabilityID(
+            for: catalogManifests ?? [package.manifest]
         )
         let capabilities = package.manifest.capabilities
             .map { capabilityLine($0, functionName: functionNamesByCapabilityID[$0.id] ?? CapabilityToolCatalog.functionName(for: $0.id)) }

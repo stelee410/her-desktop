@@ -13,6 +13,7 @@ struct ActiveWorkSummaryBuilder {
         activities: [CapabilityActivity],
         events: [InteractionEvent] = [],
         generatedDrafts: [GeneratedPluginDraft] = [],
+        installedPlugins: [PluginManifest] = [],
         workPlan: WorkPlan? = nil
     ) -> String {
         var lines = tasks.map { task in
@@ -73,8 +74,9 @@ struct ActiveWorkSummaryBuilder {
         }
 
         let recentDrafts = generatedDrafts.prefix(maxGeneratedDrafts).map { draft in
-            let review = PluginPackageReview(package: draft.package)
-            let functionNamesByCapabilityID = CapabilityToolCatalog.functionNamesByCapabilityID(for: draft.manifest)
+            let catalogManifests = installedPlugins.filter { $0.id != draft.manifest.id } + [draft.manifest]
+            let review = PluginPackageReview(package: draft.package, catalogManifests: catalogManifests)
+            let functionNamesByCapabilityID = CapabilityToolCatalog.functionNamesByCapabilityID(for: catalogManifests)
             let functions = draft.manifest.capabilities
                 .map { functionNamesByCapabilityID[$0.id] ?? CapabilityToolCatalog.functionName(for: $0.id) }
                 .joined(separator: ", ")

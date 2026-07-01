@@ -109,4 +109,36 @@ final class PluginInstallSummaryFormatterTests: XCTestCase {
         XCTAssertTrue(content.contains("local.same.run as local_same_run_"))
         XCTAssertTrue(content.contains("local_same_run as local_same_run_"))
     }
+
+    func testContentUsesCatalogContextForGlobalFunctionNameCollisions() {
+        let existing = package(id: "local.same", name: "Same", capabilityID: "local.same.run")
+        let installing = package(id: "local.underscore", name: "Underscore", capabilityID: "local_same_run")
+
+        let content = PluginInstallSummaryFormatter().content(
+            package: installing,
+            source: "test",
+            catalogManifests: [existing.manifest, installing.manifest]
+        )
+
+        XCTAssertTrue(content.contains("local_same_run as local_same_run_"))
+        XCTAssertTrue(content.contains(#"local_same_run_"#))
+        XCTAssertFalse(content.contains(#"local_same_run {"request":"<request>"}"#))
+    }
+
+    private func package(id: String, name: String, capabilityID: String) -> PluginPackage {
+        PluginPackage(
+            manifest: PluginManifest(
+                id: id,
+                name: name,
+                version: "0.1.0",
+                description: "\(name) helper.",
+                author: "Test",
+                systemPromptAddendum: nil,
+                capabilities: [
+                    .init(id: capabilityID, title: "Run \(name)", kind: "skill", invocation: capabilityID, requiresApproval: false)
+                ]
+            ),
+            files: []
+        )
+    }
 }

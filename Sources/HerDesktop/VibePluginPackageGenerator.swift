@@ -726,8 +726,6 @@ struct PluginPackageValidator {
         raw
             .replacingOccurrences(of: "{{agent_llm_base_url}}", with: "https://agentllm.example.invalid")
             .replacingOccurrences(of: "{{agent_mem_base_url}}", with: "https://agentmem.example.invalid")
-            .replacingOccurrences(of: "{{agent_code}}", with: "her-desktop")
-            .replacingOccurrences(of: "{{user_id}}", with: "local-user")
     }
 
     private func validateMCPBridgeURL(_ raw: String) throws {
@@ -799,16 +797,25 @@ struct PluginPackageValidator {
                 ("\(prefix).adapter.workingDirectory", capability.adapter?.workingDirectory)
             ]
             for (location, value) in fields {
+                if containsRetiredAgentMemScopedPlaceholder(value) {
+                    throw ValidationError.invalidAdapter("\(location) uses retired AgentMem V7 placeholder")
+                }
                 if containsSecretLikeMaterial(value) {
                     throw ValidationError.secretLikeContent(location)
                 }
             }
             for (key, value) in capability.adapter?.headers ?? [:] {
+                if containsRetiredAgentMemScopedPlaceholder(key) || containsRetiredAgentMemScopedPlaceholder(value) {
+                    throw ValidationError.invalidAdapter("\(prefix).adapter.headers.\(key) uses retired AgentMem V7 placeholder")
+                }
                 if containsSecretLikeMaterial(key) || containsSecretLikeMaterial(value) {
                     throw ValidationError.secretLikeContent("\(prefix).adapter.headers.\(key)")
                 }
             }
             for (index, argument) in (capability.adapter?.arguments ?? []).enumerated() {
+                if containsRetiredAgentMemScopedPlaceholder(argument) {
+                    throw ValidationError.invalidAdapter("\(prefix).adapter.arguments[\(index)] uses retired AgentMem V7 placeholder")
+                }
                 if containsSecretLikeMaterial(argument) {
                     throw ValidationError.secretLikeContent("\(prefix).adapter.arguments[\(index)]")
                 }
@@ -820,6 +827,11 @@ struct PluginPackageValidator {
                 throw ValidationError.secretLikeContent("files.\(file.path)")
             }
         }
+    }
+
+    private func containsRetiredAgentMemScopedPlaceholder(_ raw: String?) -> Bool {
+        guard let raw else { return false }
+        return raw.contains("{{agent_code}}") || raw.contains("{{user_id}}")
     }
 
     private func containsSecretLikeMaterial(_ raw: String?) -> Bool {
