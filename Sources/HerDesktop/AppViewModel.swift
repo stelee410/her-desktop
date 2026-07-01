@@ -1343,6 +1343,34 @@ final class AppViewModel: ObservableObject {
         )
     }
 
+    func installMCPDiscoveredToolPlugin(
+        _ tool: MCPDiscoveredTool,
+        endpointURL: String,
+        name: String = "",
+        description: String = "",
+        requiresApproval: Bool = true
+    ) async {
+        let cleanURL = endpointURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanURL.isEmpty else {
+            lastError = "MCP endpoint URL is required before installing a plugin."
+            messages.append(ChatMessage(role: .tool, content: "MCP Plugin Install Failed\n\(lastError ?? "")"))
+            saveSessionSnapshot()
+            return
+        }
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanDescription = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        await installDraftPlugin(
+            named: cleanName.isEmpty ? pluginName(forMCPToolName: tool.name) : cleanName,
+            description: cleanDescription.isEmpty ? mcpToolDescription(tool) : cleanDescription,
+            kind: "mcp",
+            requiresApproval: requiresApproval,
+            mcpEndpointURL: cleanURL,
+            mcpMethodName: "tools/call",
+            mcpToolName: tool.name,
+            mcpInputSchemaJSON: tool.rawInputSchema
+        )
+    }
+
     @discardableResult
     func stagePluginPackageJSON(_ text: String, source: String = "pasted-package") -> Bool {
         let result = stagePluginPackageJSONResult(text, source: source)

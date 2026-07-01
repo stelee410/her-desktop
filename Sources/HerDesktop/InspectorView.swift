@@ -2220,6 +2220,15 @@ private struct VibePluginComposerSheet: View {
                                     .buttonStyle(.borderless)
                                     .help("Draft a plugin from this discovered MCP tool")
                                     .disabled(!hasMCPURL || isBusy)
+
+                                    Button {
+                                        installMCPTool(tool)
+                                    } label: {
+                                        Image(systemName: "tray.and.arrow.down.fill")
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help("Install this discovered MCP tool as a local plugin")
+                                    .disabled(!hasMCPURL || isBusy)
                                 }
                                 .padding(8)
                                 .background(Color.white.opacity(0.42))
@@ -2446,6 +2455,20 @@ private struct VibePluginComposerSheet: View {
         )
         reset()
         isPresented = false
+    }
+
+    private func installMCPTool(_ tool: MCPDiscoveredTool) {
+        Task {
+            await model.installMCPDiscoveredToolPlugin(
+                tool,
+                endpointURL: pluginURL,
+                name: pluginName,
+                description: effectiveDescription,
+                requiresApproval: pluginRequiresApproval
+            )
+            reset()
+            isPresented = false
+        }
     }
 
     private var canStagePackageJSON: Bool {

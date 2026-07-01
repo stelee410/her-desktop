@@ -520,6 +520,45 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Draft Created") })
     }
 
+    func testInstallMCPDiscoveredToolPluginInstallsLocalPluginFromDiscovery() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-mcp-discovered-install-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        let model = AppViewModel(config: config, cwd: cwd.path)
+        let tool = MCPDiscoveredTool(
+            name: "calendar.create_event",
+            description: "Create a calendar event through the local MCP bridge.",
+            inputSchemaSummary: "title*:string, start*:string",
+            rawInputSchema: """
+            {
+              "type": "object",
+              "properties": {
+                "title": {"type": "string", "description": "Event title."},
+                "start": {"type": "string", "description": "Start time."}
+              },
+              "required": ["title", "start"]
+            }
+            """
+        )
+
+        await model.installMCPDiscoveredToolPlugin(tool, endpointURL: "http://localhost:8765/jsonrpc")
+
+        XCTAssertTrue(model.generatedPluginDrafts.isEmpty)
+        let plugin = try XCTUnwrap(model.plugins.first { $0.id == "local.calendar-create-event-mcp" })
+        XCTAssertEqual(plugin.name, "Calendar Create Event MCP")
+        let capability = try XCTUnwrap(plugin.capabilities.first)
+        XCTAssertEqual(capability.kind, "mcp")
+        XCTAssertEqual(capability.requiresApproval, true)
+        XCTAssertEqual(capability.adapter?.url, "http://localhost:8765/jsonrpc")
+        XCTAssertEqual(capability.adapter?.methodName, "tools/call")
+        XCTAssertEqual(capability.adapter?.toolName, "calendar.create_event")
+        XCTAssertEqual(CapabilityInputSchema.fields(for: capability).map(\.name), ["title", "start"])
+        XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Installed") })
+        XCTAssertTrue(model.pluginEvents.contains { $0.action == .installed && $0.pluginID == "local.calendar-create-event-mcp" })
+    }
+
     func testInspectorDraftInstallsCommandPluginWithApprovalAndArguments() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-command-plugin-\(UUID().uuidString)", isDirectory: true)
