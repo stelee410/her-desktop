@@ -226,7 +226,7 @@ final class ServiceHealthVerifier {
         var request = URLRequest(url: url)
         request.timeoutInterval = 12
         headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await data(for: request)
         try validate(response: response, data: data)
         return data
     }
@@ -238,9 +238,24 @@ final class ServiceHealthVerifier {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await data(for: request)
         try validate(response: response, data: data)
         return data
+    }
+
+    private func data(for request: URLRequest, attempts: Int = 3) async throws -> (Data, URLResponse) {
+        var lastError: Error?
+        for attempt in 1...attempts {
+            do {
+                return try await session.data(for: request)
+            } catch {
+                lastError = error
+                if attempt < attempts {
+                    try? await Task.sleep(nanoseconds: UInt64(attempt) * 350_000_000)
+                }
+            }
+        }
+        throw lastError ?? ServiceError.invalidResponse
     }
 
     private func memoryHeaders() -> [String: String] {

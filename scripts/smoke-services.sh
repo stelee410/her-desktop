@@ -132,6 +132,18 @@ print(body[:2000] if body else "<empty response body>")
 PY
 }
 
+curl_retry() {
+  local stderr_file
+  stderr_file="$(mktemp)"
+  if curl "$@" 2>"$stderr_file"; then
+    rm -f "$stderr_file"
+  else
+    cat "$stderr_file" >&2
+    rm -f "$stderr_file"
+    return 1
+  fi
+}
+
 is_legacy_schema_error() {
   python3 - "$1" <<'PY'
 import json
@@ -149,25 +161,25 @@ PY
 }
 
 echo "AgentLLM health"
-curl --http1.1 --connect-timeout 10 --max-time 30 --retry 3 --retry-all-errors --retry-delay 1 -fsS "$LLM_BASE/health"
+curl_retry --http1.1 --connect-timeout 10 --max-time 30 --retry 3 --retry-all-errors --retry-delay 1 -fsS "$LLM_BASE/health"
 echo
 
 echo "AgentLLM chat"
-curl --http1.1 --connect-timeout 10 --max-time 45 --retry 3 --retry-all-errors --retry-delay 1 -fsS "$LLM_BASE/v1/chat/completions" \
+curl_retry --http1.1 --connect-timeout 10 --max-time 45 --retry 3 --retry-all-errors --retry-delay 1 -fsS "$LLM_BASE/v1/chat/completions" \
   -H "Authorization: Bearer $HER_AGENT_LLM_API_KEY" \
   -H "Content-Type: application/json" \
   -d "$CHAT_BODY" \
   | python3 -c 'import json,sys; text=json.load(sys.stdin)["choices"][0]["message"].get("content","").strip(); assert text, "empty model response"; print(text[:240])'
 
 echo "AgentMem identity"
-curl --http1.1 --connect-timeout 10 --max-time 30 --retry 3 --retry-all-errors --retry-delay 1 -fsS "$MEM_BASE/v1/me" \
+curl_retry --http1.1 --connect-timeout 10 --max-time 30 --retry 3 --retry-all-errors --retry-delay 1 -fsS "$MEM_BASE/v1/me" \
   -H "X-Memory-API-Key: $HER_AGENT_MEM_API_KEY" \
   -H "X-Agent-API-Key: $HER_AGENT_MEM_API_KEY" \
   | python3 -c 'import json,sys; j=json.load(sys.stdin); print({"known": j.get("known"), "display_name": j.get("display_name"), "memory_id": j.get("memory_id")})'
 
 echo "AgentMem query"
 query_body_file="$(mktemp)"
-query_http_code="$(curl --http1.1 --connect-timeout 10 --max-time 45 --retry 5 --retry-all-errors --retry-delay 2 -sS -o "$query_body_file" -w "%{http_code}" "$MEM_BASE/v1/memory/query" \
+query_http_code="$(curl_retry --http1.1 --connect-timeout 10 --max-time 45 --retry 5 --retry-all-errors --retry-delay 2 -sS -o "$query_body_file" -w "%{http_code}" "$MEM_BASE/v1/memory/query" \
   -H "X-Memory-API-Key: $HER_AGENT_MEM_API_KEY" \
   -H "X-Agent-API-Key: $HER_AGENT_MEM_API_KEY" \
   -H "Content-Type: application/json" \
@@ -175,7 +187,7 @@ query_http_code="$(curl --http1.1 --connect-timeout 10 --max-time 45 --retry 5 -
 if [[ "$query_http_code" != 2* ]]; then
   if [[ "$query_http_code" == "422" ]] && is_legacy_schema_error "$query_body_file"; then
     echo "AgentMem query rejected scoped fields; retrying legacy key-bound payload."
-    query_http_code="$(curl --http1.1 --connect-timeout 10 --max-time 45 --retry 5 --retry-all-errors --retry-delay 2 -sS -o "$query_body_file" -w "%{http_code}" "$MEM_BASE/v1/memory/query" \
+    query_http_code="$(curl_retry --http1.1 --connect-timeout 10 --max-time 45 --retry 5 --retry-all-errors --retry-delay 2 -sS -o "$query_body_file" -w "%{http_code}" "$MEM_BASE/v1/memory/query" \
       -H "X-Memory-API-Key: $HER_AGENT_MEM_API_KEY" \
       -H "X-Agent-API-Key: $HER_AGENT_MEM_API_KEY" \
       -H "Content-Type: application/json" \
@@ -194,7 +206,7 @@ rm -f "$query_body_file"
 if [[ "${HER_SMOKE_WRITE_MEMORY:-0}" == "1" ]]; then
   echo "AgentMem add"
   add_body_file="$(mktemp)"
-  add_http_code="$(curl --http1.1 --connect-timeout 10 --max-time 45 --retry 5 --retry-all-errors --retry-delay 2 -sS -o "$add_body_file" -w "%{http_code}" "$MEM_BASE/v1/memory/add" \
+  add_http_code="$(curl_retry --http1.1 --connect-timeout 10 --max-time 45 --retry 5 --retry-all-errors --retry-delay 2 -sS -o "$add_body_file" -w "%{http_code}" "$MEM_BASE/v1/memory/add" \
     -H "X-Memory-API-Key: $HER_AGENT_MEM_API_KEY" \
     -H "X-Agent-API-Key: $HER_AGENT_MEM_API_KEY" \
     -H "Content-Type: application/json" \
@@ -203,7 +215,7 @@ if [[ "${HER_SMOKE_WRITE_MEMORY:-0}" == "1" ]]; then
   if [[ "$add_http_code" != 2* ]]; then
     if [[ "$add_http_code" == "422" ]] && is_legacy_schema_error "$add_body_file"; then
       echo "AgentMem add rejected scoped fields; retrying legacy key-bound payload."
-      add_http_code="$(curl --http1.1 --connect-timeout 10 --max-time 45 --retry 5 --retry-all-errors --retry-delay 2 -sS -o "$add_body_file" -w "%{http_code}" "$MEM_BASE/v1/memory/add" \
+      add_http_code="$(curl_retry --http1.1 --connect-timeout 10 --max-time 45 --retry 5 --retry-all-errors --retry-delay 2 -sS -o "$add_body_file" -w "%{http_code}" "$MEM_BASE/v1/memory/add" \
         -H "X-Memory-API-Key: $HER_AGENT_MEM_API_KEY" \
         -H "X-Agent-API-Key: $HER_AGENT_MEM_API_KEY" \
         -H "Content-Type: application/json" \

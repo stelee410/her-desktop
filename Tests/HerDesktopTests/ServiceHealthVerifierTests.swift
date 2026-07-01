@@ -166,6 +166,37 @@ final class ServiceHealthVerifierTests: XCTestCase {
         XCTAssertEqual(queryAttempt, 2)
     }
 
+    func testAgentMemHealthRetriesTransientIdentityNetworkFailure() async throws {
+        var config = HerAppConfig.empty
+        config.agentMemBaseURL = URL(string: "https://agentmem.test")!
+        config.agentMemAPIKey = "mem_test"
+        config.agentCode = "her-desktop"
+        config.userID = "stelee"
+
+        var identityAttempt = 0
+        let verifier = ServiceHealthVerifier(config: config, session: mockSession { request in
+            if request.url?.path == "/v1/me" {
+                identityAttempt += 1
+                if identityAttempt == 1 {
+                    throw URLError(.networkConnectionLost)
+                }
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                return (response, Data(#"{"known":true,"display_name":"her"}"#.utf8))
+            }
+
+            XCTAssertEqual(request.url?.path, "/v1/memory/query")
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data(#"{"injected_context":"","retrieved_memories":[],"timing_ms":3.9}"#.utf8))
+        })
+
+        let checked = await verifier.checkAll(pluginCount: 4)
+        let agentMem = try XCTUnwrap(checked.first { $0.id == "agentmem" })
+
+        XCTAssertEqual(identityAttempt, 2)
+        XCTAssertEqual(agentMem.state, .online)
+        XCTAssertEqual(agentMem.summary, "her · true · Scoped query OK")
+    }
+
     private func mockSession(
         handler: @escaping (URLRequest) throws -> (HTTPURLResponse, Data)
     ) -> URLSession {
