@@ -67,6 +67,54 @@ private struct MemoryWorkspaceView: View {
                 }
             }
 
+            WorkspacePanel(title: "Companion Reflection", trailing: model.dreamContext == nil ? "Not saved" : "Active") {
+                VStack(alignment: .leading, spacing: 10) {
+                    if let context = model.dreamContext {
+                        Label(context.longHorizonObjective ?? "Compressed partner context is ready.", systemImage: "moon.stars")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppTheme.ink)
+                            .lineLimit(3)
+                            .textSelection(.enabled)
+                        if let insight = context.recentInsight {
+                            Text(insight)
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.muted)
+                                .lineLimit(3)
+                                .textSelection(.enabled)
+                        }
+                        VStack(alignment: .leading, spacing: 5) {
+                            ReflectionCountLine(title: "Guidance", count: context.behaviorGuidance.count, icon: "sparkles")
+                            ReflectionCountLine(title: "Open threads", count: context.unresolvedThreads.count, icon: "text.badge.checkmark")
+                            ReflectionCountLine(title: "Cautions", count: context.cautions.count, icon: "exclamationmark.shield")
+                        }
+                        Text("Updated \(context.updatedAt)")
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(AppTheme.muted)
+                            .textSelection(.enabled)
+                    } else {
+                        EmptyWorkspaceLine(icon: "moon.stars", text: "Generate a local reflection snapshot to carry compact companion context into future turns.")
+                    }
+
+                    HStack {
+                        Button {
+                            model.generateReflectionSnapshot()
+                        } label: {
+                            Label("Reflect", systemImage: "moon.stars")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(AppTheme.coral)
+
+                        Button {
+                            model.refreshDreamContext()
+                        } label: {
+                            Label("Refresh", systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .controlSize(.small)
+                }
+            }
+
             WorkspacePanel(title: "Recent Interaction Signals", trailing: "\(model.interactionEvents.count)") {
                 if model.interactionEvents.isEmpty {
                     EmptyWorkspaceLine(icon: "dot.radiowaves.left.and.right", text: "Conversation, file, voice, and inbox signals will appear here.")
@@ -97,6 +145,30 @@ private struct MemoryWorkspaceView: View {
         case .localSessionStarted: return "plus.message"
         case .externalInboxCaptured: return "tray.and.arrow.down"
         }
+    }
+}
+
+private struct ReflectionCountLine: View {
+    var title: String
+    var count: Int
+    var icon: String
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: icon)
+                .foregroundStyle(AppTheme.coral)
+                .frame(width: 17)
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(AppTheme.ink)
+            Spacer()
+            Text("\(count)")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(AppTheme.muted)
+        }
+        .padding(7)
+        .background(Color.white.opacity(0.36))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

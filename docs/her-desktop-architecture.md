@@ -38,9 +38,10 @@ flowchart TB
             session["session.json<br/>stable session id + transcript"]
             attachments["attachments/<br/>copied local inputs"]
             plugins["plugins/<br/>installed local extensions"]
-        drafts["plugin-drafts/<br/>vibe-coded packages awaiting review"]
-        workspace["workspace/<br/>artifacts, exports, generated files"]
-        audit["audit + inbox + plugin events<br/>observable side effects"]
+            drafts["plugin-drafts/<br/>vibe-coded packages awaiting review"]
+            dreams["dreams/prompt-context.json<br/>local reflection snapshot"]
+            workspace["workspace/<br/>artifacts, exports, generated files"]
+            audit["audit + inbox + plugin events<br/>observable side effects"]
         end
 
         subgraph extensions["Extension Runtime"]
@@ -135,6 +136,7 @@ flowchart TB
 
     vm --> session
     vm --> attachments
+    vm --> dreams
     vm --> workspace
     executor --> audit
     executor --> workspace
@@ -179,7 +181,7 @@ flowchart TB
     subgraph L4["Layer 4 - Local Persistence"]
         localSession[".her/session.json"]
         localPlugins[".her/plugins + plugin-drafts"]
-        localData[".her/attachments + workspace artifacts"]
+        localData[".her/attachments + dreams + workspace artifacts"]
         localAudit[".her/logs + inbox events<br/>audit + plugin lifecycle"]
     end
 

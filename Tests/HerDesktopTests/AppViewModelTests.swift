@@ -949,6 +949,32 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(model.pluginEvents.first?.action, .installed)
     }
 
+    func testGenerateReflectionSnapshotPersistsDreamPromptContext() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-reflection-snapshot-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        config.userID = "leo"
+        let model = AppViewModel(config: config, cwd: cwd.path)
+
+        model.stageGeneratedPluginPackage(samplePackage(id: "local.reflectable", name: "Reflectable"), source: "test")
+        model.generateReflectionSnapshot()
+
+        let reflectionURL = cwd.appendingPathComponent(".her/dreams/prompt-context.json")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: reflectionURL.path))
+        let loaded = try XCTUnwrap(DreamPromptContextLoader.load(cwd: cwd.path))
+        XCTAssertEqual(model.dreamContext, loaded)
+        XCTAssertTrue(loaded.longHorizonObjective?.contains("leo") == true)
+        XCTAssertTrue(loaded.recentInsight?.contains("Reflectable") == true)
+        XCTAssertTrue(model.messages.contains { $0.content.contains("Reflection Snapshot Saved") })
+        let audit = try AuditEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(audit.contains { event in
+            event.type == "dream.reflection_saved"
+            && event.metadata["path"] == reflectionURL.path
+        })
+    }
+
     func testGeneratedPluginDraftCanBeInstalledFromReviewQueue() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-generated-plugin-\(UUID().uuidString)", isDirectory: true)

@@ -60,6 +60,83 @@ final class DreamPromptContextTests: XCTestCase {
         XCTAssertNil(DreamPromptContextLoader.load(cwd: root.path))
     }
 
+    func testDreamReflectionBuilderCreatesPromptContextFromRuntimeSignals() throws {
+        let context = DreamReflectionBuilder().build(
+            messages: [
+                ChatMessage(role: .assistant, content: "我在这里。"),
+                ChatMessage(role: .user, content: "继续把 Her Desktop 做成真正的数字合伙人。")
+            ],
+            tasks: [
+                RunningTask(title: "Plugin runtime", progress: 0.6, state: "1 draft")
+            ],
+            activities: [
+                CapabilityActivity(
+                    capabilityID: "plugin.draft",
+                    functionName: "plugin_draft",
+                    title: "Draft Plugin",
+                    status: .failed,
+                    summary: "Validator rejected remote MCP URL."
+                )
+            ],
+            interactionEvents: [],
+            pluginEvents: [
+                PluginLifecycleEvent(
+                    action: .staged,
+                    pluginID: "local.partner",
+                    pluginName: "Partner",
+                    version: "0.1.0",
+                    source: "agentllm-vibe-composer",
+                    summary: "Staged plugin package for review.",
+                    capabilityCount: 1,
+                    fileCount: 2
+                )
+            ],
+            profile: AgentProfile(
+                displayName: "Her",
+                userDisplayName: "Leo",
+                relationship: "Working partner",
+                memoryID: "mem-1",
+                known: true
+            ),
+            memorySignal: MemorySignal(
+                trust: 0.8,
+                confidence: 0.7,
+                moodLabel: "Focused",
+                relationshipSummary: "Project continuity"
+            ),
+            now: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+
+        XCTAssertTrue(context.longHorizonObjective?.contains("Leo") == true)
+        XCTAssertEqual(context.recentInsight, "Recent plugin work: Staged Partner from agentllm-vibe-composer.")
+        XCTAssertTrue(context.relevantStableMemories.contains("AgentMem has a known profile for Leo."))
+        XCTAssertTrue(context.behaviorGuidance.contains { $0.contains("plugin manifest") })
+        XCTAssertTrue(context.unresolvedThreads.contains { $0.contains("Plugin runtime") })
+        XCTAssertTrue(context.cautions.contains { $0.contains("memory writes") })
+        XCTAssertTrue(context.promptBlock().contains("Dream Context"))
+    }
+
+    func testDreamPromptContextStoreSavesLoadableHerContext() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-dream-context-store-\(UUID().uuidString)", isDirectory: true)
+        let context = DreamPromptContext(
+            updatedAt: "2027-01-15T08:00:00Z",
+            longHorizonObjective: "Keep Her Desktop useful.",
+            recentInsight: "Reflection snapshots should be compact.",
+            relevantStableMemories: ["User wants plugin-first extensibility."],
+            behaviorGuidance: ["Be concise."],
+            unresolvedThreads: ["Distribution signing"],
+            cautions: ["Do not invent completed actions."]
+        )
+
+        let url = try DreamPromptContextStore.save(context, cwd: root.path)
+        let loaded = try XCTUnwrap(DreamPromptContextLoader.load(cwd: root.path))
+
+        XCTAssertEqual(url.path, root.appendingPathComponent(".her/dreams/prompt-context.json").path)
+        XCTAssertEqual(loaded.longHorizonObjective, "Keep Her Desktop useful.")
+        XCTAssertEqual(loaded.behaviorGuidance, ["Be concise."])
+    }
+
     private func writeDreamContext(to url: URL, objective: String) throws {
         try """
         {

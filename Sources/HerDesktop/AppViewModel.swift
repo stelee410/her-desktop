@@ -20,6 +20,7 @@ final class AppViewModel: ObservableObject {
     @Published var auditEvents: [AuditEvent]
     @Published var interactionEvents: [InteractionEvent]
     @Published var webServiceArtifacts: [WebServiceArtifact]
+    @Published var dreamContext: DreamPromptContext?
     @Published var mcpDiscoveredTools: [MCPDiscoveredTool]
     @Published var pendingAttachments: [MessageAttachment]
     @Published var draft: String
@@ -102,6 +103,7 @@ final class AppViewModel: ObservableObject {
         self.auditEvents = AppViewModel.recentAuditEvents(from: (try? auditStore.loadAll()) ?? [])
         self.interactionEvents = AppViewModel.recentInteractionEvents(from: (try? inboxEventStore.loadAll()) ?? [])
         self.webServiceArtifacts = (try? webServiceArtifactStore.loadAll()) ?? []
+        self.dreamContext = DreamPromptContextLoader.load(cwd: cwd)
         self.mcpDiscoveredTools = []
         self.pendingAttachments = []
         self.messages = restoredMessages.isEmpty ? [
@@ -608,6 +610,46 @@ final class AppViewModel: ObservableObject {
             webServiceArtifacts = try webServiceArtifactStore.loadAll()
         } catch {
             lastError = "Could not load web service artifacts: \(error.localizedDescription)"
+        }
+    }
+
+    func refreshDreamContext() {
+        dreamContext = DreamPromptContextLoader.load(cwd: runtimeCwd)
+    }
+
+    func generateReflectionSnapshot() {
+        let context = DreamReflectionBuilder().build(
+            messages: messages,
+            tasks: runningTasks,
+            activities: capabilityActivities,
+            interactionEvents: interactionEvents,
+            pluginEvents: pluginEvents,
+            profile: agentProfile,
+            memorySignal: memorySignal
+        )
+        do {
+            let url = try DreamPromptContextStore.save(context, cwd: runtimeCwd)
+            dreamContext = context
+            messages.append(ChatMessage(
+                role: .tool,
+                content: "Reflection Snapshot Saved\nUpdated compressed companion context at \(url.path)."
+            ))
+            audit(
+                type: "dream.reflection_saved",
+                summary: "Saved local companion reflection snapshot.",
+                metadata: [
+                    "path": url.path,
+                    "behaviorGuidanceCount": String(context.behaviorGuidance.count),
+                    "unresolvedThreadCount": String(context.unresolvedThreads.count),
+                    "cautionCount": String(context.cautions.count)
+                ]
+            )
+            saveSessionSnapshot()
+        } catch {
+            lastError = "Could not save reflection snapshot: \(error.localizedDescription)"
+            messages.append(ChatMessage(role: .tool, content: "Reflection Snapshot Failed\n\(error.localizedDescription)"))
+            audit(type: "dream.reflection_save_failed", summary: error.localizedDescription)
+            saveSessionSnapshot()
         }
     }
 
@@ -1962,6 +2004,7 @@ final class AppViewModel: ObservableObject {
         tools = Self.tools(from: serviceHealth, model: updated.agentLLMModel)
         connectionState = updated.hasLLMKey ? .ready : .offline
         agentProfile = .empty(userID: updated.userID)
+        refreshDreamContext()
         refreshWebServiceArtifacts()
         rebuildRunningTasks()
     }

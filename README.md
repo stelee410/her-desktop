@@ -166,6 +166,7 @@ Web service JSON responses that include image generation fields such as `data[].
 
 Conversation continuity is rooted in `.her/session.json`, which stores the local transcript and a stable `session_id` used for AgentMem query/add calls.
 AgentMem requests are scoped by both `user_id` and `agent_code`: query/add send them in the JSON body, and relationship refresh reads `/v1/users/{user_id}/relationship?agent_code=...`.
+The Memory workspace can generate a local reflection snapshot at `.her/dreams/prompt-context.json`; future turns load it as Dream Context so long-horizon objectives, recent insights, behavior guidance, open threads, and cautions survive without giving that compressed context instruction authority.
 User-attached files are copied under `.her/attachments/` and referenced from the transcript; UTF-8 text and selectable-text PDF attachments include a bounded preview in the model context, while images, video, audio, and other files are represented with reliable metadata until a media/plugin processor is invoked.
 Spoken replies can be enabled from the toolbar or configuration panel; this uses local macOS speech synthesis. The composer mic button uses local macOS speech recognition to fill draft text and does not auto-send. Explicit speech tool calls are also exposed as the approved `native.speak` plugin capability.
 Generated plugin drafts awaiting review are persisted under `.her/plugin-drafts/`, so vibe-coded extension packages survive app restarts until installed or discarded.
