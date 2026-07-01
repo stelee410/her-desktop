@@ -87,6 +87,7 @@ final class BuiltInPluginContractTests: XCTestCase {
         if adapterType == "native" {
             return ![
                 "workspace.inspect",
+                "workspace.plan",
                 "agentmem.query",
                 "mcp.discover",
                 "inbox.capture"

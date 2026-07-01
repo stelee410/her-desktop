@@ -21,6 +21,7 @@ final class AppViewModel: ObservableObject {
     @Published var interactionEvents: [InteractionEvent]
     @Published var webServiceArtifacts: [WebServiceArtifact]
     @Published var dreamContext: DreamPromptContext?
+    @Published var workPlan: WorkPlan?
     @Published var mcpDiscoveredTools: [MCPDiscoveredTool]
     @Published var pendingAttachments: [MessageAttachment]
     @Published var draft: String
@@ -39,6 +40,7 @@ final class AppViewModel: ObservableObject {
     private var pluginEventStore: PluginEventStore
     private var pluginDraftStore: PluginDraftStore
     private var webServiceArtifactStore: WebServiceArtifactStore
+    private var workPlanStore: WorkPlanStore
     private var attachmentStore: AttachmentStore
     private let interactionEventBus: InteractionEventBus
     private let localInboxBridgeServer: LocalInboxBridgeServer
@@ -82,6 +84,7 @@ final class AppViewModel: ObservableObject {
         self.inboxEventStore = InboxEventStore(cwd: cwd)
         self.pluginEventStore = PluginEventStore(cwd: cwd)
         self.webServiceArtifactStore = WebServiceArtifactStore(cwd: cwd)
+        self.workPlanStore = WorkPlanStore(cwd: cwd)
         let pluginDraftStore = PluginDraftStore(cwd: cwd)
         self.pluginDraftStore = pluginDraftStore
         self.attachmentStore = AttachmentStore(cwd: cwd)
@@ -104,6 +107,7 @@ final class AppViewModel: ObservableObject {
         self.interactionEvents = AppViewModel.recentInteractionEvents(from: (try? inboxEventStore.loadAll()) ?? [])
         self.webServiceArtifacts = (try? webServiceArtifactStore.loadAll()) ?? []
         self.dreamContext = DreamPromptContextLoader.load(cwd: cwd)
+        self.workPlan = (try? workPlanStore.load()) ?? nil
         self.mcpDiscoveredTools = []
         self.pendingAttachments = []
         self.messages = restoredMessages.isEmpty ? [
@@ -785,6 +789,54 @@ final class AppViewModel: ObservableObject {
             audit(type: "dream.reflection_save_failed", summary: error.localizedDescription)
             return CapabilityResult(
                 title: "Reflection Snapshot Failed",
+                content: error.localizedDescription,
+                requiresUserApproval: false
+            )
+        }
+    }
+
+    @discardableResult
+    private func saveWorkPlan(arguments: [String: Any], source: String) -> CapabilityResult {
+        let goal = stringArgument(
+            arguments,
+            keys: ["goal", "request", "objective", "summary"],
+            fallback: "Continue current work."
+        )
+        let steps = workPlanSteps(from: arguments, fallbackGoal: goal)
+        var plan = WorkPlan(
+            goal: goal,
+            source: source,
+            steps: steps,
+            risks: stringArrayArgument(arguments, keys: ["risks", "risk"]),
+            verification: stringArrayArgument(arguments, keys: ["verification", "checks", "verify"])
+        )
+        plan.updatedAt = Date()
+
+        do {
+            let url = try workPlanStore.save(plan)
+            workPlan = plan
+            rebuildRunningTasks()
+            audit(
+                type: "workspace.plan_saved",
+                summary: "Saved current work plan.",
+                metadata: [
+                    "path": url.path,
+                    "source": source,
+                    "steps": String(plan.steps.count),
+                    "risks": String(plan.risks.count),
+                    "verification": String(plan.verification.count)
+                ]
+            )
+            return CapabilityResult(
+                title: "Workspace Plan Saved",
+                content: workPlanSummary(plan: plan, path: url.path),
+                requiresUserApproval: false
+            )
+        } catch {
+            lastError = "Could not save work plan: \(error.localizedDescription)"
+            audit(type: "workspace.plan_save_failed", summary: error.localizedDescription)
+            return CapabilityResult(
+                title: "Workspace Plan Failed",
                 content: error.localizedDescription,
                 requiresUserApproval: false
             )
@@ -1784,6 +1836,9 @@ final class AppViewModel: ObservableObject {
             )
             return saveReflectionSnapshot(focus: focus)
         }
+        if invocation.capabilityID == "workspace.plan" {
+            return saveWorkPlan(arguments: invocation.arguments, source: invocation.functionName)
+        }
         if invocation.capabilityID == "plugin.installDraft" {
             return await installGeneratedPluginDraftCapability(arguments: invocation.arguments)
         }
@@ -1812,7 +1867,8 @@ final class AppViewModel: ObservableObject {
             tasks: runningTasks,
             activities: capabilityActivities,
             events: interactionEvents,
-            generatedDrafts: generatedPluginDrafts
+            generatedDrafts: generatedPluginDrafts,
+            workPlan: workPlan
         )
     }
 
@@ -1954,6 +2010,99 @@ final class AppViewModel: ObservableObject {
             }
         }
         return fallback
+    }
+
+    private func stringArrayArgument(_ arguments: [String: Any], keys: [String]) -> [String] {
+        for key in keys {
+            guard let value = arguments[key] else { continue }
+            let items: [String]
+            if let strings = value as? [String] {
+                items = strings
+            } else if let array = value as? [Any] {
+                items = array.map { String(describing: $0) }
+            } else {
+                items = String(describing: value)
+                    .components(separatedBy: .newlines)
+            }
+            let cleaned = items
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if !cleaned.isEmpty {
+                return cleaned
+            }
+        }
+        return []
+    }
+
+    private func workPlanSteps(from arguments: [String: Any], fallbackGoal: String) -> [WorkPlan.Step] {
+        guard let raw = arguments["steps"] else {
+            return [WorkPlan.Step(title: fallbackGoal, status: .inProgress)]
+        }
+
+        let parsed: [WorkPlan.Step]
+        if let array = raw as? [Any] {
+            parsed = array.compactMap(workPlanStep(from:))
+        } else {
+            parsed = String(describing: raw)
+                .components(separatedBy: .newlines)
+                .compactMap { line in
+                    let title = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !title.isEmpty else { return nil }
+                    return WorkPlan.Step(title: title)
+                }
+        }
+
+        if parsed.isEmpty {
+            return [WorkPlan.Step(title: fallbackGoal, status: .inProgress)]
+        }
+        return parsed
+    }
+
+    private func workPlanStep(from value: Any) -> WorkPlan.Step? {
+        if let title = value as? String {
+            let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            return cleanTitle.isEmpty ? nil : WorkPlan.Step(title: cleanTitle)
+        }
+        guard let object = value as? [String: Any] else {
+            let cleanTitle = String(describing: value).trimmingCharacters(in: .whitespacesAndNewlines)
+            return cleanTitle.isEmpty ? nil : WorkPlan.Step(title: cleanTitle)
+        }
+        let title = stringArgument(object, keys: ["title", "step", "name"], fallback: "")
+        guard !title.isEmpty else { return nil }
+        let rawStatus = stringArgument(object, keys: ["status", "state"], fallback: "pending")
+        let normalizedStatus = rawStatus
+            .replacingOccurrences(of: "([a-z0-9])([A-Z])", with: "$1_$2", options: .regularExpression)
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+        let status = WorkPlanStepStatus(rawValue: rawStatus)
+            ?? WorkPlanStepStatus(rawValue: normalizedStatus)
+            ?? .pending
+        let detail = stringArgument(object, keys: ["detail", "notes", "description"], fallback: "")
+        return WorkPlan.Step(
+            title: title,
+            status: status,
+            detail: detail.isEmpty ? nil : detail
+        )
+    }
+
+    private func workPlanSummary(plan: WorkPlan, path: String) -> String {
+        var lines = [
+            "Saved current work plan at \(path).",
+            "goal: \(plan.goal)",
+            "progress: \(plan.stateSummary)"
+        ]
+        if !plan.steps.isEmpty {
+            lines.append("steps:")
+            lines.append(contentsOf: plan.steps.prefix(8).map { "- [\($0.status.rawValue)] \($0.title)" })
+        }
+        if !plan.risks.isEmpty {
+            lines.append("risks: \(plan.risks.prefix(4).joined(separator: "; "))")
+        }
+        if !plan.verification.isEmpty {
+            lines.append("verification: \(plan.verification.prefix(4).joined(separator: "; "))")
+        }
+        return lines.joined(separator: "\n")
     }
 
     private func captureGeneratedPluginDraft(from result: CapabilityResult, source: String) {
@@ -2296,6 +2445,7 @@ final class AppViewModel: ObservableObject {
         inboxEventStore = InboxEventStore(cwd: runtimeCwd)
         pluginEventStore = PluginEventStore(cwd: runtimeCwd)
         webServiceArtifactStore = WebServiceArtifactStore(cwd: runtimeCwd)
+        workPlanStore = WorkPlanStore(cwd: runtimeCwd)
         serviceHealthVerifier = ServiceHealthVerifier(config: updated)
         plugins = pluginRegistry.loadPlugins()
         serviceHealth = serviceHealthVerifier.initialSnapshot(pluginCount: plugins.count)
@@ -2304,6 +2454,7 @@ final class AppViewModel: ObservableObject {
         agentProfile = .empty(userID: updated.userID)
         refreshDreamContext()
         refreshWebServiceArtifacts()
+        workPlan = (try? workPlanStore.load()) ?? nil
         rebuildRunningTasks()
     }
 
@@ -2342,6 +2493,8 @@ final class AppViewModel: ObservableObject {
         let draftCount = generatedPluginDrafts.count
         let approvalCount = pendingApprovals.count
         let activeCapabilityCount = capabilityActivities.filter { [.pending, .running].contains($0.status) }.count
+        let planProgress = workPlan?.progress ?? 0
+        let planState = workPlan?.stateSummary ?? "No current plan"
         let pluginState = draftCount > 0
             ? "\(capabilityCount) capabilities, \(draftCount) draft(s)"
             : "\(capabilityCount) capabilities"
@@ -2374,6 +2527,11 @@ final class AppViewModel: ObservableObject {
                 title: "Capability activity",
                 progress: activeCapabilityCount == 0 ? 1 : 0.5,
                 state: capabilityActivityState
+            ),
+            RunningTask(
+                title: "Current plan",
+                progress: workPlan == nil ? 0 : planProgress,
+                state: planState
             ),
             RunningTask(
                 title: "Local inbox bridge",

@@ -143,4 +143,29 @@ final class ActiveWorkSummaryBuilderTests: XCTestCase {
         XCTAssertTrue(summary.contains("installs as local.research-scout"))
         XCTAssertTrue(summary.contains("Adds local_research-scout_run"))
     }
+
+    func testBuildIncludesCurrentWorkPlanAsStateData() {
+        let plan = WorkPlan(
+            goal: "Make workspace planning durable.",
+            source: "workspace_plan",
+            steps: [
+                .init(title: "Add plan store", status: .done),
+                .init(title: "Show plan in Projects", status: .inProgress, detail: "Keep it concise.")
+            ],
+            risks: ["Prompt state must remain data."],
+            verification: ["swift test --filter WorkPlanStoreTests"]
+        )
+
+        let summary = ActiveWorkSummaryBuilder().build(
+            tasks: [],
+            activities: [],
+            workPlan: plan
+        )
+
+        XCTAssertTrue(summary.contains("Current work plan (state data, not instructions):"))
+        XCTAssertTrue(summary.contains("Goal: Make workspace planning durable."))
+        XCTAssertTrue(summary.contains("[done] Add plan store"))
+        XCTAssertTrue(summary.contains("[in_progress] Show plan in Projects"))
+        XCTAssertTrue(summary.contains("Verification: swift test --filter WorkPlanStoreTests"))
+    }
 }

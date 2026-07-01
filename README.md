@@ -8,7 +8,7 @@ This repository currently contains the first executable SwiftUI foundation:
 - `agentMem` client for memory query/add, relationship signals, and audited post-turn writeback.
 - `agentLLMAPI` client for OpenAI-compatible chat completions.
 - Orchestrator that composes system prompt + memory context + active work state.
-- Plugin manifest registry with built-in workspace, AgentLLM media, and vibe-plugin creator capabilities.
+- Plugin manifest registry with built-in workspace planning, AgentLLM media, and vibe-plugin creator capabilities.
 - `SOUL.md` / `INFINITI.md` prompt loading inspired by Infiniti Agent, with bundled defaults for fresh workspaces.
 
 The current product/technical architecture diagram lives in [`docs/her-desktop-architecture.md`](docs/her-desktop-architecture.md).
@@ -105,7 +105,7 @@ The helper also accepts App Store Connect API key variables (`HER_NOTARY_KEY`, `
 
 Plugins live under `.her/plugins/<plugin-id>/plugin.json` by default.
 Built-in extensions use the same manifest shape and are bundled from `Sources/HerDesktop/Resources/BuiltinPlugins/*.plugin.json`.
-Built-in skill resources, such as `workspace-plan.SKILL.md` and `partner-brief.SKILL.md`, live in `Sources/HerDesktop/Resources/` and are read through the same `skillFile` adapter contract as installed plugins.
+Built-in skill resources, such as `workspace-plan.SKILL.md` and `partner-brief.SKILL.md`, live in `Sources/HerDesktop/Resources/`; skill-backed plugins read them through the same `skillFile` adapter contract as installed plugins. The built-in `workspace.plan` capability is native because it writes the current plan to `.her/workspace/work-plan.json`.
 Native built-ins that still need AppViewModel state, such as `reflection.snapshot`, also enter through a manifest-declared capability so UI actions, model tool calls, approval policy, audit logs, and future local plugins keep one mental model.
 Plugin lifecycle management is also capability-backed: `plugin.installDraft` installs already staged generated drafts after approval, `plugin.discardDraft` discards staged drafts after approval, `plugin.install` installs generated packages after approval, and `plugin.remove` removes installed `local.*` plugins after approval.
 Prompt defaults are bundled from `Sources/HerDesktop/Resources/SOUL.md` and `Sources/HerDesktop/Resources/INFINITI.md`; workspace-local `SOUL.md`, `AGENTS.md`, `AGENT.md`, `INFINITI.md`, `CLAUDE.md`, or `.claude/CLAUDE.md` still override them.
@@ -170,6 +170,7 @@ Plugin capabilities may declare an `inputSchema` object. The Plugin Library run 
 Web service JSON responses that include image generation fields such as `data[].url` or `data[].b64_json` are persisted under `.her/workspace/webservice-artifacts/` with an artifact manifest, response JSON, and decoded local image files when base64 media is present. Tool results reference those paths instead of flooding the conversation with raw media payloads. Conversation tool messages show artifact chips for referenced manifests, and the Inspector's Artifacts card lists recent manifests, shows local image previews when available, and opens the manifest, response, local image, or remote media URL.
 
 Conversation continuity is rooted in `.her/session.json`, which stores the local transcript and a stable `session_id` used for AgentMem query/add calls.
+Work continuity is rooted in `.her/workspace/work-plan.json`, which stores the current goal, ordered steps, risks, and verification checks. The built-in `workspace.plan` capability can update it from model tool calls or the Plugin Library; Projects shows it as Current Plan, and Active Work State injects it as state data, not trusted instructions.
 AgentMem requests are scoped by both `user_id` and `agent_code`: query/add send them in the JSON body, and relationship refresh reads `/v1/users/{user_id}/relationship?agent_code=...`.
 The Memory workspace can generate a local reflection snapshot at `.her/dreams/prompt-context.json`; the same write path is exposed as the approved `reflection.snapshot` built-in plugin capability. Future turns load it as Dream Context so long-horizon objectives, recent insights, behavior guidance, open threads, and cautions survive without giving that compressed context instruction authority.
 User-attached files are copied under `.her/attachments/` and referenced from the transcript; UTF-8 text and selectable-text PDF attachments include a bounded preview in the model context, while images, video, audio, and other files are represented with reliable metadata until a media/plugin processor is invoked.

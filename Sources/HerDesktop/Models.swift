@@ -158,6 +158,71 @@ struct RunningTask: Identifiable, Codable, Equatable {
     var state: String
 }
 
+enum WorkPlanStepStatus: String, Codable, CaseIterable, Equatable {
+    case pending
+    case inProgress = "in_progress"
+    case done
+    case blocked
+
+    var displayName: String {
+        switch self {
+        case .pending: return "Pending"
+        case .inProgress: return "In progress"
+        case .done: return "Done"
+        case .blocked: return "Blocked"
+        }
+    }
+}
+
+struct WorkPlan: Identifiable, Codable, Equatable {
+    struct Step: Identifiable, Codable, Equatable {
+        var id: UUID = UUID()
+        var title: String
+        var status: WorkPlanStepStatus
+        var detail: String?
+
+        init(
+            id: UUID = UUID(),
+            title: String,
+            status: WorkPlanStepStatus = .pending,
+            detail: String? = nil
+        ) {
+            self.id = id
+            self.title = title
+            self.status = status
+            self.detail = detail
+        }
+    }
+
+    var id: UUID = UUID()
+    var goal: String
+    var source: String
+    var steps: [Step]
+    var risks: [String]
+    var verification: [String]
+    var updatedAt: Date = Date()
+
+    var progress: Double {
+        guard !steps.isEmpty else { return 0 }
+        let completed = steps.filter { $0.status == .done }.count
+        let active = steps.filter { $0.status == .inProgress }.count
+        return min(1, (Double(completed) + Double(active) * 0.5) / Double(steps.count))
+    }
+
+    var stateSummary: String {
+        guard !steps.isEmpty else { return "No steps" }
+        let done = steps.filter { $0.status == .done }.count
+        let blocked = steps.filter { $0.status == .blocked }.count
+        if blocked > 0 {
+            return "\(blocked) blocked, \(done)/\(steps.count) done"
+        }
+        if steps.contains(where: { $0.status == .inProgress }) {
+            return "In progress, \(done)/\(steps.count) done"
+        }
+        return "\(done)/\(steps.count) done"
+    }
+}
+
 enum CapabilityActivityStatus: String, Codable, Equatable {
     case pending
     case running

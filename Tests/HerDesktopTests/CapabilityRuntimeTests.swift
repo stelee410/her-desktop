@@ -333,8 +333,8 @@ final class CapabilityRuntimeTests: XCTestCase {
                 .capabilities
                 .first { $0.id == "workspace.plan" }?
                 .adapter?
-                .skillFile,
-            "workspace-plan.SKILL.md"
+                .type,
+            "native"
         )
         XCTAssertEqual(
             plugins.first { $0.id == "builtin.partner-brief" }?

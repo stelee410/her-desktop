@@ -40,7 +40,7 @@ flowchart TB
             plugins["plugins/<br/>installed local extensions"]
             drafts["plugin-drafts/<br/>vibe-coded packages awaiting review"]
             dreams["dreams/prompt-context.json<br/>local reflection snapshot"]
-            workspace["workspace/<br/>artifacts, exports, generated files"]
+            workspace["workspace/<br/>work-plan, artifacts, exports, generated files"]
             audit["audit + inbox + plugin events<br/>observable side effects"]
         end
 
@@ -137,7 +137,7 @@ flowchart TB
     vm --> session
     vm --> attachments
     vm -->|reflection.snapshot| dreams
-    vm --> workspace
+    vm -->|workspace.plan| workspace
     executor --> audit
     executor --> workspace
     vm -->|post-turn writeback| add
@@ -166,7 +166,7 @@ flowchart TB
     subgraph L2["Layer 2 - Conversation Orchestration"]
         turn["Turn Controller<br/>send, stream state, bounded loop"]
         prompt2["Prompt Stack<br/>SOUL + INFINITI + session + memory + tools"]
-        work["Active Work Model<br/>tasks, projects, attachments, summaries"]
+        work["Active Work Model<br/>current plan, tasks, projects, attachments, summaries"]
         safety["Local Safety Boundary<br/>approval, audit, path and network policy"]
     end
 
@@ -181,7 +181,7 @@ flowchart TB
     subgraph L4["Layer 4 - Local Persistence"]
         localSession[".her/session.json"]
         localPlugins[".her/plugins + plugin-drafts"]
-        localData[".her/attachments + dreams + workspace artifacts"]
+        localData[".her/attachments + dreams + work-plan + workspace artifacts"]
         localAudit[".her/logs + inbox events<br/>audit + plugin lifecycle"]
     end
 

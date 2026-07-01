@@ -18,6 +18,11 @@ enum HerWorkspacePaths {
             .appendingPathComponent("workspace", isDirectory: true)
     }
 
+    static func workPlanPath(cwd: String = FileManager.default.currentDirectoryPath) -> URL {
+        workspaceDirectory(cwd: cwd)
+            .appendingPathComponent("work-plan.json")
+    }
+
     static func pluginExportDirectory(cwd: String = FileManager.default.currentDirectoryPath) -> URL {
         workspaceDirectory(cwd: cwd)
             .appendingPathComponent("plugin-exports", isDirectory: true)

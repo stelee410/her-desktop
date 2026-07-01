@@ -22,27 +22,74 @@
     },
     {
       "adapter" : {
-        "skillFile" : "workspace-plan.SKILL.md",
-        "type" : "skill"
+        "type" : "native"
       },
-      "description" : "Prepare a scoped implementation plan from local workspace context.",
+      "description" : "Save the current actionable work plan into Her Desktop state.",
       "id" : "workspace.plan",
       "inputSchema" : {
         "properties" : {
-          "request" : {
-            "description" : "Planning request or implementation goal.",
+          "goal" : {
+            "description" : "Concrete outcome this plan should make true.",
             "type" : "string"
+          },
+          "request" : {
+            "description" : "Fallback planning request when a structured goal is not available.",
+            "type" : "string"
+          },
+          "risks" : {
+            "description" : "Known risks, trust concerns, or implementation cautions.",
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "steps" : {
+            "description" : "Ordered plan steps. Each item can include title, status, and detail.",
+            "items" : {
+              "properties" : {
+                "detail" : {
+                  "description" : "Optional evidence, scope, or implementation note.",
+                  "type" : "string"
+                },
+                "status" : {
+                  "description" : "Current step state.",
+                  "enum" : [
+                    "pending",
+                    "in_progress",
+                    "done",
+                    "blocked"
+                  ],
+                  "type" : "string"
+                },
+                "title" : {
+                  "description" : "Short testable step.",
+                  "type" : "string"
+                }
+              },
+              "required" : [
+                "title"
+              ],
+              "type" : "object"
+            },
+            "type" : "array"
+          },
+          "verification" : {
+            "description" : "Commands, UI checks, or service checks that should prove the plan.",
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
           }
         },
         "required" : [
-          "request"
+          "goal"
         ],
         "type" : "object"
       },
       "invocation" : "workspace.plan",
-      "kind" : "skill",
+      "kind" : "native",
       "requiresApproval" : false,
-      "title" : "Plan code work"
+      "title" : "Save work plan"
     }
   ],
   "description" : "Read local context, summarize files, and prepare work plans with explicit approval.",

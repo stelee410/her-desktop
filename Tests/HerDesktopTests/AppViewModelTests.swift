@@ -119,7 +119,7 @@ final class AppViewModelTests: XCTestCase {
         try "hello".write(to: cwd.appendingPathComponent("note.txt"), atomically: true, encoding: .utf8)
         let fakeLLM = FakeLLM(responses: [
             .toolCall(id: "call_1", name: "workspace_inspect", arguments: #"{"max_files":2}"#),
-            .toolCall(id: "call_2", name: "workspace_plan", arguments: #"{"request":"make a plan"}"#),
+            .toolCall(id: "call_2", name: "workspace_plan", arguments: #"{"goal":"make a plan","steps":[{"title":"inspect workspace","status":"done"},{"title":"write implementation plan","status":"in_progress","detail":"keep it scoped"}],"risks":["avoid unrelated edits"],"verification":["swift test"]}"#),
             .assistantText("我看过工作区，也整理好了计划。")
         ])
         let model = AppViewModel(cwd: cwd.path, agentLLM: fakeLLM)
@@ -129,6 +129,10 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(fakeLLM.requests.count, 3)
         XCTAssertTrue(model.messages.contains { $0.content.contains("Workspace Inspect") })
         XCTAssertTrue(model.messages.contains { $0.content.contains("Workspace Plan") })
+        XCTAssertEqual(model.workPlan?.goal, "make a plan")
+        XCTAssertEqual(model.workPlan?.steps.map(\.title), ["inspect workspace", "write implementation plan"])
+        XCTAssertEqual(model.workPlan?.steps.last?.status, .inProgress)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: cwd.appendingPathComponent(".her/workspace/work-plan.json").path))
         XCTAssertEqual(model.messages.last?.role, .assistant)
         XCTAssertEqual(model.messages.last?.content, "我看过工作区，也整理好了计划。")
     }
@@ -1635,6 +1639,7 @@ final class AppViewModelTests: XCTestCase {
             "Plugin runtime",
             "Approval queue",
             "Capability activity",
+            "Current plan",
             "Local inbox bridge",
             "Memory continuity"
         ])
@@ -1644,6 +1649,7 @@ final class AppViewModelTests: XCTestCase {
         model.stageGeneratedPluginPackage(samplePackage(id: "local.pending-draft", name: "Pending Draft"), source: "test")
 
         XCTAssertTrue(model.runningTasks.first { $0.title == "Plugin runtime" }?.state.contains("draft") == true)
+        XCTAssertEqual(model.runningTasks.first { $0.title == "Current plan" }?.state, "No current plan")
         XCTAssertEqual(model.runningTasks.first { $0.title == "Approval queue" }?.state, "Clear")
         XCTAssertEqual(model.runningTasks.first { $0.title == "Memory continuity" }?.state, "Ready to learn")
     }
