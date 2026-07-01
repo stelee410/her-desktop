@@ -191,7 +191,8 @@ enum ProductReadinessBuilder {
         ("builtin.vibe-plugin-creator", "Vibe Plugin Creator"),
         ("builtin.mcp-bridge", "MCP Bridge"),
         ("builtin.native-macos", "Native macOS"),
-        ("builtin.companion-reflection", "Companion Reflection")
+        ("builtin.companion-reflection", "Companion Reflection"),
+        ("builtin.product-diagnostics", "Product Diagnostics")
     ]
 
     private static func localLabelsItem(config: HerAppConfig) -> ProductReadinessItem {

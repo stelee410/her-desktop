@@ -101,6 +101,22 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.isVibePluginComposerPresented)
     }
 
+    func testProductDiagnosticsCapabilityReturnsLiveReadinessSnapshot() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-product-diagnostics-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(config: .empty, cwd: root.path)
+
+        await model.runCapability(capabilityID: "product.diagnostics", arguments: [:])
+
+        XCTAssertTrue(model.pendingApprovals.isEmpty)
+        let message = try XCTUnwrap(model.messages.last { $0.content.contains("Product Diagnostics") })
+        XCTAssertTrue(message.content.contains("product_readiness: Setup Needed"))
+        XCTAssertTrue(message.content.contains("agentllm_key_configured: false"))
+        XCTAssertTrue(message.content.contains("agentmem_memory_key_configured: false"))
+        XCTAssertTrue(message.content.contains("builtin.product-diagnostics"))
+        XCTAssertTrue(message.content.contains("secret_policy"))
+    }
+
     func testDictationUpdatesDraftAndStopsWithoutSending() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-dictation-\(UUID().uuidString)", isDirectory: true)

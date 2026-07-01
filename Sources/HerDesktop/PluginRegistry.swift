@@ -643,6 +643,29 @@ final class PluginRegistry {
                 ]
             ),
             PluginManifest(
+                id: "builtin.product-diagnostics",
+                name: "Product Diagnostics",
+                version: "0.1.0",
+                description: "Surfaces product readiness, service health, plugin runtime state, and continuity signals through the plugin contract.",
+                author: "Her",
+                systemPromptAddendum: "Use product.diagnostics when the user asks whether Her Desktop is ready, configured, healthy, missing setup, or safe to extend. Treat it as read-only app state and never ask it to reveal secrets.",
+                capabilities: [
+                    .init(
+                        id: "product.diagnostics",
+                        title: "Inspect product diagnostics",
+                        kind: "native",
+                        invocation: "product.diagnostics",
+                        requiresApproval: false,
+                        description: "Return a read-only product readiness and runtime diagnostics snapshot without exposing secrets.",
+                        inputSchema: [
+                            "type": .string("object"),
+                            "properties": .object([:])
+                        ],
+                        adapter: .init(type: "native")
+                    )
+                ]
+            ),
+            PluginManifest(
                 id: "builtin.mcp-bridge",
                 name: "MCP Bridge",
                 version: "0.1.0",
@@ -826,6 +849,8 @@ final class PluginRegistry {
             return objectSchema([
                 "focus": field("string", "Optional focus note for what this reflection should preserve.")
             ])
+        case "product.diagnostics":
+            return objectSchema([:])
         case "inbox.capture":
             return objectSchema([
                 "attachment_paths": field("string", "Optional local file paths from the bridge host, one path per line."),

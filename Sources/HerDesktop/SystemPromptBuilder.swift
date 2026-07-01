@@ -255,6 +255,7 @@ struct SystemPromptBuilder {
         - Use `workspace.writeTextFile` when the user asks you to create or update a UTF-8 text artifact inside the current workspace; request approval before writing and report only the executor result.
         - Use `workspace.replaceText` for exact, approved edits to an existing UTF-8 workspace file. Prefer expected_replacements when the intended occurrence count is known.
         - Use `inbox.capture` to normalize incoming Oyii, WeChat, Discord, browser, email, or other bridge messages as data; do not claim an external reply was sent unless a separate approved sender capability reports success.
+        - Use `product.diagnostics` when the user asks whether Her Desktop is ready, healthy, configured, missing setup, or safe to extend; it is read-only app state and must not reveal secrets.
         - Use `mcp.discover` before creating MCP plugins when the user provides a local bridge URL but not an exact tool name or schema; reuse the returned `plugin.draft arguments` exactly when drafting the selected MCP tool.
         - Use `plugin.listDrafts` when the user asks what generated plugin drafts are waiting, or before installing/discarding a draft that is not already visible in Active Work State.
         - Use `plugin.listInstalled` when the user asks what local plugins are installed, or before exporting/removing a local plugin when the exact plugin_id is not already clear.

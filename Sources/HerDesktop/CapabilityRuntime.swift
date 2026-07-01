@@ -236,6 +236,12 @@ final class CapabilityExecutor {
             return await executeNativeSpeak(arguments: invocation.arguments)
         case "native.inspectAttachment":
             return executeNativeInspectAttachment(arguments: invocation.arguments)
+        case "product.diagnostics":
+            return CapabilityResult(
+                title: "Product Diagnostics Unavailable",
+                content: "Product diagnostics are handled by the Her Desktop app state because readiness depends on live services, queues, plugins, and session context.",
+                requiresUserApproval: false
+            )
         case "inbox.capture":
             return executeInboxCapture(arguments: invocation.arguments)
         case "agentmem.query":
@@ -684,6 +690,13 @@ final class CapabilityExecutor {
             }
             if capability.id == "mcp.discover" {
                 return await executeMCPToolDiscovery(arguments: invocation.arguments)
+            }
+            if capability.id == "product.diagnostics" {
+                return CapabilityResult(
+                    title: "Product Diagnostics Unavailable",
+                    content: "Product diagnostics are handled by the Her Desktop app state because readiness depends on live services, queues, plugins, and session context.",
+                    requiresUserApproval: false
+                )
             }
             return bridgePlaceholder(
                 title: "Native Adapter Missing",

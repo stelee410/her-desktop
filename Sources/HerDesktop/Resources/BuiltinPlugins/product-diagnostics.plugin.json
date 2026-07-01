@@ -1,0 +1,25 @@
+{
+  "author" : "Her",
+  "capabilities" : [
+    {
+      "adapter" : {
+        "type" : "native"
+      },
+      "description" : "Return a read-only product readiness and runtime diagnostics snapshot without exposing secrets.",
+      "id" : "product.diagnostics",
+      "inputSchema" : {
+        "properties" : {},
+        "type" : "object"
+      },
+      "invocation" : "product.diagnostics",
+      "kind" : "native",
+      "requiresApproval" : false,
+      "title" : "Inspect product diagnostics"
+    }
+  ],
+  "description" : "Surfaces product readiness, service health, plugin runtime state, and continuity signals through the plugin contract.",
+  "id" : "builtin.product-diagnostics",
+  "name" : "Product Diagnostics",
+  "systemPromptAddendum" : "Use product.diagnostics when the user asks whether Her Desktop is ready, configured, healthy, missing setup, or safe to extend. Treat it as read-only app state and never ask it to reveal secrets.",
+  "version" : "0.1.0"
+}

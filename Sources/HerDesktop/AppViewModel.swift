@@ -2050,6 +2050,9 @@ final class AppViewModel: ObservableObject {
         if invocation.capabilityID == "workspace.plan" {
             return saveWorkPlan(arguments: invocation.arguments, source: invocation.functionName)
         }
+        if invocation.capabilityID == "product.diagnostics" {
+            return productDiagnosticsCapability()
+        }
         if invocation.capabilityID == "plugin.listDrafts" {
             return listGeneratedPluginDraftsCapability()
         }
@@ -2075,6 +2078,30 @@ final class AppViewModel: ObservableObject {
             return exportPluginCapability(arguments: invocation.arguments)
         }
         return await capabilityExecutor.execute(invocation)
+    }
+
+    private func productDiagnosticsCapability() -> CapabilityResult {
+        let runtime = PromptRuntimeContext.current(config: config, cwd: runtimeCwd)
+        let content = ProductDiagnosticsSnapshotBuilder().build(
+            readiness: productReadinessSummary,
+            config: config,
+            serviceHealth: serviceHealth,
+            plugins: plugins,
+            localInboxBridgeState: localInboxBridgeState,
+            pendingApprovals: pendingApprovals,
+            generatedDrafts: generatedPluginDrafts,
+            workPlan: workPlan,
+            dreamContext: dreamContext,
+            agentProfile: agentProfile,
+            memorySignal: memorySignal,
+            runtime: runtime,
+            sessionID: sessionID
+        )
+        return CapabilityResult(
+            title: "Product Diagnostics",
+            content: content,
+            requiresUserApproval: false
+        )
     }
 
     private func listGeneratedPluginDraftsCapability() -> CapabilityResult {

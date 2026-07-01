@@ -500,6 +500,7 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertTrue(plugins.contains { $0.id == "builtin.native-macos" })
         XCTAssertTrue(plugins.contains { $0.id == "builtin.partner-brief" })
         XCTAssertTrue(plugins.contains { $0.id == "builtin.companion-reflection" })
+        XCTAssertTrue(plugins.contains { $0.id == "builtin.product-diagnostics" })
         XCTAssertTrue(plugins.contains { $0.id == "builtin.external-inbox" })
         XCTAssertTrue(plugins.contains { $0.id == "builtin.mcp-bridge" })
         XCTAssertEqual(
@@ -588,6 +589,13 @@ final class CapabilityRuntimeTests: XCTestCase {
                 .requiresApproval,
             true
         )
+        XCTAssertEqual(
+            plugins.first { $0.id == "builtin.product-diagnostics" }?
+                .capabilities
+                .first { $0.id == "product.diagnostics" }?
+                .requiresApproval,
+            false
+        )
     }
 
     func testBundledBuiltInCapabilitiesDeclareInputSchemasInManifests() {
@@ -615,6 +623,10 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(
             CapabilityInputSchema.fields(for: registry.capability(id: "reflection.snapshot")!).map(\.name),
             ["focus"]
+        )
+        XCTAssertEqual(
+            CapabilityInputSchema.fields(for: registry.capability(id: "product.diagnostics")!).map(\.name),
+            []
         )
     }
 

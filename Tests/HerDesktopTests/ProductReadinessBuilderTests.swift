@@ -244,7 +244,8 @@ final class ProductReadinessBuilderTests: XCTestCase {
             plugin(id: "builtin.vibe-plugin-creator", name: "Vibe Plugin Creator"),
             plugin(id: "builtin.mcp-bridge", name: "MCP Bridge"),
             plugin(id: "builtin.native-macos", name: "Native macOS"),
-            plugin(id: "builtin.companion-reflection", name: "Companion Reflection")
+            plugin(id: "builtin.companion-reflection", name: "Companion Reflection"),
+            plugin(id: "builtin.product-diagnostics", name: "Product Diagnostics")
         ]
     }
 
