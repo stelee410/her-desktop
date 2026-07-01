@@ -2,6 +2,7 @@
 
 Use this built-in skill when the user asks Her to add an extension, connect a local MCP tool, wrap a web service, create a command-backed helper, or turn a conversational idea into an installable plugin.
 If the user asks what generated extensions are waiting, or asks to install/discard a staged extension that is not visible in the current context, use `plugin.listDrafts` first.
+If the user asks what local extensions are installed, or asks to export/remove one without a clear plugin id, use `plugin.listInstalled` first.
 If the user pastes or imports a PluginPackage JSON object, use `plugin.stagePackage` to validate and stage it for review; do not install it directly.
 If the user asks to install an already staged generated extension, use the approved `plugin.installDraft` capability with the staged plugin id and draft id instead of regenerating package JSON.
 If the user asks to discard an already staged generated extension, use the approved `plugin.discardDraft` capability with the staged plugin id and draft id.

@@ -74,6 +74,7 @@ struct PluginPackageReview: Equatable {
         "mcp.discover",
         "inbox.capture",
         "plugin.listDrafts",
+        "plugin.listInstalled",
         "plugin.stagePackage"
     ]
 
@@ -333,6 +334,15 @@ struct PluginPackageReview: Equatable {
                 title: "Plugin Draft Review Queue",
                 detail: "Lists generated plugin drafts waiting for local review.",
                 systemImage: "list.bullet.clipboard",
+                requiresApproval: approval
+            )
+        }
+        if id == "plugin.listInstalled" {
+            return PermissionSummary(
+                id: id,
+                title: "Installed Local Plugin List",
+                detail: "Lists installed local plugins available for export or removal.",
+                systemImage: "puzzlepiece.extension",
                 requiresApproval: approval
             )
         }

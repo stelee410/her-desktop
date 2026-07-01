@@ -131,6 +131,12 @@ final class CapabilityExecutor {
                 content: "Staged draft listing is handled by the Her Desktop app state because drafts live in the generated review queue.",
                 requiresUserApproval: false
             )
+        case "plugin.listInstalled":
+            return CapabilityResult(
+                title: "Installed Plugin List Failed",
+                content: "Installed local plugin listing is handled by the Her Desktop app state because the active plugin registry lives in the app model.",
+                requiresUserApproval: false
+            )
         case "plugin.stagePackage":
             return CapabilityResult(
                 title: "Plugin Package Import Failed",

@@ -76,6 +76,7 @@ final class BuiltInPluginContractTests: XCTestCase {
         XCTAssertTrue(skill.contains("MCP"))
         XCTAssertTrue(skill.contains("Never include API keys"))
         XCTAssertTrue(skill.contains("plugin.listDrafts"))
+        XCTAssertTrue(skill.contains("plugin.listInstalled"))
         XCTAssertTrue(skill.contains("plugin.stagePackage"))
         XCTAssertTrue(skill.contains("plugin.installDraft"))
         XCTAssertTrue(skill.contains("plugin.discardDraft"))
@@ -112,6 +113,7 @@ final class BuiltInPluginContractTests: XCTestCase {
                 "mcp.discover",
                 "inbox.capture",
                 "plugin.listDrafts",
+                "plugin.listInstalled",
                 "plugin.stagePackage"
             ].contains(capability.id)
         }

@@ -1088,6 +1088,31 @@ final class AppViewModelTests: XCTestCase {
         })
     }
 
+    func testPluginListInstalledCapabilityReportsLocalPluginActions() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-list-installed-plugins-capability-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+
+        let model = AppViewModel(config: config, cwd: cwd.path)
+        await model.installDraftPlugin(
+            named: "Installed Helper",
+            description: "A helper available for export or removal.",
+            kind: "skill"
+        )
+
+        await model.runCapability(capabilityID: "plugin.listInstalled", arguments: [:])
+
+        let lastMessage = try XCTUnwrap(model.messages.last?.content)
+        XCTAssertTrue(lastMessage.contains("Installed Local Plugins"))
+        XCTAssertTrue(lastMessage.contains("local_plugins: 1"))
+        XCTAssertTrue(lastMessage.contains("Installed Helper (local.installed-helper)"))
+        XCTAssertTrue(lastMessage.contains("callable_functions: local_installed-helper_run"))
+        XCTAssertTrue(lastMessage.contains("export_arguments: {\"plugin_id\":\"local.installed-helper\",\"confirmed\":true}"))
+        XCTAssertTrue(lastMessage.contains("remove_arguments: {\"plugin_id\":\"local.installed-helper\",\"confirmed\":true}"))
+    }
+
     func testViewModelLoadsRecentAuditEventsOnStartup() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-load-audit-\(UUID().uuidString)", isDirectory: true)

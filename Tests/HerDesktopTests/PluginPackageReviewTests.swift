@@ -189,6 +189,39 @@ final class PluginPackageReviewTests: XCTestCase {
         XCTAssertEqual(review.riskLevel, .low)
     }
 
+    func testPluginListInstalledPermissionIsExplicitAndLowRisk() {
+        let package = PluginPackage(
+            manifest: PluginManifest(
+                id: "local.plugin-list-installed",
+                name: "Plugin List Installed",
+                version: "0.1.0",
+                description: "Plugin list installed package.",
+                author: "Test",
+                systemPromptAddendum: nil,
+                capabilities: [
+                    .init(
+                        id: "plugin.listInstalled",
+                        title: "List Installed",
+                        kind: "native",
+                        invocation: "plugin.listInstalled",
+                        requiresApproval: false,
+                        adapter: .init(type: "native")
+                    )
+                ]
+            ),
+            files: [
+                .init(path: "README.md", content: "# List Installed\n\nLists local plugins.")
+            ]
+        )
+
+        let review = PluginPackageReview(package: package)
+
+        XCTAssertEqual(review.permissionSummaries.first?.title, "Installed Local Plugin List")
+        XCTAssertEqual(review.permissionSummaries.first?.detail, "Lists installed local plugins available for export or removal.")
+        XCTAssertEqual(review.permissionSummaries.first?.systemImage, "puzzlepiece.extension")
+        XCTAssertEqual(review.riskLevel, .low)
+    }
+
     func testPluginStagePackagePermissionIsExplicitAndLowRisk() {
         let package = PluginPackage(
             manifest: PluginManifest(

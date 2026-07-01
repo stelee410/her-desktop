@@ -384,6 +384,15 @@ final class PluginRegistry {
                         adapter: .init(type: "native")
                     ),
                     .init(
+                        id: "plugin.listInstalled",
+                        title: "List installed local plugins",
+                        kind: "native",
+                        invocation: "plugin.listInstalled",
+                        requiresApproval: false,
+                        description: "List installed local plugins with follow-up export and removal arguments.",
+                        adapter: .init(type: "native")
+                    ),
+                    .init(
                         id: "plugin.stagePackage",
                         title: "Stage plugin package",
                         kind: "native",
@@ -724,6 +733,8 @@ final class PluginRegistry {
                 "confirmed": field("boolean", "True only after the user explicitly confirms installation.")
             ], required: ["confirmed"])
         case "plugin.listDrafts":
+            return objectSchema([:], required: [])
+        case "plugin.listInstalled":
             return objectSchema([:], required: [])
         case "plugin.stagePackage":
             return objectSchema([

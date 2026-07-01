@@ -76,6 +76,24 @@
       "adapter" : {
         "type" : "native"
       },
+      "description" : "List installed local plugins with follow-up export and removal arguments.",
+      "id" : "plugin.listInstalled",
+      "inputSchema" : {
+        "properties" : {
+        },
+        "required" : [
+        ],
+        "type" : "object"
+      },
+      "invocation" : "plugin.listInstalled",
+      "kind" : "native",
+      "requiresApproval" : false,
+      "title" : "List installed local plugins"
+    },
+    {
+      "adapter" : {
+        "type" : "native"
+      },
       "description" : "Stage a PluginPackage JSON object into the generated review queue.",
       "id" : "plugin.stagePackage",
       "inputSchema" : {

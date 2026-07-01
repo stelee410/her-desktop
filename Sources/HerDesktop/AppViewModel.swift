@@ -1927,6 +1927,9 @@ final class AppViewModel: ObservableObject {
         if invocation.capabilityID == "plugin.listDrafts" {
             return listGeneratedPluginDraftsCapability()
         }
+        if invocation.capabilityID == "plugin.listInstalled" {
+            return listInstalledLocalPluginsCapability()
+        }
         if invocation.capabilityID == "plugin.stagePackage" {
             return stagePluginPackageCapability(arguments: invocation.arguments)
         }
@@ -1979,6 +1982,50 @@ final class AppViewModel: ObservableObject {
             title: "Plugin Drafts",
             content: """
             staged_drafts: \(generatedPluginDrafts.count)
+            \(summaries.joined(separator: "\n"))
+            """,
+            requiresUserApproval: false
+        )
+    }
+
+    private func listInstalledLocalPluginsCapability() -> CapabilityResult {
+        let localPlugins = plugins
+            .filter { $0.id.hasPrefix("local.") }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+        guard !localPlugins.isEmpty else {
+            return CapabilityResult(
+                title: "Installed Local Plugins",
+                content: "No installed local plugins are available to export or remove.",
+                requiresUserApproval: false
+            )
+        }
+
+        let summaries = localPlugins.map { plugin in
+            let functions = plugin.capabilities
+                .map { CapabilityToolCatalog.functionName(for: $0.id) }
+                .joined(separator: ", ")
+            let exportArguments = """
+            {"plugin_id":"\(plugin.id)","confirmed":true}
+            """
+            let removeArguments = """
+            {"plugin_id":"\(plugin.id)","confirmed":true}
+            """
+            return """
+            - \(plugin.name) (\(plugin.id))
+              version: \(plugin.version)
+              description: \(plugin.description)
+              capabilities: \(plugin.capabilities.count)
+              callable_functions: \(functions.isEmpty ? "none" : functions)
+              export_arguments: \(exportArguments)
+              remove_arguments: \(removeArguments)
+            """
+        }
+
+        return CapabilityResult(
+            title: "Installed Local Plugins",
+            content: """
+            local_plugins: \(localPlugins.count)
             \(summaries.joined(separator: "\n"))
             """,
             requiresUserApproval: false
