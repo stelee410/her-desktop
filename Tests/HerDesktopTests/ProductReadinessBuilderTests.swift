@@ -6,7 +6,7 @@ final class ProductReadinessBuilderTests: XCTestCase {
         let summary = ProductReadinessBuilder.build(
             config: .empty,
             serviceHealth: [],
-            plugins: [plugin()],
+            plugins: corePlugins(),
             localInboxBridgeState: LocalInboxBridgeState(),
             pendingApprovals: [],
             generatedDrafts: [],
@@ -38,7 +38,7 @@ final class ProductReadinessBuilderTests: XCTestCase {
                 health(id: "agentmem", state: .online, summary: "known · Query OK"),
                 health(id: "plugins", state: .online, summary: "1 installed")
             ],
-            plugins: [plugin()],
+            plugins: corePlugins(),
             localInboxBridgeState: LocalInboxBridgeState(status: .running),
             pendingApprovals: [],
             generatedDrafts: [],
@@ -67,7 +67,7 @@ final class ProductReadinessBuilderTests: XCTestCase {
                 health(id: "agentllm", state: .online),
                 health(id: "agentmem", state: .online)
             ],
-            plugins: [plugin()],
+            plugins: corePlugins(),
             localInboxBridgeState: LocalInboxBridgeState(),
             pendingApprovals: [approval()],
             generatedDrafts: [],
@@ -124,7 +124,7 @@ final class ProductReadinessBuilderTests: XCTestCase {
                 health(id: "agentllm", state: .online),
                 health(id: "agentmem", state: .online)
             ],
-            plugins: [plugin()],
+            plugins: corePlugins(),
             localInboxBridgeState: LocalInboxBridgeState(),
             pendingApprovals: [],
             generatedDrafts: [],
@@ -154,7 +154,7 @@ final class ProductReadinessBuilderTests: XCTestCase {
                 health(id: "agentllm", state: .online),
                 health(id: "agentmem", state: .online)
             ],
-            plugins: [plugin()],
+            plugins: corePlugins(),
             localInboxBridgeState: LocalInboxBridgeState(),
             pendingApprovals: [approval()],
             generatedDrafts: [],
@@ -197,6 +197,34 @@ final class ProductReadinessBuilderTests: XCTestCase {
         XCTAssertEqual(summary.suggestedActions(limit: 0), [])
     }
 
+    func testMissingCoreBuiltInPluginsBlockPluginRuntimeReadiness() {
+        var config = HerAppConfig.empty
+        config.agentLLMAPIKey = "llm-test"
+        config.agentMemAPIKey = "mem-test"
+
+        let summary = ProductReadinessBuilder.build(
+            config: config,
+            serviceHealth: [
+                health(id: "agentllm", state: .online),
+                health(id: "agentmem", state: .online)
+            ],
+            plugins: [plugin(id: "builtin.workspace", name: "Workspace")],
+            localInboxBridgeState: LocalInboxBridgeState(),
+            pendingApprovals: [],
+            generatedDrafts: [],
+            workPlan: nil,
+            dreamContext: nil
+        )
+
+        let pluginItem = summary.items.first { $0.id == "plugins" }
+        XCTAssertEqual(summary.score, "2/3")
+        XCTAssertFalse(summary.isReadyForCoreWork)
+        XCTAssertEqual(pluginItem?.level, .attention)
+        XCTAssertEqual(pluginItem?.action, .openToolsWorkspace)
+        XCTAssertTrue(pluginItem?.detail.contains("Vibe Plugin Creator") == true)
+        XCTAssertTrue(pluginItem?.detail.contains("MCP Bridge") == true)
+    }
+
     private func health(id: String, state: ServiceHealthState, summary: String? = nil) -> ServiceHealth {
         ServiceHealth(
             id: id,
@@ -209,16 +237,27 @@ final class ProductReadinessBuilderTests: XCTestCase {
         )
     }
 
-    private func plugin() -> PluginManifest {
+    private func corePlugins() -> [PluginManifest] {
+        [
+            plugin(id: "builtin.workspace", name: "Workspace"),
+            plugin(id: "builtin.agentmem", name: "AgentMem"),
+            plugin(id: "builtin.vibe-plugin-creator", name: "Vibe Plugin Creator"),
+            plugin(id: "builtin.mcp-bridge", name: "MCP Bridge"),
+            plugin(id: "builtin.native-macos", name: "Native macOS"),
+            plugin(id: "builtin.companion-reflection", name: "Companion Reflection")
+        ]
+    }
+
+    private func plugin(id: String = "builtin.test", name: String = "Test") -> PluginManifest {
         PluginManifest(
-            id: "builtin.test",
-            name: "Test",
+            id: id,
+            name: name,
             version: "1.0.0",
-            description: "Test plugin.",
+            description: "\(name) plugin.",
             author: nil,
             systemPromptAddendum: nil,
             capabilities: [
-                .init(id: "test.run", title: "Run", kind: "native", invocation: "test.run", requiresApproval: false)
+                .init(id: "\(id).run", title: "Run \(name)", kind: "native", invocation: "\(id).run", requiresApproval: false)
             ]
         )
     }

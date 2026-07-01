@@ -114,6 +114,7 @@ Plugin lifecycle management is also capability-backed: `plugin.stagePackage` val
 Prompt defaults are bundled from `Sources/HerDesktop/Resources/SOUL.md` and `Sources/HerDesktop/Resources/INFINITI.md`; workspace-local `SOUL.md`, `AGENTS.md`, `AGENT.md`, `INFINITI.md`, `CLAUDE.md`, or `.claude/CLAUDE.md` still override them.
 The system prompt follows Infiniti Agent's memory layering discipline: current chat, verified tool results, app state, AgentMem retrieval, companion profile, Dream Context, and plugin lifecycle events are separate evidence layers. Retrieved memory is relevant background, not a complete database dump; missing retrieval should not be treated as proof that a user preference, plugin state, or prior decision does not exist.
 The registry discovers bundled `*.plugin.json` resources dynamically, so adding a new built-in extension should not require a Swift registration list.
+Product Readiness also verifies that the core built-in extension set is present (`Workspace`, `AgentMem`, `Vibe Plugin Creator`, `MCP Bridge`, `Native macOS`, and `Companion Reflection`) before calling the plugin runtime ready for core work.
 
 When adding a new built-in extension, keep it plugin-first:
 

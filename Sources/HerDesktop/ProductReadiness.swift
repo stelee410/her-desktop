@@ -160,6 +160,21 @@ enum ProductReadinessBuilder {
                 action: .composePlugin
             )
         }
+        let installedIDs = Set(plugins.map(\.id))
+        let missingCore = coreBuiltInPlugins.filter { !installedIDs.contains($0.id) }
+        if !missingCore.isEmpty {
+            let names = missingCore.map(\.name).joined(separator: ", ")
+            return item(
+                id: "plugins",
+                title: "Plugin Runtime",
+                detail: "Missing core built-in extension(s): \(names).",
+                level: .attention,
+                systemImage: "puzzlepiece.extension",
+                required: true,
+                actionTitle: "Tools",
+                action: .openToolsWorkspace
+            )
+        }
         return item(
             id: "plugins",
             title: "Plugin Runtime",
@@ -169,6 +184,15 @@ enum ProductReadinessBuilder {
             required: true
         )
     }
+
+    private static let coreBuiltInPlugins: [(id: String, name: String)] = [
+        ("builtin.workspace", "Workspace"),
+        ("builtin.agentmem", "AgentMem"),
+        ("builtin.vibe-plugin-creator", "Vibe Plugin Creator"),
+        ("builtin.mcp-bridge", "MCP Bridge"),
+        ("builtin.native-macos", "Native macOS"),
+        ("builtin.companion-reflection", "Companion Reflection")
+    ]
 
     private static func localLabelsItem(config: HerAppConfig) -> ProductReadinessItem {
         let agentCode = config.agentCode.trimmingCharacters(in: .whitespacesAndNewlines)

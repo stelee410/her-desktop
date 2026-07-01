@@ -2,6 +2,14 @@ import SwiftUI
 
 struct SidebarView: View {
     @EnvironmentObject private var model: AppViewModel
+    private var memoryRows: [SidebarMemoryRowState] {
+        SidebarStateBuilder().memoryRows(
+            profile: model.agentProfile,
+            signal: model.memorySignal,
+            dreamContext: model.dreamContext,
+            auditEvents: model.auditEvents
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -51,17 +59,17 @@ struct SidebarView: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("Recent Memories")
+                    Text("Memory Signals")
                         .font(.caption)
                         .foregroundStyle(AppTheme.ink)
                     Spacer()
-                    Image(systemName: "plus")
+                    Image(systemName: model.agentProfile.known ? "checkmark.seal" : "brain.head.profile")
                         .font(.caption)
                         .foregroundStyle(AppTheme.muted)
                 }
-                MemoryRow(title: "Design architecture", subtitle: "Her desktop shell")
-                MemoryRow(title: "Prefers direct critique", subtitle: "Architecture reviews")
-                MemoryRow(title: "Agent platform", subtitle: "agentMem + agentLLMAPI")
+                ForEach(memoryRows) { row in
+                    MemoryRow(row: row)
+                }
             }
 
             Spacer()
@@ -70,9 +78,9 @@ struct SidebarView: View {
                 Circle()
                     .fill(AppTheme.coral.opacity(0.2))
                     .frame(width: 34, height: 34)
-                    .overlay(Text("H").foregroundStyle(AppTheme.coral))
+                    .overlay(Text(initials(model.agentProfile.displayName)).foregroundStyle(AppTheme.coral))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Doris")
+                    Text(model.agentProfile.displayName)
                         .font(.subheadline)
                     Text(model.connectionState.rawValue.capitalized)
                         .font(.caption)
@@ -86,6 +94,12 @@ struct SidebarView: View {
         }
         .padding(.horizontal, 18)
         .background(.ultraThinMaterial)
+    }
+
+    private func initials(_ name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = trimmed.first else { return "H" }
+        return String(first).uppercased()
     }
 }
 
@@ -116,21 +130,20 @@ private struct NavItem: View {
 }
 
 private struct MemoryRow: View {
-    var title: String
-    var subtitle: String
+    var row: SidebarMemoryRowState
 
     var body: some View {
         HStack(spacing: 10) {
             RoundedRectangle(cornerRadius: 6)
                 .fill(AppTheme.rose.opacity(0.75))
                 .frame(width: 32, height: 32)
-                .overlay(Image(systemName: "sparkle").font(.caption).foregroundStyle(AppTheme.coral))
+                .overlay(Image(systemName: row.systemImage).font(.caption).foregroundStyle(AppTheme.coral))
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(row.title)
                     .font(.caption)
                     .foregroundStyle(AppTheme.ink)
                     .lineLimit(1)
-                Text(subtitle)
+                Text(row.subtitle)
                     .font(.caption2)
                     .foregroundStyle(AppTheme.muted)
                     .lineLimit(1)
