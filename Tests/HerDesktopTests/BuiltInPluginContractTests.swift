@@ -79,6 +79,23 @@ final class BuiltInPluginContractTests: XCTestCase {
         XCTAssertTrue(skill.contains("plugin.discardDraft"))
     }
 
+    func testFallbackWorkspacePlanMatchesNativeContract() throws {
+        let registry = PluginRegistry(config: .empty, loadBundledBuiltInResources: false)
+        let workspace = try XCTUnwrap(registry.loadPlugins().first { $0.id == "builtin.workspace" })
+        let plan = try XCTUnwrap(workspace.capabilities.first { $0.id == "workspace.plan" })
+
+        XCTAssertEqual(plan.kind, "native")
+        XCTAssertEqual(plan.adapter?.type, "native")
+        XCTAssertEqual(plan.title, "Save work plan")
+        XCTAssertEqual(CapabilityInputSchema.fields(for: plan).map(\.name), [
+            "goal",
+            "request",
+            "risks",
+            "steps",
+            "verification"
+        ])
+    }
+
     private func requiresApprovalByDefault(_ capability: PluginManifest.Capability) -> Bool {
         let adapterType = capability.adapter?.type ?? capability.kind
         if adapterType == "webservice" || adapterType == "mcp" || adapterType == "command" {

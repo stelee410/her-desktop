@@ -94,4 +94,32 @@ final class AgentLoopSummaryBuilderTests: XCTestCase {
         XCTAssertTrue(plan?.detail.contains("1 generated plugin") == true)
         XCTAssertEqual(plan?.isActive, true)
     }
+
+    func testCurrentWorkPlanFeedsPlanningStep() {
+        let plan = WorkPlan(
+            goal: "Finish durable planning loop.",
+            source: "workspace_plan",
+            steps: [
+                .init(title: "Persist plan", status: .done),
+                .init(title: "Surface loop state", status: .inProgress)
+            ],
+            risks: [],
+            verification: []
+        )
+
+        let steps = AgentLoopSummaryBuilder().build(
+            events: [],
+            activities: [],
+            pendingApprovals: [],
+            generatedDrafts: [],
+            workPlan: plan,
+            connectionState: .ready
+        )
+
+        let planning = steps.first { $0.phase == .plan }
+        XCTAssertEqual(planning?.status, "Current plan")
+        XCTAssertTrue(planning?.detail.contains("Finish durable planning loop.") == true)
+        XCTAssertTrue(planning?.detail.contains("In progress, 1/2 done") == true)
+        XCTAssertEqual(planning?.isActive, true)
+    }
 }

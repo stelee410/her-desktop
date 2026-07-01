@@ -21,6 +21,7 @@ struct AgentLoopSummaryBuilder {
         activities: [CapabilityActivity],
         pendingApprovals: [PendingApproval],
         generatedDrafts: [GeneratedPluginDraft],
+        workPlan: WorkPlan? = nil,
         connectionState: ConnectionState
     ) -> [AgentLoopStep] {
         [
@@ -28,6 +29,7 @@ struct AgentLoopSummaryBuilder {
             planStep(
                 pendingApprovals: pendingApprovals,
                 generatedDrafts: generatedDrafts,
+                workPlan: workPlan,
                 connectionState: connectionState
             ),
             actStep(activities: activities, connectionState: connectionState),
@@ -55,6 +57,7 @@ struct AgentLoopSummaryBuilder {
     private func planStep(
         pendingApprovals: [PendingApproval],
         generatedDrafts: [GeneratedPluginDraft],
+        workPlan: WorkPlan?,
         connectionState: ConnectionState
     ) -> AgentLoopStep {
         if !pendingApprovals.isEmpty {
@@ -71,6 +74,14 @@ struct AgentLoopSummaryBuilder {
                 status: "Draft ready",
                 detail: "\(generatedDrafts.count) generated plugin draft(s) ready for review.",
                 isActive: true
+            )
+        }
+        if let workPlan {
+            return .init(
+                phase: .plan,
+                status: "Current plan",
+                detail: "\(compact(workPlan.goal, limit: 72)) - \(workPlan.stateSummary)",
+                isActive: workPlan.progress < 1
             )
         }
         if connectionState == .thinking {

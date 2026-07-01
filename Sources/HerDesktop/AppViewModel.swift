@@ -1879,6 +1879,7 @@ final class AppViewModel: ObservableObject {
                 activities: capabilityActivities,
                 pendingApprovals: pendingApprovals,
                 generatedDrafts: generatedPluginDrafts,
+                workPlan: workPlan,
                 connectionState: connectionState
             )
             .map { step in

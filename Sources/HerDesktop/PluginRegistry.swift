@@ -295,12 +295,12 @@ final class PluginRegistry {
                     ),
                     .init(
                         id: "workspace.plan",
-                        title: "Plan code work",
-                        kind: "skill",
+                        title: "Save work plan",
+                        kind: "native",
                         invocation: "workspace.plan",
                         requiresApproval: false,
-                        description: "Prepare a scoped implementation plan from local workspace context.",
-                        adapter: .init(type: "skill", skillFile: "workspace-plan.SKILL.md")
+                        description: "Save the current actionable work plan into Her Desktop state.",
+                        adapter: .init(type: "native")
                     )
                 ]
             ),
@@ -618,8 +618,12 @@ final class PluginRegistry {
             ])
         case "workspace.plan":
             return objectSchema([
-                "request": field("string", "Planning request or implementation goal.")
-            ], required: ["request"])
+                "goal": field("string", "Concrete outcome this plan should make true."),
+                "request": field("string", "Fallback planning request when a structured goal is not available."),
+                "steps": field("string", "Ordered plan steps. In Plugin Library, enter one step per line."),
+                "risks": field("string", "Known risks or cautions. In Plugin Library, enter one per line."),
+                "verification": field("string", "Commands, UI checks, or service checks. In Plugin Library, enter one per line.")
+            ], required: ["goal"])
         case "partner.brief":
             return objectSchema([
                 "request": field("string", "Messy idea, project situation, or decision to turn into a partner brief.")

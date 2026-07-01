@@ -593,6 +593,7 @@ private struct AgentsWorkspaceView: View {
             activities: model.capabilityActivities,
             pendingApprovals: model.pendingApprovals,
             generatedDrafts: model.generatedPluginDrafts,
+            workPlan: model.workPlan,
             connectionState: model.connectionState
         )
     }

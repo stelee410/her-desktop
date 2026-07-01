@@ -366,6 +366,7 @@ private struct AgentLoopCard: View {
             activities: model.capabilityActivities,
             pendingApprovals: model.pendingApprovals,
             generatedDrafts: model.generatedPluginDrafts,
+            workPlan: model.workPlan,
             connectionState: model.connectionState
         )
     }
@@ -1664,24 +1665,37 @@ private struct ActivePlanCard: View {
         Panel(title: "Active Plan", trailing: "\(Int(planProgress * 100))%") {
             VStack(alignment: .leading, spacing: 9) {
                 HStack {
-                    Text("Her Desktop Runtime")
+                    Text(model.workPlan?.goal ?? "Her Desktop Runtime")
                         .font(.subheadline.weight(.semibold))
+                        .lineLimit(3)
                     Spacer()
                     Gauge(value: planProgress) { EmptyView() }
                         .gaugeStyle(.accessoryCircularCapacity)
                         .tint(AppTheme.coral)
                         .frame(width: 44, height: 44)
                 }
-                PlanLine(done: true, title: "Architecture boundaries")
-                PlanLine(done: true, title: "Native app shell")
-                PlanLine(done: liveServicesVerified, title: "Live service verification")
-                PlanLine(done: pluginFlowReady, title: "Plugin install flow")
-                PlanLine(done: memoryReady, title: "Memory continuity")
+                if let workPlan = model.workPlan {
+                    ForEach(Array(workPlan.steps.prefix(5))) { step in
+                        WorkPlanStepLine(step: step)
+                    }
+                    if workPlan.steps.isEmpty {
+                        PlanLine(done: false, title: "No steps saved yet")
+                    }
+                } else {
+                    PlanLine(done: true, title: "Architecture boundaries")
+                    PlanLine(done: true, title: "Native app shell")
+                    PlanLine(done: liveServicesVerified, title: "Live service verification")
+                    PlanLine(done: pluginFlowReady, title: "Plugin install flow")
+                    PlanLine(done: memoryReady, title: "Memory continuity")
+                }
             }
         }
     }
 
     private var planProgress: Double {
+        if let workPlan = model.workPlan {
+            return workPlan.progress
+        }
         let checks = [true, true, liveServicesVerified, pluginFlowReady, memoryReady]
         return Double(checks.filter { $0 }.count) / Double(checks.count)
     }
@@ -2505,6 +2519,50 @@ private struct PlanLine: View {
             Text(title)
                 .font(.caption)
             Spacer()
+        }
+    }
+}
+
+private struct WorkPlanStepLine: View {
+    var step: WorkPlan.Step
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .foregroundStyle(color)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(step.title)
+                    .font(.caption)
+                    .lineLimit(2)
+                if let detail = step.detail, !detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(detail)
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.muted)
+                        .lineLimit(2)
+                }
+            }
+            Spacer()
+            Text(step.status.displayName)
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(AppTheme.muted)
+        }
+    }
+
+    private var icon: String {
+        switch step.status {
+        case .pending: return "circle"
+        case .inProgress: return "clock"
+        case .done: return "checkmark.circle.fill"
+        case .blocked: return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private var color: Color {
+        switch step.status {
+        case .pending: return AppTheme.muted
+        case .inProgress: return AppTheme.coral
+        case .done: return .green
+        case .blocked: return .orange
         }
     }
 }
