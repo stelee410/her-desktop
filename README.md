@@ -106,6 +106,7 @@ The helper also accepts App Store Connect API key variables (`HER_NOTARY_KEY`, `
 Plugins live under `.her/plugins/<plugin-id>/plugin.json` by default.
 Built-in extensions use the same manifest shape and are bundled from `Sources/HerDesktop/Resources/BuiltinPlugins/*.plugin.json`.
 Built-in skill resources, such as `workspace-plan.SKILL.md` and `partner-brief.SKILL.md`, live in `Sources/HerDesktop/Resources/` and are read through the same `skillFile` adapter contract as installed plugins.
+Native built-ins that still need AppViewModel state, such as `reflection.snapshot`, also enter through a manifest-declared capability so UI actions, model tool calls, approval policy, audit logs, and future local plugins keep one mental model.
 
 When adding a new built-in extension, keep it plugin-first:
 
@@ -166,7 +167,7 @@ Web service JSON responses that include image generation fields such as `data[].
 
 Conversation continuity is rooted in `.her/session.json`, which stores the local transcript and a stable `session_id` used for AgentMem query/add calls.
 AgentMem requests are scoped by both `user_id` and `agent_code`: query/add send them in the JSON body, and relationship refresh reads `/v1/users/{user_id}/relationship?agent_code=...`.
-The Memory workspace can generate a local reflection snapshot at `.her/dreams/prompt-context.json`; future turns load it as Dream Context so long-horizon objectives, recent insights, behavior guidance, open threads, and cautions survive without giving that compressed context instruction authority.
+The Memory workspace can generate a local reflection snapshot at `.her/dreams/prompt-context.json`; the same write path is exposed as the approved `reflection.snapshot` built-in plugin capability. Future turns load it as Dream Context so long-horizon objectives, recent insights, behavior guidance, open threads, and cautions survive without giving that compressed context instruction authority.
 User-attached files are copied under `.her/attachments/` and referenced from the transcript; UTF-8 text and selectable-text PDF attachments include a bounded preview in the model context, while images, video, audio, and other files are represented with reliable metadata until a media/plugin processor is invoked.
 Spoken replies can be enabled from the toolbar or configuration panel; this uses local macOS speech synthesis. The composer mic button uses local macOS speech recognition to fill draft text and does not auto-send. Explicit speech tool calls are also exposed as the approved `native.speak` plugin capability.
 Generated plugin drafts awaiting review are persisted under `.her/plugin-drafts/`, so vibe-coded extension packages survive app restarts until installed or discarded.
@@ -196,4 +197,4 @@ Executable adapters currently include:
 - `mcp`: posts JSON-RPC 2.0 requests to a local HTTP bridge on `localhost`, `127.0.0.1`, or `::1`; `tools/call` adapters should declare `toolName` so capability arguments are wrapped as MCP tool arguments.
 - `mcp.discover`: built-in local discovery that posts `tools/list` to a bridge and returns tool names, descriptions, and input schema summaries for vibe-coded plugin creation.
 - `command`: runs a fixed executable with fixed argument templates, no shell, a bounded timeout, and required approval.
-- `native`: supports built-in macOS actions such as notifications, approved UTF-8 text-file reads, approved attachment inspection/PDF extraction, and approved text-to-speech playback.
+- `native`: supports built-in macOS actions such as notifications, approved UTF-8 text-file reads, approved attachment inspection/PDF extraction, approved text-to-speech playback, inbox capture, AgentMem read/write, and approved reflection snapshots.

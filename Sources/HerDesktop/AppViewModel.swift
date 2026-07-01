@@ -455,7 +455,7 @@ final class AppViewModel: ObservableObject {
             status: .running,
             summary: "Executing without additional approval."
         )
-        let result = await capabilityExecutor.execute(invocation)
+        let result = await executeCapabilityInvocation(invocation)
         finishCapabilityActivity(activityID, result: result)
         refreshWebServiceArtifacts()
         captureExternalInboxEventIfNeeded(invocation: invocation, result: result)
@@ -618,6 +618,13 @@ final class AppViewModel: ObservableObject {
     }
 
     func generateReflectionSnapshot() {
+        let result = saveReflectionSnapshot(focus: "")
+        messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
+        saveSessionSnapshot()
+    }
+
+    @discardableResult
+    private func saveReflectionSnapshot(focus: String) -> CapabilityResult {
         let context = DreamReflectionBuilder().build(
             messages: messages,
             tasks: runningTasks,
@@ -625,15 +632,12 @@ final class AppViewModel: ObservableObject {
             interactionEvents: interactionEvents,
             pluginEvents: pluginEvents,
             profile: agentProfile,
-            memorySignal: memorySignal
+            memorySignal: memorySignal,
+            focus: focus
         )
         do {
             let url = try DreamPromptContextStore.save(context, cwd: runtimeCwd)
             dreamContext = context
-            messages.append(ChatMessage(
-                role: .tool,
-                content: "Reflection Snapshot Saved\nUpdated compressed companion context at \(url.path)."
-            ))
             audit(
                 type: "dream.reflection_saved",
                 summary: "Saved local companion reflection snapshot.",
@@ -644,12 +648,24 @@ final class AppViewModel: ObservableObject {
                     "cautionCount": String(context.cautions.count)
                 ]
             )
-            saveSessionSnapshot()
+            return CapabilityResult(
+                title: "Reflection Snapshot Saved",
+                content: """
+                Updated compressed companion context at \(url.path).
+                guidance: \(context.behaviorGuidance.count)
+                open_threads: \(context.unresolvedThreads.count)
+                cautions: \(context.cautions.count)
+                """,
+                requiresUserApproval: false
+            )
         } catch {
             lastError = "Could not save reflection snapshot: \(error.localizedDescription)"
-            messages.append(ChatMessage(role: .tool, content: "Reflection Snapshot Failed\n\(error.localizedDescription)"))
             audit(type: "dream.reflection_save_failed", summary: error.localizedDescription)
-            saveSessionSnapshot()
+            return CapabilityResult(
+                title: "Reflection Snapshot Failed",
+                content: error.localizedDescription,
+                requiresUserApproval: false
+            )
         }
     }
 
@@ -789,7 +805,7 @@ final class AppViewModel: ObservableObject {
             status: .running,
             summary: "Manual run from Plugin Library."
         )
-        let result = await capabilityExecutor.execute(invocation)
+        let result = await executeCapabilityInvocation(invocation)
         finishCapabilityActivity(activityID, result: result)
         refreshWebServiceArtifacts()
         captureExternalInboxEventIfNeeded(invocation: invocation, result: result)
@@ -1530,7 +1546,7 @@ final class AppViewModel: ObservableObject {
             summary: "Approved by user; executing now."
         )
         rebuildRunningTasks()
-        let result = await capabilityExecutor.execute(approval.invocation)
+        let result = await executeCapabilityInvocation(approval.invocation)
         finishCapabilityActivity(activityID, result: result)
         refreshWebServiceArtifacts()
         captureExternalInboxEventIfNeeded(invocation: approval.invocation, result: result)
@@ -1585,6 +1601,18 @@ final class AppViewModel: ObservableObject {
             ]
         )
         saveSessionSnapshot()
+    }
+
+    private func executeCapabilityInvocation(_ invocation: CapabilityInvocation) async -> CapabilityResult {
+        if invocation.capabilityID == "reflection.snapshot" {
+            let focus = stringArgument(
+                invocation.arguments,
+                keys: ["focus", "request", "summary"],
+                fallback: ""
+            )
+            return saveReflectionSnapshot(focus: focus)
+        }
+        return await capabilityExecutor.execute(invocation)
     }
 
     private func retrieveMemory(for text: String) async throws -> String {

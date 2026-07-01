@@ -238,6 +238,7 @@ final class PluginRegistry {
         let manifestNames = [
             "agentmem.plugin",
             "agentllm-media.plugin",
+            "companion-reflection.plugin",
             "external-inbox.plugin",
             "mcp-bridge.plugin",
             "native-macos.plugin",
@@ -519,6 +520,34 @@ final class PluginRegistry {
                 ]
             ),
             PluginManifest(
+                id: "builtin.companion-reflection",
+                name: "Companion Reflection",
+                version: "0.1.0",
+                description: "Creates compact local Dream Context from recent conversation, work state, plugin events, and memory signals.",
+                author: "Her",
+                systemPromptAddendum: "Use reflection.snapshot when the user asks Her to preserve the current working/companion context for future turns. Reflection writes local state and requires approval unless invoked by an explicit UI action.",
+                capabilities: [
+                    .init(
+                        id: "reflection.snapshot",
+                        title: "Save reflection snapshot",
+                        kind: "native",
+                        invocation: "reflection.snapshot",
+                        requiresApproval: true,
+                        description: "Save a compact local reflection snapshot into .her/dreams/prompt-context.json for future prompt continuity.",
+                        inputSchema: [
+                            "type": .string("object"),
+                            "properties": .object([
+                                "focus": .object([
+                                    "type": .string("string"),
+                                    "description": .string("Optional focus note for what this reflection should preserve.")
+                                ])
+                            ])
+                        ],
+                        adapter: .init(type: "native")
+                    )
+                ]
+            ),
+            PluginManifest(
                 id: "builtin.mcp-bridge",
                 name: "MCP Bridge",
                 version: "0.1.0",
@@ -629,6 +658,10 @@ final class PluginRegistry {
             return objectSchema([
                 "url": field("string", "Local MCP HTTP JSON-RPC bridge endpoint, such as http://localhost:8765/jsonrpc.")
             ], required: ["url"])
+        case "reflection.snapshot":
+            return objectSchema([
+                "focus": field("string", "Optional focus note for what this reflection should preserve.")
+            ])
         case "inbox.capture":
             return objectSchema([
                 "source": field("string", "Inbox or bridge source, such as oyii, wechat, discord, browser, or email."),

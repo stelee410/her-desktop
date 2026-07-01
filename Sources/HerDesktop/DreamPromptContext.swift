@@ -67,12 +67,18 @@ struct DreamReflectionBuilder {
         pluginEvents: [PluginLifecycleEvent],
         profile: AgentProfile,
         memorySignal: MemorySignal,
+        focus: String = "",
         now: Date = Date()
     ) -> DreamPromptContext {
         DreamPromptContext(
             updatedAt: isoString(now),
             longHorizonObjective: longHorizonObjective(profile: profile),
-            recentInsight: recentInsight(messages: messages, interactionEvents: interactionEvents, pluginEvents: pluginEvents),
+            recentInsight: recentInsight(
+                messages: messages,
+                interactionEvents: interactionEvents,
+                pluginEvents: pluginEvents,
+                focus: focus
+            ),
             relevantStableMemories: relevantStableMemories(profile: profile, memorySignal: memorySignal),
             behaviorGuidance: behaviorGuidance(
                 messages: messages,
@@ -95,8 +101,13 @@ struct DreamReflectionBuilder {
     private func recentInsight(
         messages: [ChatMessage],
         interactionEvents: [InteractionEvent],
-        pluginEvents: [PluginLifecycleEvent]
+        pluginEvents: [PluginLifecycleEvent],
+        focus: String
     ) -> String {
+        let cleanFocus = focus.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cleanFocus.isEmpty {
+            return "Reflection focus: \(compact(cleanFocus, limit: 220))"
+        }
         if let plugin = pluginEvents.first {
             return "Recent plugin work: \(plugin.action.title) \(plugin.pluginName) from \(plugin.source)."
         }

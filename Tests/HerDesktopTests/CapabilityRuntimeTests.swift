@@ -240,6 +240,7 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertTrue(plugins.contains { $0.id == "builtin.vibe-plugin-creator" })
         XCTAssertTrue(plugins.contains { $0.id == "builtin.native-macos" })
         XCTAssertTrue(plugins.contains { $0.id == "builtin.partner-brief" })
+        XCTAssertTrue(plugins.contains { $0.id == "builtin.companion-reflection" })
         XCTAssertTrue(plugins.contains { $0.id == "builtin.external-inbox" })
         XCTAssertTrue(plugins.contains { $0.id == "builtin.mcp-bridge" })
         XCTAssertEqual(
@@ -313,6 +314,21 @@ final class CapabilityRuntimeTests: XCTestCase {
                 .type,
             "native"
         )
+        XCTAssertEqual(
+            plugins.first { $0.id == "builtin.companion-reflection" }?
+                .capabilities
+                .first { $0.id == "reflection.snapshot" }?
+                .adapter?
+                .type,
+            "native"
+        )
+        XCTAssertEqual(
+            plugins.first { $0.id == "builtin.companion-reflection" }?
+                .capabilities
+                .first { $0.id == "reflection.snapshot" }?
+                .requiresApproval,
+            true
+        )
     }
 
     func testBundledBuiltInCapabilitiesDeclareInputSchemasInManifests() {
@@ -336,6 +352,10 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(
             CapabilityInputSchema.fields(for: registry.capability(id: "inbox.capture")!).filter(\.required).map(\.name),
             ["source", "text"]
+        )
+        XCTAssertEqual(
+            CapabilityInputSchema.fields(for: registry.capability(id: "reflection.snapshot")!).map(\.name),
+            ["focus"]
         )
     }
 
@@ -399,6 +419,15 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(capability?.kind, "native")
         XCTAssertEqual(capability?.adapter?.type, "native")
         XCTAssertEqual(capability?.requiresApproval, false)
+    }
+
+    func testBuiltInReflectionSnapshotRequiresApproval() {
+        let registry = PluginRegistry(config: .empty)
+        let capability = registry.capability(id: "reflection.snapshot")
+
+        XCTAssertEqual(capability?.kind, "native")
+        XCTAssertEqual(capability?.adapter?.type, "native")
+        XCTAssertEqual(capability?.requiresApproval, true)
     }
 
     func testBuiltInAgentMemAddRequiresApproval() {

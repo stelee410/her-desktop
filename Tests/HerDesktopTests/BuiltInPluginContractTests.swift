@@ -6,7 +6,7 @@ final class BuiltInPluginContractTests: XCTestCase {
         let registry = PluginRegistry(config: .empty)
         let builtIns = registry.loadPlugins().filter { $0.id.hasPrefix("builtin.") }
 
-        XCTAssertEqual(builtIns.count, 8)
+        XCTAssertEqual(builtIns.count, 9)
         XCTAssertEqual(Set(builtIns.map(\.id)).count, builtIns.count)
 
         var capabilityIDs = Set<String>()

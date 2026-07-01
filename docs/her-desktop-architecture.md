@@ -49,7 +49,7 @@ flowchart TB
             catalog["Tool Catalog<br/>capability id -> function call"]
             executor["Capability Executor"]
             skill["Skill Adapter<br/>SKILL.md instructions"]
-            native["Native Adapter<br/>notifications, TTS, file read, attachment inspect"]
+            native["Native Adapter<br/>notifications, TTS, file read, attachment inspect, reflection"]
             websvc["WebService Adapter<br/>HTTPS/local HTTP with safe placeholders"]
             mcp["MCP Adapter<br/>local JSON-RPC bridge<br/>tools/call + toolName"]
             mcpDiscovery["MCP Discovery<br/>tools/list -> composer choices"]
@@ -136,7 +136,7 @@ flowchart TB
 
     vm --> session
     vm --> attachments
-    vm --> dreams
+    vm -->|reflection.snapshot| dreams
     vm --> workspace
     executor --> audit
     executor --> workspace
@@ -289,6 +289,7 @@ flowchart TB
     subgraph platform["Good AI Platform"]
         e1["Plugin manifest registry<br/>builtin and local plugins share one path"]
         e2["Adapter runtime<br/>skill, native, webservice, MCP, command"]
+        e5["Reflection snapshot capability<br/>Dream Context via plugin contract"]
         e3["Vibe coding install flow<br/>discover, draft, review, install"]
         e4["Local bridge pattern<br/>inbox and MCP are local-first"]
     end
@@ -296,6 +297,7 @@ flowchart TB
     companion --> done
     partner --> done
     platform --> done
+    e5 --> done
 ```
 
 ### V1 必须真实可用

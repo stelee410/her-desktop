@@ -1,0 +1,30 @@
+{
+  "author" : "Her",
+  "capabilities" : [
+    {
+      "adapter" : {
+        "type" : "native"
+      },
+      "description" : "Save a compact local reflection snapshot into .her/dreams/prompt-context.json for future prompt continuity.",
+      "id" : "reflection.snapshot",
+      "inputSchema" : {
+        "properties" : {
+          "focus" : {
+            "description" : "Optional focus note for what this reflection should preserve.",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "invocation" : "reflection.snapshot",
+      "kind" : "native",
+      "requiresApproval" : true,
+      "title" : "Save reflection snapshot"
+    }
+  ],
+  "description" : "Creates compact local Dream Context from recent conversation, work state, plugin events, and memory signals.",
+  "id" : "builtin.companion-reflection",
+  "name" : "Companion Reflection",
+  "systemPromptAddendum" : "Use reflection.snapshot when the user asks Her to preserve the current working/companion context for future turns. Reflection writes local state and requires approval unless invoked by an explicit UI action.",
+  "version" : "0.1.0"
+}

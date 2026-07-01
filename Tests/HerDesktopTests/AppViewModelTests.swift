@@ -975,6 +975,48 @@ final class AppViewModelTests: XCTestCase {
         })
     }
 
+    func testReflectionSnapshotCapabilityRequiresApprovalAndSavesDreamContext() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-reflection-capability-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        config.userID = "leo"
+        let model = AppViewModel(config: config, cwd: cwd.path)
+
+        await model.runCapability(
+            capabilityID: "reflection.snapshot",
+            arguments: ["focus": "Preserve plugin-first reflection context"]
+        )
+
+        XCTAssertEqual(model.pendingApprovals.count, 1)
+        let approval = try XCTUnwrap(model.pendingApprovals.first)
+        XCTAssertEqual(approval.invocation.capabilityID, "reflection.snapshot")
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: cwd.appendingPathComponent(".her/dreams/prompt-context.json").path
+        ))
+
+        await model.approve(approval)
+
+        let reflectionURL = cwd.appendingPathComponent(".her/dreams/prompt-context.json")
+        XCTAssertTrue(model.pendingApprovals.isEmpty)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: reflectionURL.path))
+        let loaded = try XCTUnwrap(DreamPromptContextLoader.load(cwd: cwd.path))
+        XCTAssertEqual(model.dreamContext, loaded)
+        XCTAssertEqual(loaded.recentInsight, "Reflection focus: Preserve plugin-first reflection context")
+        XCTAssertTrue(model.messages.contains { $0.content.contains("Reflection Snapshot Saved") })
+        let audit = try AuditEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(audit.contains { event in
+            event.type == "dream.reflection_saved"
+            && event.metadata["path"] == reflectionURL.path
+        })
+        XCTAssertTrue(audit.contains { event in
+            event.type == "capability.executed"
+            && event.metadata["capabilityID"] == "reflection.snapshot"
+            && event.metadata["approved"] == "true"
+        })
+    }
+
     func testGeneratedPluginDraftCanBeInstalledFromReviewQueue() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-generated-plugin-\(UUID().uuidString)", isDirectory: true)
