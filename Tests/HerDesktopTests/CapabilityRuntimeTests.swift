@@ -1561,6 +1561,52 @@ final class CapabilityRuntimeTests: XCTestCase {
     }
 
     @MainActor
+    func testNativeInspectAttachmentReadsImageMetadata() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-native-inspect-image-\(UUID().uuidString)", isDirectory: true)
+        let attachmentDirectory = HerWorkspacePaths.attachmentDirectory(cwd: root.path)
+        try FileManager.default.createDirectory(at: attachmentDirectory, withIntermediateDirectories: true)
+        let file = attachmentDirectory.appendingPathComponent("mock.png")
+        try writePNG(width: 7, height: 4, to: file)
+        let executor = CapabilityExecutor(registry: PluginRegistry(config: .empty), baseDirectory: root.path)
+
+        let result = await executor.execute(CapabilityInvocation(
+            toolCallID: "call_attachment_image",
+            functionName: "native_inspectAttachment",
+            capabilityID: "native.inspectAttachment",
+            arguments: ["path": file.path]
+        ))
+
+        XCTAssertEqual(result.title, "Attachment Inspected")
+        XCTAssertTrue(result.content.contains("kind: image"))
+        XCTAssertTrue(result.content.contains("content_type: image_metadata"))
+        XCTAssertTrue(result.content.contains("pixel_width: 7"))
+        XCTAssertTrue(result.content.contains("pixel_height: 4"))
+    }
+
+    private func writePNG(width: Int, height: Int, to url: URL) throws {
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        context.setFillColor(NSColor.systemGreen.cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        guard let image = context.makeImage(),
+              let data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        try data.write(to: url)
+    }
+
+    @MainActor
     func testNativeInspectAttachmentBlocksOutsidePaths() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-native-inspect-outside-\(UUID().uuidString)", isDirectory: true)

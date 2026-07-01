@@ -125,10 +125,18 @@ struct MessageAttachment: Identifiable, Codable, Equatable {
             lines.insert("  mime_type: \(mimeType)", at: 3)
         }
         if let textPreview, !textPreview.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            lines.append("  text_preview:")
+            lines.append("  \(previewLabel):")
             lines.append(textPreview.indentedForAttachmentContext())
         }
         return lines.joined(separator: "\n")
+    }
+
+    private var previewLabel: String {
+        switch kind {
+        case .image: return "visual_metadata"
+        case .video, .audio: return "media_metadata"
+        default: return "text_preview"
+        }
     }
 }
 

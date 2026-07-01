@@ -1,5 +1,4 @@
 import Foundation
-import ImageIO
 import PDFKit
 import UniformTypeIdentifiers
 
@@ -136,19 +135,8 @@ final class AttachmentInspector {
     }
 
     private func inspectImage(url: URL) -> String {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] else {
-            return "content_type: image_metadata\nmetadata: unavailable"
-        }
-        let width = properties[kCGImagePropertyPixelWidth] ?? "unknown"
-        let height = properties[kCGImagePropertyPixelHeight] ?? "unknown"
-        let orientation = properties[kCGImagePropertyOrientation] ?? "unknown"
-        return """
-        content_type: image_metadata
-        pixel_width: \(width)
-        pixel_height: \(height)
-        orientation: \(orientation)
-        """
+        AttachmentMetadataExtractor.imageMetadata(for: url)
+            ?? "content_type: image_metadata\nmetadata: unavailable"
     }
 
     private static func kind(for url: URL) -> MessageAttachment.Kind {

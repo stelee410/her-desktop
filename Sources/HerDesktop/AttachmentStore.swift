@@ -69,7 +69,7 @@ final class AttachmentStore {
         let destination = try destinationURL(for: source)
         try fileManager.copyItem(at: source, to: destination)
         let kind = Self.kind(for: source)
-        let textPreview = try previewIfText(kind: kind, source: destination, byteCount: byteCount)
+        let textPreview = try preview(kind: kind, source: destination, byteCount: byteCount)
 
         return MessageAttachment(
             originalName: source.lastPathComponent,
@@ -89,7 +89,10 @@ final class AttachmentStore {
         return directory.appendingPathComponent("\(UUID().uuidString)-\(safeName)")
     }
 
-    private func previewIfText(kind: MessageAttachment.Kind, source: URL, byteCount: Int64) throws -> String? {
+    private func preview(kind: MessageAttachment.Kind, source: URL, byteCount: Int64) throws -> String? {
+        if kind == .image {
+            return AttachmentMetadataExtractor.imageMetadata(for: source)
+        }
         guard kind == .text || kind == .pdf else { return nil }
         if kind == .pdf {
             guard let document = PDFDocument(url: source) else {
@@ -155,7 +158,7 @@ final class AttachmentStore {
         case .text:
             return hasPreview ? "UTF-8 text preview included." : "Text-like file attached; no UTF-8 preview was available."
         case .image:
-            return "Image attached for multimodal or plugin processing."
+            return hasPreview ? "Image metadata preview included." : "Image attached for multimodal or plugin processing."
         case .video:
             return "Video attached for future media processing; metadata is available now."
         case .audio:

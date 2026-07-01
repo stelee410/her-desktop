@@ -68,4 +68,31 @@ final class ConversationContextBuilderTests: XCTestCase {
         XCTAssertTrue(user.contains("text_preview:"))
         XCTAssertTrue(user.contains("launch plan"))
     }
+
+    func testImageAttachmentVisualMetadataIsIncludedForLLM() throws {
+        let builder = ConversationContextBuilder(maxMessages: 4)
+        let attachment = MessageAttachment(
+            originalName: "mock.png",
+            storedPath: "/tmp/her/mock.png",
+            kind: .image,
+            mimeType: "image/png",
+            byteCount: 128,
+            summary: "Image metadata preview included.",
+            textPreview: """
+            content_type: image_metadata
+            pixel_width: 4
+            pixel_height: 3
+            """
+        )
+        let messages = [
+            ChatMessage(role: .user, content: "这张图是什么？", attachments: [attachment])
+        ]
+
+        let result = builder.build(systemPrompt: "system", messages: messages)
+        let user = try XCTUnwrap(result.last?.content)
+
+        XCTAssertTrue(user.contains("visual_metadata:"))
+        XCTAssertTrue(user.contains("pixel_width: 4"))
+        XCTAssertFalse(user.contains("text_preview:"))
+    }
 }

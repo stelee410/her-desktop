@@ -42,6 +42,27 @@ final class AttachmentStoreTests: XCTestCase {
         XCTAssertTrue(attachment.textPreview?.contains("PDF launch brief") == true)
     }
 
+    func testImportImageBuildsVisualMetadataPreview() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-attachment-image-\(UUID().uuidString)", isDirectory: true)
+        let sourceDirectory = root.appendingPathComponent("source", isDirectory: true)
+        try FileManager.default.createDirectory(at: sourceDirectory, withIntermediateDirectories: true)
+        let source = sourceDirectory.appendingPathComponent("mock.png")
+        try writePNG(width: 4, height: 3, to: source)
+
+        let store = AttachmentStore(cwd: root.path)
+        let attachment = try store.importFile(source)
+
+        XCTAssertEqual(attachment.kind, .image)
+        XCTAssertEqual(attachment.mimeType, "image/png")
+        XCTAssertTrue(attachment.summary.contains("Image metadata preview included"))
+        XCTAssertTrue(attachment.textPreview?.contains("content_type: image_metadata") == true)
+        XCTAssertTrue(attachment.textPreview?.contains("pixel_width: 4") == true)
+        XCTAssertTrue(attachment.textPreview?.contains("pixel_height: 3") == true)
+        XCTAssertTrue(attachment.contextDescription.contains("visual_metadata:"))
+        XCTAssertFalse(attachment.contextDescription.contains("text_preview:"))
+    }
+
     func testRejectsDirectories() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-attachment-directory-\(UUID().uuidString)", isDirectory: true)
@@ -71,5 +92,27 @@ final class AttachmentStoreTests: XCTestCase {
         NSGraphicsContext.restoreGraphicsState()
         context.endPDFPage()
         context.closePDF()
+    }
+
+    private func writePNG(width: Int, height: Int, to url: URL) throws {
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        context.setFillColor(NSColor.systemRed.cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        guard let image = context.makeImage(),
+              let data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        try data.write(to: url)
     }
 }
