@@ -106,6 +106,37 @@
       "adapter" : {
         "type" : "native"
       },
+      "description" : "Install a generated plugin draft already staged in Her Desktop after explicit user approval.",
+      "id" : "plugin.installDraft",
+      "inputSchema" : {
+        "properties" : {
+          "confirmed" : {
+            "description" : "True only after the user explicitly confirms installing the staged draft.",
+            "type" : "boolean"
+          },
+          "draft_id" : {
+            "description" : "Generated draft UUID to install. Optional alternative to plugin_id.",
+            "type" : "string"
+          },
+          "plugin_id" : {
+            "description" : "Generated draft plugin id to install, such as local.example. Optional when exactly one draft is waiting.",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "confirmed"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "plugin.installDraft",
+      "kind" : "native",
+      "requiresApproval" : true,
+      "title" : "Install staged plugin draft"
+    },
+    {
+      "adapter" : {
+        "type" : "native"
+      },
       "description" : "Remove an installed local plugin after explicit user approval.",
       "id" : "plugin.remove",
       "inputSchema" : {

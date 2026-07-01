@@ -348,6 +348,15 @@ final class PluginRegistry {
                         adapter: .init(type: "native")
                     ),
                     .init(
+                        id: "plugin.installDraft",
+                        title: "Install staged plugin draft",
+                        kind: "native",
+                        invocation: "plugin.installDraft",
+                        requiresApproval: true,
+                        description: "Install a generated plugin draft already staged in Her Desktop after explicit user approval.",
+                        adapter: .init(type: "native")
+                    ),
+                    .init(
                         id: "plugin.remove",
                         title: "Remove local plugin",
                         kind: "native",
@@ -624,6 +633,12 @@ final class PluginRegistry {
                 "package_json": field("string", "Preferred: a PluginPackage JSON object with manifest and files."),
                 "manifest_json": field("string", "A complete plugin manifest JSON object."),
                 "confirmed": field("boolean", "True only after the user explicitly confirms installation.")
+            ], required: ["confirmed"])
+        case "plugin.installDraft":
+            return objectSchema([
+                "plugin_id": field("string", "Generated draft plugin id to install, such as local.example. Optional when exactly one draft is waiting."),
+                "draft_id": field("string", "Generated draft UUID to install. Optional alternative to plugin_id."),
+                "confirmed": field("boolean", "True only after the user explicitly confirms installing the staged draft.")
             ], required: ["confirmed"])
         case "plugin.remove":
             return objectSchema([

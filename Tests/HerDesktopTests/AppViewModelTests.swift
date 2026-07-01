@@ -1208,6 +1208,56 @@ final class AppViewModelTests: XCTestCase {
         })
     }
 
+    func testApprovedPluginInstallDraftCapabilityInstallsStagedDraftByPluginID() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-plugin-install-draft-capability-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        let package = samplePackage(id: "local.staged-install", name: "Staged Install")
+        let model = AppViewModel(config: config, cwd: cwd.path)
+        model.stageGeneratedPluginPackage(package, source: "plugin.draft")
+        let draftID = try XCTUnwrap(model.generatedPluginDrafts.first?.id)
+
+        let approval = PendingApproval(
+            title: "Install staged plugin draft",
+            detail: "Install local.staged-install",
+            invocation: CapabilityInvocation(
+                toolCallID: "call-plugin-install-draft",
+                functionName: "plugin_installDraft",
+                capabilityID: "plugin.installDraft",
+                arguments: [
+                    "confirmed": true,
+                    "plugin_id": "local.staged-install"
+                ]
+            ),
+            activityID: nil
+        )
+
+        await model.approve(approval)
+
+        XCTAssertTrue(model.generatedPluginDrafts.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: cwd.appendingPathComponent(".her/plugin-drafts/\(draftID.uuidString).json").path
+        ))
+        XCTAssertTrue(model.plugins.contains { $0.id == "local.staged-install" })
+        XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Installed") })
+        let audit = try AuditEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(audit.contains { event in
+            event.type == "plugin.installed"
+            && event.metadata["pluginID"] == "local.staged-install"
+            && event.metadata["source"] == "plugin.installDraft capability"
+            && event.metadata["draftSource"] == "plugin.draft"
+        })
+        let pluginEvents = try PluginEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(pluginEvents.contains { event in
+            event.action == .installed
+            && event.pluginID == "local.staged-install"
+            && event.source == "plugin.installDraft capability"
+            && event.metadata["draftSource"] == "plugin.draft"
+        })
+    }
+
     func testGeneratedPluginDraftCanUpdateExistingLocalPlugin() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-generated-plugin-update-\(UUID().uuidString)", isDirectory: true)

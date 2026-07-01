@@ -495,6 +495,64 @@ final class AppViewModel: ObservableObject {
     }
 
     func installGeneratedPluginDraft(_ draft: GeneratedPluginDraft) async {
+        let result = await installGeneratedPluginDraftResult(
+            draft,
+            source: draft.source,
+            eventSource: draft.source,
+            summary: "generated plugin draft"
+        )
+        messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
+        saveSessionSnapshot()
+    }
+
+    private func installGeneratedPluginDraftCapability(arguments: [String: Any]) async -> CapabilityResult {
+        guard arguments["confirmed"] as? Bool == true else {
+            return CapabilityResult(
+                title: "Plugin Draft Install Needs Confirmation",
+                content: "Installing a staged plugin draft needs explicit confirmation. Set confirmed=true only after the user approves.",
+                requiresUserApproval: true
+            )
+        }
+        guard let draft = stagedDraft(from: arguments) else {
+            let pluginID = stringArgument(arguments, keys: ["plugin_id", "pluginID"], fallback: "")
+            let draftID = stringArgument(arguments, keys: ["draft_id", "draftID"], fallback: "")
+            let hint = generatedPluginDrafts.isEmpty
+                ? "No generated plugin drafts are waiting for review."
+                : "Available drafts: \(generatedPluginDrafts.map { "\($0.manifest.name) (\($0.manifest.id))" }.joined(separator: ", "))."
+            return CapabilityResult(
+                title: "Plugin Draft Install Failed",
+                content: "Could not find staged draft plugin_id=\(pluginID.isEmpty ? "unspecified" : pluginID) draft_id=\(draftID.isEmpty ? "unspecified" : draftID). \(hint)",
+                requiresUserApproval: false
+            )
+        }
+        return await installGeneratedPluginDraftResult(
+            draft,
+            source: "staged generated draft",
+            eventSource: "plugin.installDraft capability",
+            summary: "staged generated plugin draft"
+        )
+    }
+
+    private func stagedDraft(from arguments: [String: Any]) -> GeneratedPluginDraft? {
+        let draftID = stringArgument(arguments, keys: ["draft_id", "draftID"], fallback: "")
+        if !draftID.isEmpty {
+            return generatedPluginDrafts.first {
+                $0.id.uuidString.caseInsensitiveCompare(draftID) == .orderedSame
+            }
+        }
+        let pluginID = stringArgument(arguments, keys: ["plugin_id", "pluginID"], fallback: "")
+        if !pluginID.isEmpty {
+            return generatedPluginDrafts.first { $0.manifest.id == pluginID }
+        }
+        return generatedPluginDrafts.count == 1 ? generatedPluginDrafts.first : nil
+    }
+
+    private func installGeneratedPluginDraftResult(
+        _ draft: GeneratedPluginDraft,
+        source: String,
+        eventSource: String,
+        summary: String
+    ) async -> CapabilityResult {
         do {
             let existingIDs = plugins.map(\.id).filter { $0 != draft.manifest.id }
             try PluginPackageValidator().validate(draft.package, existingPluginIDs: existingIDs)
@@ -502,33 +560,49 @@ final class AppViewModel: ObservableObject {
             try pluginRegistry.install(package: draft.package, replacingExisting: updatingExisting)
             generatedPluginDrafts.removeAll { $0.id == draft.id }
             try? pluginDraftStore.delete(draft)
-            messages.append(ChatMessage(
-                role: .tool,
-                content: pluginInstalledContent(
-                    package: draft.package,
-                    source: "generated draft",
-                    title: updatingExisting ? "Plugin Updated" : "Plugin Installed",
-                    verb: updatingExisting ? "Updated" : "Installed"
-                )
-            ))
+            let title = updatingExisting ? "Plugin Updated" : "Plugin Installed"
+            let verb = updatingExisting ? "Updated" : "Installed"
             auditPluginEvent(
                 type: updatingExisting ? "plugin.updated" : "plugin.installed",
                 package: draft.package,
-                summary: updatingExisting ? "Updated generated plugin draft." : "Installed generated plugin draft.",
-                metadata: ["source": draft.source]
+                summary: updatingExisting ? "Updated \(summary)." : "Installed \(summary).",
+                metadata: [
+                    "source": eventSource,
+                    "draftID": draft.id.uuidString,
+                    "draftSource": draft.source
+                ]
             )
             saveSessionSnapshot()
             await reloadPlugins()
             rebuildRunningTasks()
+            return CapabilityResult(
+                title: title,
+                content: pluginInstalledContent(
+                    package: draft.package,
+                    source: source,
+                    title: title,
+                    verb: verb
+                ),
+                requiresUserApproval: false
+            )
         } catch {
             lastError = error.localizedDescription
-            messages.append(ChatMessage(role: .tool, content: "Plugin Install Failed\n\(error.localizedDescription)"))
             audit(
                 type: "plugin.install_failed",
                 summary: error.localizedDescription,
-                metadata: ["pluginID": draft.manifest.id, "source": draft.source]
+                metadata: [
+                    "pluginID": draft.manifest.id,
+                    "source": eventSource,
+                    "draftID": draft.id.uuidString,
+                    "draftSource": draft.source
+                ]
             )
             saveSessionSnapshot()
+            return CapabilityResult(
+                title: "Plugin Install Failed",
+                content: error.localizedDescription,
+                requiresUserApproval: false
+            )
         }
     }
 
@@ -1663,6 +1737,9 @@ final class AppViewModel: ObservableObject {
                 fallback: ""
             )
             return saveReflectionSnapshot(focus: focus)
+        }
+        if invocation.capabilityID == "plugin.installDraft" {
+            return await installGeneratedPluginDraftCapability(arguments: invocation.arguments)
         }
         return await capabilityExecutor.execute(invocation)
     }

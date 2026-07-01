@@ -299,6 +299,15 @@ struct PluginPackageReview: Equatable {
                 requiresApproval: approval
             )
         }
+        if id == "plugin.installDraft" {
+            return PermissionSummary(
+                id: id,
+                title: "Staged Plugin Install",
+                detail: "Installs a generated plugin draft already staged in the local review queue.",
+                systemImage: "shippingbox.circle",
+                requiresApproval: approval
+            )
+        }
         if id == "mcp.discover" {
             return PermissionSummary(
                 id: id,

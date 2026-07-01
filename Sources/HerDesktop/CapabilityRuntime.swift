@@ -119,6 +119,12 @@ final class CapabilityExecutor {
             return draftPlugin(arguments: invocation.arguments)
         case "plugin.install":
             return installPlugin(arguments: invocation.arguments)
+        case "plugin.installDraft":
+            return CapabilityResult(
+                title: "Plugin Draft Install Failed",
+                content: "Staged draft installation is handled by the Her Desktop app state because drafts live in the generated review queue.",
+                requiresUserApproval: false
+            )
         case "plugin.remove":
             return removePlugin(arguments: invocation.arguments)
         case "native.notify":

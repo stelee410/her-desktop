@@ -95,6 +95,14 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(commandArguments["type"] as? String, "string")
         XCTAssertEqual(draftParameters["required"] as? [String], ["name", "description"])
 
+        let installDraft = try XCTUnwrap(toolFunction(named: "plugin_installDraft", in: catalog))
+        let installDraftParameters = try XCTUnwrap(installDraft["parameters"] as? [String: Any])
+        let installDraftProperties = try XCTUnwrap(installDraftParameters["properties"] as? [String: Any])
+
+        XCTAssertEqual((installDraftProperties["plugin_id"] as? [String: Any])?["type"] as? String, "string")
+        XCTAssertEqual((installDraftProperties["draft_id"] as? [String: Any])?["type"] as? String, "string")
+        XCTAssertEqual(installDraftParameters["required"] as? [String], ["confirmed"])
+
         let remove = try XCTUnwrap(toolFunction(named: "plugin_remove", in: catalog))
         let removeParameters = try XCTUnwrap(remove["parameters"] as? [String: Any])
         let removeProperties = try XCTUnwrap(removeParameters["properties"] as? [String: Any])
