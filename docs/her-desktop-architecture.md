@@ -375,6 +375,7 @@ sequenceDiagram
     VM->>MEM: get task status(/v1/tasks/{task_id})
     MEM-->>VM: task status/result metadata
     VM->>APP: append memory task audit event
+    UI->>APP: render Recent Writebacks from audit state
     VM-->>UI: concise answer + visible activity state
 ```
 

@@ -23,6 +23,9 @@ struct CenterWorkspaceView: View {
 
 private struct MemoryWorkspaceView: View {
     @EnvironmentObject private var model: AppViewModel
+    private var writebacks: [MemoryWritebackStatus] {
+        MemoryWritebackStatusBuilder().build(from: model.auditEvents)
+    }
 
     var body: some View {
         WorkspacePage(title: "Memory", subtitle: model.agentProfile.relationship) {
@@ -115,6 +118,18 @@ private struct MemoryWorkspaceView: View {
                 }
             }
 
+            WorkspacePanel(title: "Recent Writebacks", trailing: writebacks.isEmpty ? "Quiet" : writebacks.first?.status.capitalized ?? "\(writebacks.count)") {
+                if writebacks.isEmpty {
+                    EmptyWorkspaceLine(icon: "brain.head.profile", text: "AgentMem writeback task status will appear after memory is saved.")
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(writebacks) { item in
+                            MemoryWritebackStatusRow(item: item)
+                        }
+                    }
+                }
+            }
+
             WorkspacePanel(title: "Recent Interaction Signals", trailing: "\(model.interactionEvents.count)") {
                 if model.interactionEvents.isEmpty {
                     EmptyWorkspaceLine(icon: "dot.radiowaves.left.and.right", text: "Conversation, file, voice, and inbox signals will appear here.")
@@ -144,6 +159,54 @@ private struct MemoryWorkspaceView: View {
         case .pluginDraftRequested, .pluginPackageImported: return "shippingbox"
         case .localSessionStarted: return "plus.message"
         case .externalInboxCaptured: return "tray.and.arrow.down"
+        }
+    }
+}
+
+private struct MemoryWritebackStatusRow: View {
+    var item: MemoryWritebackStatus
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: item.icon)
+                .foregroundStyle(color(for: item.status))
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text(item.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.ink)
+                        .lineLimit(1)
+                    Spacer()
+                    Text(item.status.capitalized)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(color(for: item.status))
+                    Text(item.createdAt, style: .time)
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.muted)
+                }
+                Text(item.detail)
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.muted)
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+            }
+        }
+        .padding(9)
+        .background(Color.white.opacity(0.40))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func color(for status: String) -> Color {
+        switch status {
+        case "succeeded":
+            return .green
+        case "failed", "check failed":
+            return AppTheme.coral
+        case "processing", "queued":
+            return AppTheme.burgundy
+        default:
+            return AppTheme.muted
         }
     }
 }
