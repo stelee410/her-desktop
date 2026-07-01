@@ -543,6 +543,12 @@ private struct ToolsWorkspaceView: View {
             CapabilityRunSheet(target: target)
                 .environmentObject(model)
         }
+        .onAppear {
+            openPendingCapabilityRun()
+        }
+        .onChange(of: model.pendingCapabilityRunTarget?.id) { _, _ in
+            openPendingCapabilityRun()
+        }
         .alert("Remove Plugin?", isPresented: removalBinding) {
             Button("Cancel", role: .cancel) {
                 removalCandidate = nil
@@ -571,6 +577,12 @@ private struct ToolsWorkspaceView: View {
                 }
             }
         )
+    }
+
+    private func openPendingCapabilityRun() {
+        guard let pending = model.pendingCapabilityRunTarget else { return }
+        runTarget = pending
+        model.pendingCapabilityRunTarget = nil
     }
 
     private func icon(for kind: String) -> String {

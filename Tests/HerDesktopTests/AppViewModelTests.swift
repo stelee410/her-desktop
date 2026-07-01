@@ -646,6 +646,7 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.pluginEvents.contains { $0.action == .installed && $0.pluginID == "local.calendar-create-event-mcp" })
         XCTAssertEqual(model.selectedSection, .tools)
         XCTAssertEqual(model.highlightedPluginID, "local.calendar-create-event-mcp")
+        XCTAssertEqual(model.pendingCapabilityRunTarget?.capability.id, "local.calendar-create-event-mcp.run")
     }
 
     func testInspectorDraftInstallsCommandPluginWithApprovalAndArguments() async throws {
@@ -1547,6 +1548,8 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.plugins.contains { $0.id == "local.generated" })
         XCTAssertEqual(model.selectedSection, .tools)
         XCTAssertEqual(model.highlightedPluginID, "local.generated")
+        XCTAssertEqual(model.pendingCapabilityRunTarget?.pluginName, "Generated")
+        XCTAssertEqual(model.pendingCapabilityRunTarget?.capability.id, "local.generated.run")
         XCTAssertTrue(FileManager.default.fileExists(
             atPath: URL(fileURLWithPath: config.pluginDirectory)
                 .appendingPathComponent("local.generated/plugin.json")
@@ -1573,6 +1576,33 @@ final class AppViewModelTests: XCTestCase {
             && event.pluginID == "local.generated"
             && event.source == "plugin.draft"
         })
+    }
+
+    func testGeneratedPluginWithMultipleCapabilitiesDoesNotAutoOpenRunTarget() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-generated-plugin-multi-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+
+        let model = AppViewModel(config: config, cwd: cwd.path)
+        var package = samplePackage(id: "local.multi", name: "Multi")
+        package.manifest.capabilities.append(.init(
+            id: "local.multi.second",
+            title: "Second Multi",
+            kind: "skill",
+            invocation: "local.multi.second",
+            requiresApproval: false,
+            adapter: .init(type: "skill", skillFile: "SKILL.md")
+        ))
+        model.stageGeneratedPluginPackage(package, source: "plugin.draft")
+
+        let draft = try XCTUnwrap(model.generatedPluginDrafts.first)
+        await model.installGeneratedPluginDraft(draft)
+
+        XCTAssertEqual(model.selectedSection, .tools)
+        XCTAssertEqual(model.highlightedPluginID, "local.multi")
+        XCTAssertNil(model.pendingCapabilityRunTarget)
     }
 
     func testPluginDraftCapabilityStagesReviewableDraftWithFollowUpActions() async throws {

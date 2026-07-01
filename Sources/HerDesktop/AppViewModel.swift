@@ -30,6 +30,7 @@ final class AppViewModel: ObservableObject {
     @Published var localInboxBridgeState: LocalInboxBridgeState
     @Published var selectedSection: WorkspaceSection
     @Published var highlightedPluginID: String?
+    @Published var pendingCapabilityRunTarget: CapabilityRunTarget?
     @Published var isVibePluginComposerPresented: Bool
 
     private var agentMem: AgentMemClient
@@ -126,6 +127,7 @@ final class AppViewModel: ObservableObject {
         self.localInboxBridgeState = LocalInboxBridgeState()
         self.selectedSection = .today
         self.highlightedPluginID = nil
+        self.pendingCapabilityRunTarget = nil
         self.isVibePluginComposerPresented = false
         rebuildRunningTasks()
     }
@@ -633,6 +635,7 @@ final class AppViewModel: ObservableObject {
             await reloadPlugins()
             rebuildRunningTasks()
             focusInstalledPlugin(draft.manifest.id)
+            prepareInstalledCapabilityRun(for: draft.manifest)
             return CapabilityResult(
                 title: title,
                 content: pluginInstalledContent(
@@ -1116,6 +1119,7 @@ final class AppViewModel: ObservableObject {
             saveSessionSnapshot()
             await reloadPlugins()
             focusInstalledPlugin(package.manifest.id)
+            prepareInstalledCapabilityRun(for: package.manifest)
         } catch {
             lastError = error.localizedDescription
             messages.append(ChatMessage(role: .tool, content: "Plugin Install Failed\n\(error.localizedDescription)"))
@@ -1583,6 +1587,7 @@ final class AppViewModel: ObservableObject {
                 )
                 await reloadPlugins()
                 focusInstalledPlugin(package.manifest.id)
+                prepareInstalledCapabilityRun(for: package.manifest)
             } else {
                 let draft = stageGeneratedPluginPackage(package, source: "agentllm-vibe-composer")
                 messages.append(ChatMessage(
@@ -2583,11 +2588,20 @@ final class AppViewModel: ObservableObject {
         )
         rebuildRunningTasks()
         focusInstalledPlugin(documented.manifest.id)
+        prepareInstalledCapabilityRun(for: documented.manifest)
     }
 
     private func focusInstalledPlugin(_ pluginID: String) {
         highlightedPluginID = pluginID
         selectedSection = .tools
+    }
+
+    private func prepareInstalledCapabilityRun(for manifest: PluginManifest) {
+        guard manifest.capabilities.count == 1, let capability = manifest.capabilities.first else {
+            pendingCapabilityRunTarget = nil
+            return
+        }
+        pendingCapabilityRunTarget = CapabilityRunTarget(pluginName: manifest.name, capability: capability)
     }
 
     private func pluginPackageArgument(from arguments: [String: Any]) -> PluginPackage? {
