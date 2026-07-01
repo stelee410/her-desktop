@@ -57,6 +57,13 @@ struct ActiveWorkSummaryBuilder {
                 if let url = event.payload["url"], !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     line += " [url: \(url)]"
                 }
+                if !event.attachments.isEmpty {
+                    let attachments = event.attachments
+                        .prefix(3)
+                        .map { "\($0.displayName) (\($0.kind.rawValue))" }
+                        .joined(separator: ", ")
+                    line += " [attachments: \(attachments)]"
+                }
                 return line
             }
 

@@ -788,6 +788,9 @@ final class CapabilityExecutor {
         )
         let url = clean(arguments["url"] as? String, fallback: "")
         let receivedAt = clean(arguments["received_at"] as? String, fallback: "")
+        let attachmentPaths = commandArgumentTemplates(
+            arguments["attachment_paths"] ?? arguments["attachments"] ?? arguments["files"]
+        )
         guard !text.isEmpty else {
             return CapabilityResult(
                 title: "Inbox Capture Failed",
@@ -798,10 +801,11 @@ final class CapabilityExecutor {
         let senderLine = sender.isEmpty ? "" : "\nsender: \(sender)"
         let urlLine = url.isEmpty ? "" : "\nurl: \(url)"
         let receivedLine = receivedAt.isEmpty ? "" : "\nreceived_at: \(receivedAt)"
+        let attachmentLine = attachmentPaths.isEmpty ? "" : "\nattachment_paths: \(attachmentPaths.joined(separator: ", "))"
         return CapabilityResult(
             title: "Inbox Event Captured",
             content: """
-            source: \(source)\(senderLine)\(urlLine)\(receivedLine)
+            source: \(source)\(senderLine)\(urlLine)\(receivedLine)\(attachmentLine)
             characters: \(text.count)
 
             \(text)

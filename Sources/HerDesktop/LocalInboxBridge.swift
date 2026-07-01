@@ -7,19 +7,22 @@ struct LocalInboxMessage: Codable, Equatable {
     var text: String
     var url: String
     var receivedAt: String
+    var attachmentPaths: [String]
 
     init(
         source: String = "local-http",
         sender: String = "",
         text: String,
         url: String = "",
-        receivedAt: String = ""
+        receivedAt: String = "",
+        attachmentPaths: [String] = []
     ) {
         self.source = source
         self.sender = sender
         self.text = text
         self.url = url
         self.receivedAt = receivedAt
+        self.attachmentPaths = attachmentPaths
     }
 }
 
@@ -107,7 +110,8 @@ enum LocalInboxBridgeRequestParser {
             sender: stringValue(object, keys: ["sender", "from", "author"]),
             text: text,
             url: stringValue(object, keys: ["url", "link"]),
-            receivedAt: stringValue(object, keys: ["received_at", "receivedAt", "timestamp"])
+            receivedAt: stringValue(object, keys: ["received_at", "receivedAt", "timestamp"]),
+            attachmentPaths: stringArrayValue(object, keys: ["attachment_paths", "attachments", "files"])
         )
     }
 
@@ -139,6 +143,36 @@ enum LocalInboxBridgeRequestParser {
             }
         }
         return fallback
+    }
+
+    private static func stringArrayValue(_ object: [String: Any], keys: [String]) -> [String] {
+        for key in keys {
+            guard let raw = object[key] else { continue }
+            let values: [String]
+            if let array = raw as? [String] {
+                values = array
+            } else if let array = raw as? [Any] {
+                values = array.compactMap { item in
+                    if let string = item as? String {
+                        return string
+                    }
+                    if let object = item as? [String: Any] {
+                        return stringValue(object, keys: ["path", "file", "file_path", "stored_path", "url"])
+                    }
+                    return String(describing: item)
+                }
+            } else {
+                values = String(describing: raw)
+                    .components(separatedBy: .newlines)
+            }
+            let cleaned = values
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if !cleaned.isEmpty {
+                return cleaned
+            }
+        }
+        return []
     }
 }
 

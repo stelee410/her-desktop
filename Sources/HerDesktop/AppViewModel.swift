@@ -2216,14 +2216,23 @@ final class AppViewModel: ObservableObject {
         let text = stringArgument(invocation.arguments, keys: ["text", "request", "body", "content"], fallback: "")
         let url = stringArgument(invocation.arguments, keys: ["url"], fallback: "")
         let receivedAt = stringArgument(invocation.arguments, keys: ["received_at", "receivedAt"], fallback: "")
+        let attachmentPaths = stringArrayArgument(invocation.arguments, keys: ["attachment_paths", "attachments", "files"])
+        let (attachments, attachmentFailures) = importInboxAttachments(paths: attachmentPaths)
         let summaryPrefix = sender.isEmpty ? source : "\(source) from \(sender)"
         let preview = text.isEmpty ? "External inbox event captured." : String(text.prefix(140))
         var payload: [String: String] = [
             "source": source,
             "sender": sender,
             "textCharacters": String(text.count),
-            "toolCallID": invocation.toolCallID
+            "toolCallID": invocation.toolCallID,
+            "attachmentCount": String(attachments.count)
         ]
+        if !attachments.isEmpty {
+            payload["attachmentNames"] = attachments.map(\.displayName).joined(separator: ", ")
+        }
+        if !attachmentFailures.isEmpty {
+            payload["attachmentImportFailures"] = attachmentFailures.joined(separator: " | ")
+        }
         if !url.isEmpty {
             payload["url"] = url
         }
@@ -2234,8 +2243,32 @@ final class AppViewModel: ObservableObject {
             surface: .externalInbox,
             kind: .externalInboxCaptured,
             summary: "\(summaryPrefix): \(preview)",
-            payload: payload
+            payload: payload,
+            attachments: attachments
         ))
+    }
+
+    private func importInboxAttachments(paths: [String]) -> ([MessageAttachment], [String]) {
+        var imported: [MessageAttachment] = []
+        var failures: [String] = []
+        for path in paths {
+            do {
+                imported.append(try attachmentStore.importFile(resolveInboxAttachmentURL(path)))
+            } catch {
+                failures.append("\(path): \(error.localizedDescription)")
+            }
+        }
+        return (imported, failures)
+    }
+
+    private func resolveInboxAttachmentURL(_ path: String) -> URL {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        let expanded = (trimmed as NSString).expandingTildeInPath
+        if expanded.hasPrefix("/") {
+            return URL(fileURLWithPath: expanded)
+        }
+        return URL(fileURLWithPath: runtimeCwd, isDirectory: true)
+            .appendingPathComponent(expanded)
     }
 
     private func captureLocalInboxBridgeMessage(_ message: LocalInboxMessage) {
@@ -2248,18 +2281,23 @@ final class AppViewModel: ObservableObject {
                 "sender": message.sender,
                 "text": message.text,
                 "url": message.url,
-                "received_at": message.receivedAt
+                "received_at": message.receivedAt,
+                "attachment_paths": message.attachmentPaths
             ]
         )
+        var contentLines = [
+            "source: \(message.source)",
+            "sender: \(message.sender)"
+        ]
+        if !message.attachmentPaths.isEmpty {
+            contentLines.append("attachment_paths: \(message.attachmentPaths.joined(separator: ", "))")
+        }
+        contentLines.append("characters: \(message.text.count)")
+        contentLines.append("")
+        contentLines.append(message.text)
         let result = CapabilityResult(
             title: "Inbox Event Captured",
-            content: """
-            source: \(message.source)
-            sender: \(message.sender)
-            characters: \(message.text.count)
-
-            \(message.text)
-            """,
+            content: contentLines.joined(separator: "\n"),
             requiresUserApproval: false
         )
         captureExternalInboxEventIfNeeded(invocation: invocation, result: result)

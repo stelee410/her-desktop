@@ -1660,7 +1660,8 @@ final class CapabilityRuntimeTests: XCTestCase {
                 "sender": "Leo",
                 "text": "Please review the new architecture note.",
                 "url": "https://example.com/thread/1",
-                "received_at": "2026-06-30T10:00:00Z"
+                "received_at": "2026-06-30T10:00:00Z",
+                "attachment_paths": ["/tmp/screenshot.png", "/tmp/note.txt"]
             ]
         ))
 
@@ -1668,6 +1669,7 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertFalse(result.requiresUserApproval)
         XCTAssertTrue(result.content.contains("source: oyii"))
         XCTAssertTrue(result.content.contains("sender: Leo"))
+        XCTAssertTrue(result.content.contains("attachment_paths: /tmp/screenshot.png, /tmp/note.txt"))
         XCTAssertTrue(result.content.contains("Please review the new architecture note."))
     }
 

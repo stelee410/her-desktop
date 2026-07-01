@@ -71,6 +71,17 @@ final class ActiveWorkSummaryBuilderTests: XCTestCase {
                         "source": "quick-capture",
                         "sender": "tester",
                         "url": "https://example.com/thread"
+                    ],
+                    attachments: [
+                        MessageAttachment(
+                            originalName: "thread.png",
+                            storedPath: "/tmp/thread.png",
+                            kind: .image,
+                            mimeType: "image/png",
+                            byteCount: 42,
+                            summary: "Image metadata preview included.",
+                            textPreview: "content_type: image_metadata"
+                        )
                     ]
                 ),
                 InteractionEvent(
@@ -91,6 +102,7 @@ final class ActiveWorkSummaryBuilderTests: XCTestCase {
         XCTAssertTrue(summary.contains("quick-capture from tester"))
         XCTAssertTrue(summary.contains("Follow up on AgentMem integration notes."))
         XCTAssertTrue(summary.contains("[url: https://example.com/thread]"))
+        XCTAssertTrue(summary.contains("[attachments: thread.png (image)]"))
         XCTAssertFalse(summary.contains("Should not appear."))
         XCTAssertFalse(summary.contains("Older capture should not appear."))
     }

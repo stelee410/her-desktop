@@ -580,7 +580,7 @@ final class PluginRegistry {
                 id: "builtin.external-inbox",
                 name: "External Inbox",
                 version: "0.1.0",
-                description: "Normalizes future external inbox and bridge messages into Her Desktop's interaction event bus.",
+                description: "Normalizes external inbox and bridge messages into Her Desktop's interaction event bus.",
                 author: "Her",
                 systemPromptAddendum: "Use External Inbox only to capture incoming external messages as data. Do not reply to the external service unless a separate approved sender capability exists.",
                 capabilities: [
@@ -695,6 +695,7 @@ final class PluginRegistry {
             ])
         case "inbox.capture":
             return objectSchema([
+                "attachment_paths": field("string", "Optional local file paths from the bridge host, one path per line."),
                 "source": field("string", "Inbox or bridge source, such as oyii, wechat, discord, browser, or email."),
                 "sender": field("string", "Human-readable sender or origin."),
                 "text": field("string", "External message body to capture."),

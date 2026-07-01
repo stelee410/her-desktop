@@ -190,10 +190,11 @@ For local thoughts or tasks, use `Shift+Command+I` or the menu bar's Quick Captu
 ```bash
 curl -X POST http://127.0.0.1:8766/inbox \
   -H "Content-Type: application/json" \
-  -d '{"source":"oyii","sender":"Leo","text":"Review this thread"}'
+  -d '{"source":"oyii","sender":"Leo","text":"Review this thread","attachment_paths":["/Users/stelee/Desktop/screenshot.png"]}'
 ```
 
 Capturing an inbox message does not send a reply to the external service. Outbound replies need a separate approved sender capability.
+`attachment_paths`, `attachments`, or `files` may contain local file paths from the bridge host; Her Desktop imports readable files into `.her/attachments/`, attaches them to the inbox event, and reports import failures without dropping the text message. It does not download remote URLs from inbox payloads.
 
 Executable adapters currently include:
 
@@ -203,4 +204,4 @@ Executable adapters currently include:
 - `mcp`: posts JSON-RPC 2.0 requests to a local HTTP bridge on `localhost`, `127.0.0.1`, or `::1`; `tools/call` adapters should declare `toolName` so capability arguments are wrapped as MCP tool arguments.
 - `mcp.discover`: built-in local discovery that posts `tools/list` to a bridge and returns tool names, descriptions, and input schema summaries for vibe-coded plugin creation.
 - `command`: runs a fixed executable with fixed argument templates, no shell, a bounded timeout, and required approval.
-- `native`: supports built-in macOS actions such as notifications, approved UTF-8 text-file reads, approved attachment inspection/PDF extraction, approved text-to-speech playback, inbox capture, AgentMem read/write, and approved reflection snapshots.
+- `native`: supports built-in macOS actions such as notifications, approved UTF-8 text-file reads, approved attachment inspection/PDF extraction/image metadata, approved text-to-speech playback, inbox capture with optional local attachment import, AgentMem read/write, and approved reflection snapshots.
