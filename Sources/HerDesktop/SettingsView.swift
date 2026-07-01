@@ -142,9 +142,9 @@ struct HerConfigurationFields: View {
                 SecureField("AgentMem API key", text: $draft.agentMemAPIKey)
             }
 
-            fieldSection("Identity & Plugins", systemImage: "puzzlepiece.extension") {
-                TextField("Agent code", text: $draft.agentCode)
-                TextField("User ID", text: $draft.userID)
+            fieldSection("Local Labels & Plugins", systemImage: "puzzlepiece.extension") {
+                TextField("Local agent label", text: $draft.agentCode)
+                TextField("Local user label", text: $draft.userID)
                 TextField("Plugin directory", text: $draft.pluginDirectory)
             }
 
@@ -181,4 +181,3 @@ struct HerConfigurationFields: View {
         presentation == .settings ? .body : .caption
     }
 }
-

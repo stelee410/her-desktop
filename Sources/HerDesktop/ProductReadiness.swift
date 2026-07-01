@@ -190,9 +190,7 @@ enum ProductReadinessBuilder {
             detail: detail,
             level: hasLabels ? .ready : .optional,
             systemImage: "person.crop.circle.badge.checkmark",
-            required: false,
-            actionTitle: hasLabels ? nil : "Settings",
-            action: hasLabels ? nil : .openSettings
+            required: false
         )
     }
 

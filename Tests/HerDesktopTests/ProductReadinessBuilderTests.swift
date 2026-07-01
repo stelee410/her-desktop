@@ -137,6 +137,34 @@ final class ProductReadinessBuilderTests: XCTestCase {
         XCTAssertEqual(summary.items.first { $0.id == "labels" }?.level, .optional)
         XCTAssertFalse(summary.items.first { $0.id == "labels" }?.required == true)
         XCTAssertTrue(summary.items.first { $0.id == "labels" }?.detail.contains("Memory-Key") == true)
+        XCTAssertNil(summary.items.first { $0.id == "labels" }?.actionTitle)
+        XCTAssertNil(summary.items.first { $0.id == "labels" }?.action)
+    }
+
+    func testSuggestedActionsDoNotPromoteOptionalLocalLabels() {
+        var config = HerAppConfig.empty
+        config.agentLLMAPIKey = "llm-test"
+        config.agentMemAPIKey = "mem-test"
+        config.agentCode = ""
+        config.userID = ""
+
+        let summary = ProductReadinessBuilder.build(
+            config: config,
+            serviceHealth: [
+                health(id: "agentllm", state: .online),
+                health(id: "agentmem", state: .online)
+            ],
+            plugins: [plugin()],
+            localInboxBridgeState: LocalInboxBridgeState(),
+            pendingApprovals: [approval()],
+            generatedDrafts: [],
+            workPlan: nil,
+            dreamContext: nil
+        )
+
+        XCTAssertEqual(summary.items.first { $0.id == "labels" }?.level, .optional)
+        XCTAssertFalse(summary.suggestedActions(limit: 8).map(\.id).contains("labels"))
+        XCTAssertEqual(summary.suggestedActions(limit: 3).map(\.id), ["reviews", "workplan", "reflection"])
     }
 
     func testSuggestedActionsReturnFirstNonReadyActionableItemsWithLimit() {
