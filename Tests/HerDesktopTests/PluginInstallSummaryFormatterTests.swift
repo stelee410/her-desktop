@@ -48,7 +48,37 @@ final class PluginInstallSummaryFormatterTests: XCTestCase {
         XCTAssertTrue(content.contains("Quick start"))
         XCTAssertTrue(content.contains("run from Plugin Library or call local_image-helper_run"))
         XCTAssertTrue(content.contains("inputs: prompt*:string, size:string=1024x1024/1536x1024"))
+        XCTAssertTrue(content.contains("Callable tool arguments"))
+        XCTAssertTrue(content.contains(#"local_image-helper_run {"prompt":"<prompt>","size":"1024x1024"}"#))
         XCTAssertTrue(content.contains("approval required"))
         XCTAssertTrue(content.contains("Package files: 1"))
+    }
+
+    func testContentIncludesDefaultRequestArgumentsForFreeTextCapabilities() {
+        let package = PluginPackage(
+            manifest: PluginManifest(
+                id: "local.freeform",
+                name: "Freeform",
+                version: "0.1.0",
+                description: "Free text helper.",
+                author: "Test",
+                systemPromptAddendum: nil,
+                capabilities: [
+                    .init(
+                        id: "local.freeform.run",
+                        title: "Run Freeform",
+                        kind: "skill",
+                        invocation: "local.freeform.run",
+                        requiresApproval: false
+                    )
+                ]
+            ),
+            files: []
+        )
+
+        let content = PluginInstallSummaryFormatter().content(package: package, source: "test")
+
+        XCTAssertTrue(content.contains(#"local_freeform_run {"request":"<request>"}"#))
+        XCTAssertTrue(content.contains("no approval"))
     }
 }

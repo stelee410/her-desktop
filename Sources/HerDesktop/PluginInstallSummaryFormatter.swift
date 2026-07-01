@@ -13,6 +13,9 @@ struct PluginInstallSummaryFormatter {
         let quickStart = package.manifest.capabilities
             .map(quickStartLine)
             .joined(separator: "\n")
+        let toolArguments = package.manifest.capabilities
+            .map(toolArgumentLine)
+            .joined(separator: "\n")
 
         return """
         \(title)
@@ -23,6 +26,9 @@ struct PluginInstallSummaryFormatter {
 
         Quick start:
         \(quickStart.isEmpty ? "- No runnable capabilities declared." : quickStart)
+
+        Callable tool arguments:
+        \(toolArguments.isEmpty ? "- No callable arguments available." : toolArguments)
 
         Package files: \(package.files.count)
         """
@@ -41,6 +47,11 @@ struct PluginInstallSummaryFormatter {
         return "- \(capability.title): run from Plugin Library or call \(functionName); inputs: \(inputSummary(for: capability)); \(approval)."
     }
 
+    private func toolArgumentLine(_ capability: PluginManifest.Capability) -> String {
+        let functionName = CapabilityToolCatalog.functionName(for: capability.id)
+        return "- \(functionName) \(sampleArgumentsJSON(for: capability))"
+    }
+
     private func inputSummary(for capability: PluginManifest.Capability) -> String {
         let fields = CapabilityInputSchema.fields(for: capability)
         guard !fields.isEmpty else { return "free text request" }
@@ -50,5 +61,38 @@ struct PluginInstallSummaryFormatter {
             return "\(field.name)\(required):\(field.type.rawValue)\(enumSuffix)"
         }
         .joined(separator: ", ")
+    }
+
+    private func sampleArgumentsJSON(for capability: PluginManifest.Capability) -> String {
+        let fields = CapabilityInputSchema.fields(for: capability)
+        let object: [String: Any]
+        if fields.isEmpty {
+            object = ["request": "<request>"]
+        } else {
+            object = Dictionary(uniqueKeysWithValues: fields.map { field in
+                (field.name, sampleValue(for: field))
+            })
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+              let text = String(data: data, encoding: .utf8) else {
+            return "{}"
+        }
+        return text
+    }
+
+    private func sampleValue(for field: CapabilityInputField) -> Any {
+        switch field.type {
+        case .boolean:
+            return false
+        case .integer:
+            return 0
+        case .number:
+            return 0
+        case .string:
+            if let first = field.enumValues.first {
+                return first
+            }
+            return field.required ? "<\(field.name)>" : ""
+        }
     }
 }

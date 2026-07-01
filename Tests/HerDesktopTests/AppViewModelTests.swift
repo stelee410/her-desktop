@@ -1868,7 +1868,9 @@ final class AppViewModelTests: XCTestCase {
             atPath: cwd.appendingPathComponent(".her/plugin-drafts/\(draftID.uuidString).json").path
         ))
         XCTAssertTrue(model.plugins.contains { $0.id == "local.staged-install" })
-        XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Installed") })
+        let installMessage = try XCTUnwrap(model.messages.last { $0.content.contains("Plugin Installed") }?.content)
+        XCTAssertTrue(installMessage.contains("Callable tool arguments"))
+        XCTAssertTrue(installMessage.contains(#"local_staged-install_run {"request":"<request>"}"#))
         let audit = try AuditEventStore(cwd: cwd.path).loadAll()
         XCTAssertTrue(audit.contains { event in
             event.type == "plugin.installed"
