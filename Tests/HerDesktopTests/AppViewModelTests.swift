@@ -1779,6 +1779,86 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(lastMessage.contains("\"confirmed\":true"))
     }
 
+    func testPluginInstallDraftFailureListsRetryArguments() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-plugin-install-draft-retry-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        let model = AppViewModel(config: config, cwd: cwd.path)
+        model.stageGeneratedPluginPackage(samplePackage(id: "local.first-draft", name: "First Draft"), source: "plugin.draft")
+        model.stageGeneratedPluginPackage(samplePackage(id: "local.second-draft", name: "Second Draft"), source: "plugin.draft")
+        let draftIDs = model.generatedPluginDrafts.reduce(into: [String: String]()) { result, draft in
+            result[draft.manifest.id] = draft.id.uuidString
+        }
+
+        let approval = PendingApproval(
+            title: "Install staged plugin draft",
+            detail: "Install missing draft",
+            invocation: CapabilityInvocation(
+                toolCallID: "call-plugin-install-draft-missing",
+                functionName: "plugin_installDraft",
+                capabilityID: "plugin.installDraft",
+                arguments: [
+                    "confirmed": true,
+                    "plugin_id": "local.missing-draft",
+                    "draft_id": "missing-draft-id"
+                ]
+            ),
+            activityID: nil
+        )
+
+        await model.approve(approval)
+
+        let lastMessage = try XCTUnwrap(model.messages.last?.content)
+        XCTAssertTrue(lastMessage.contains("Plugin Draft Install Failed"))
+        XCTAssertTrue(lastMessage.contains("Could not find staged draft plugin_id=local.missing-draft draft_id=missing-draft-id."))
+        XCTAssertTrue(lastMessage.contains("Available drafts:"))
+        XCTAssertTrue(lastMessage.contains("First Draft (local.first-draft)"))
+        XCTAssertTrue(lastMessage.contains("Second Draft (local.second-draft)"))
+        XCTAssertTrue(lastMessage.contains("draft_id: \(try XCTUnwrap(draftIDs["local.first-draft"]))"))
+        XCTAssertTrue(lastMessage.contains("draft_id: \(try XCTUnwrap(draftIDs["local.second-draft"]))"))
+        XCTAssertTrue(lastMessage.contains("retry: plugin_installDraft {\"plugin_id\":\"local.first-draft\",\"draft_id\":\"\(try XCTUnwrap(draftIDs["local.first-draft"]))\",\"confirmed\":true}"))
+        XCTAssertTrue(lastMessage.contains("retry: plugin_installDraft {\"plugin_id\":\"local.second-draft\",\"draft_id\":\"\(try XCTUnwrap(draftIDs["local.second-draft"]))\",\"confirmed\":true}"))
+    }
+
+    func testPluginDiscardDraftFailureListsRetryArguments() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-plugin-discard-draft-retry-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        let model = AppViewModel(config: config, cwd: cwd.path)
+        model.stageGeneratedPluginPackage(samplePackage(id: "local.keep-draft", name: "Keep Draft"), source: "plugin.draft")
+        let draftID = try XCTUnwrap(model.generatedPluginDrafts.first?.id.uuidString)
+
+        let approval = PendingApproval(
+            title: "Discard staged plugin draft",
+            detail: "Discard missing draft",
+            invocation: CapabilityInvocation(
+                toolCallID: "call-plugin-discard-draft-missing",
+                functionName: "plugin_discardDraft",
+                capabilityID: "plugin.discardDraft",
+                arguments: [
+                    "confirmed": true,
+                    "plugin_id": "local.missing-draft"
+                ]
+            ),
+            activityID: nil
+        )
+
+        await model.approve(approval)
+
+        let lastMessage = try XCTUnwrap(model.messages.last?.content)
+        XCTAssertTrue(lastMessage.contains("Plugin Draft Discard Failed"))
+        XCTAssertTrue(lastMessage.contains("Could not find staged draft plugin_id=local.missing-draft draft_id=unspecified."))
+        XCTAssertTrue(lastMessage.contains("Available drafts:"))
+        XCTAssertTrue(lastMessage.contains("Keep Draft (local.keep-draft)"))
+        XCTAssertTrue(lastMessage.contains("draft_id: \(draftID)"))
+        XCTAssertTrue(lastMessage.contains("retry: plugin_discardDraft {\"plugin_id\":\"local.keep-draft\",\"draft_id\":\"\(draftID)\",\"confirmed\":true}"))
+        XCTAssertEqual(model.generatedPluginDrafts.count, 1)
+    }
+
     func testApprovedPluginDiscardDraftCapabilityRemovesStagedDraftByPluginID() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-plugin-discard-draft-capability-\(UUID().uuidString)", isDirectory: true)

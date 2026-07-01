@@ -575,12 +575,12 @@ final class AppViewModel: ObservableObject {
         guard let draft = stagedDraft(from: arguments) else {
             let pluginID = stringArgument(arguments, keys: ["plugin_id", "pluginID"], fallback: "")
             let draftID = stringArgument(arguments, keys: ["draft_id", "draftID"], fallback: "")
-            let hint = generatedPluginDrafts.isEmpty
-                ? "No generated plugin drafts are waiting for review."
-                : "Available drafts: \(generatedPluginDrafts.map { "\($0.manifest.name) (\($0.manifest.id))" }.joined(separator: ", "))."
             return CapabilityResult(
                 title: "Plugin Draft Install Failed",
-                content: "Could not find staged draft plugin_id=\(pluginID.isEmpty ? "unspecified" : pluginID) draft_id=\(draftID.isEmpty ? "unspecified" : draftID). \(hint)",
+                content: """
+                Could not find staged draft plugin_id=\(pluginID.isEmpty ? "unspecified" : pluginID) draft_id=\(draftID.isEmpty ? "unspecified" : draftID).
+                \(stagedDraftRetryHint(functionName: "plugin_installDraft"))
+                """,
                 requiresUserApproval: false
             )
         }
@@ -688,12 +688,12 @@ final class AppViewModel: ObservableObject {
         guard let draft = stagedDraft(from: arguments) else {
             let pluginID = stringArgument(arguments, keys: ["plugin_id", "pluginID"], fallback: "")
             let draftID = stringArgument(arguments, keys: ["draft_id", "draftID"], fallback: "")
-            let hint = generatedPluginDrafts.isEmpty
-                ? "No generated plugin drafts are waiting for review."
-                : "Available drafts: \(generatedPluginDrafts.map { "\($0.manifest.name) (\($0.manifest.id))" }.joined(separator: ", "))."
             return CapabilityResult(
                 title: "Plugin Draft Discard Failed",
-                content: "Could not find staged draft plugin_id=\(pluginID.isEmpty ? "unspecified" : pluginID) draft_id=\(draftID.isEmpty ? "unspecified" : draftID). \(hint)",
+                content: """
+                Could not find staged draft plugin_id=\(pluginID.isEmpty ? "unspecified" : pluginID) draft_id=\(draftID.isEmpty ? "unspecified" : draftID).
+                \(stagedDraftRetryHint(functionName: "plugin_discardDraft"))
+                """,
                 requiresUserApproval: false
             )
         }
@@ -702,6 +702,26 @@ final class AppViewModel: ObservableObject {
             eventSource: "plugin.discardDraft capability",
             summary: "staged generated plugin draft"
         )
+    }
+
+    private func stagedDraftRetryHint(functionName: String) -> String {
+        guard !generatedPluginDrafts.isEmpty else {
+            return "No generated plugin drafts are waiting for review."
+        }
+        let summaries = generatedPluginDrafts.map { draft in
+            let arguments = """
+            {"plugin_id":"\(draft.manifest.id)","draft_id":"\(draft.id.uuidString)","confirmed":true}
+            """
+            return """
+            - \(draft.manifest.name) (\(draft.manifest.id))
+              draft_id: \(draft.id.uuidString)
+              retry: \(functionName) \(arguments)
+            """
+        }
+        return """
+        Available drafts:
+        \(summaries.joined(separator: "\n"))
+        """
     }
 
     private func discardGeneratedPluginDraftResult(
