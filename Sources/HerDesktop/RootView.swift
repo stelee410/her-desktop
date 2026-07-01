@@ -15,6 +15,9 @@ struct RootView: View {
                 .frame(width: 330)
         }
         .background(AppTheme.windowBackground)
+        .task {
+            await model.bootstrapRuntime()
+        }
     }
 }
 

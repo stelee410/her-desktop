@@ -53,6 +53,7 @@ final class AppViewModel: ObservableObject {
     private let sessionID: String
     private var dictationTask: Task<Void, Never>?
     private var dictationBaseText = ""
+    private var didBootstrapRuntime = false
 
     init(
         config explicitConfig: HerAppConfig? = nil,
@@ -65,8 +66,8 @@ final class AppViewModel: ObservableObject {
         let loaded = explicitConfig ?? ConfigLoader.load(cwd: cwd)
         self.runtimeCwd = cwd
         self.config = loaded
-        self.agentMem = AgentMemClient(config: loaded)
-        self.agentLLM = agentLLM ?? AgentLLMClient(config: loaded)
+        self.agentMem = AgentMemClient(config: loaded, session: urlSession)
+        self.agentLLM = agentLLM ?? AgentLLMClient(config: loaded, session: urlSession)
         self.pluginRegistry = PluginRegistry(config: loaded, baseDirectory: cwd)
         self.speechSynthesizer = speechSynthesizer
         self.speechDictation = speechDictation
@@ -90,7 +91,7 @@ final class AppViewModel: ObservableObject {
         self.attachmentStore = AttachmentStore(cwd: cwd)
         self.interactionEventBus = InteractionEventBus()
         self.localInboxBridgeServer = LocalInboxBridgeServer()
-        self.serviceHealthVerifier = ServiceHealthVerifier(config: loaded)
+        self.serviceHealthVerifier = ServiceHealthVerifier(config: loaded, session: urlSession)
         self.conversationContextBuilder = ConversationContextBuilder()
         self.sessionID = sessionStore.loadOrCreateSessionID()
         let loadedPlugins = pluginRegistry.loadPlugins()
@@ -127,6 +128,17 @@ final class AppViewModel: ObservableObject {
 
     deinit {
         localInboxBridgeServer.stop()
+    }
+
+    func bootstrapRuntime() async {
+        guard !didBootstrapRuntime else { return }
+        didBootstrapRuntime = true
+        refreshAuditEvents()
+        refreshPluginEvents()
+        refreshWebServiceArtifacts()
+        refreshDreamContext()
+        await reloadPlugins()
+        await refreshServiceHealth()
     }
 
     func saveConfiguration(_ draft: HerAppConfigDraft) async {
@@ -2821,8 +2833,8 @@ final class AppViewModel: ObservableObject {
 
     private func applyConfiguration(_ updated: HerAppConfig) {
         config = updated
-        agentMem = AgentMemClient(config: updated)
-        agentLLM = AgentLLMClient(config: updated)
+        agentMem = AgentMemClient(config: updated, session: urlSession)
+        agentLLM = AgentLLMClient(config: updated, session: urlSession)
         pluginRegistry = PluginRegistry(config: updated, baseDirectory: runtimeCwd)
         capabilityExecutor = CapabilityExecutor(
             registry: pluginRegistry,
@@ -2836,7 +2848,7 @@ final class AppViewModel: ObservableObject {
         pluginEventStore = PluginEventStore(cwd: runtimeCwd)
         webServiceArtifactStore = WebServiceArtifactStore(cwd: runtimeCwd)
         workPlanStore = WorkPlanStore(cwd: runtimeCwd)
-        serviceHealthVerifier = ServiceHealthVerifier(config: updated)
+        serviceHealthVerifier = ServiceHealthVerifier(config: updated, session: urlSession)
         plugins = pluginRegistry.loadPlugins()
         serviceHealth = serviceHealthVerifier.initialSnapshot(pluginCount: plugins.count)
         tools = Self.tools(from: serviceHealth, model: updated.agentLLMModel)

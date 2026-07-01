@@ -1999,6 +1999,64 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertFalse(model.agentProfile.known)
     }
 
+    func testBootstrapRuntimeRefreshesHealthAndProfileOnceWithInjectedSession() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-bootstrap-runtime-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.agentLLMBaseURL = URL(string: "https://agentllm.test")!
+        config.agentLLMAPIKey = "llm-test"
+        config.agentMemBaseURL = URL(string: "https://agentmem.test")!
+        config.agentMemAPIKey = "mem-test"
+        config.userID = "tester"
+        config.agentCode = "her-desktop"
+
+        var requests: [String] = []
+        let session = mockSession { request in
+            let path = request.url?.path ?? ""
+            requests.append("\(request.httpMethod ?? "GET") \(path)")
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            switch path {
+            case "/health":
+                return (response, Data("ready".utf8))
+            case "/v1/chat/completions":
+                return (response, Data(#"{"choices":[{"message":{"role":"assistant","content":"OK"}}]}"#.utf8))
+            case "/v1/me":
+                return (response, Data(#"{"known":true,"display_name":"her","memory_id":"mem_test"}"#.utf8))
+            case "/v1/memory/query":
+                return (response, Data(#"{"injected_context":"","retrieved_memories":[],"timing_ms":1.0}"#.utf8))
+            case "/v1/users/tester/relationship":
+                return (response, Data(#"{"known":true,"display_name":"Her","user_display_name":"Tester","relationship":"Stage: collaborator","memory_id":"mem_test"}"#.utf8))
+            default:
+                throw URLError(.badURL)
+            }
+        }
+        let model = AppViewModel(config: config, cwd: cwd.path, urlSession: session)
+
+        await model.bootstrapRuntime()
+
+        XCTAssertEqual(model.serviceHealth.first { $0.id == "agentllm" }?.state, .online)
+        XCTAssertEqual(model.serviceHealth.first { $0.id == "agentmem" }?.state, .online)
+        XCTAssertEqual(model.agentProfile.userDisplayName, "Tester")
+        XCTAssertEqual(model.agentProfile.relationship, "Stage: collaborator")
+        XCTAssertEqual(requests, [
+            "GET /health",
+            "POST /v1/chat/completions",
+            "GET /v1/me",
+            "POST /v1/memory/query",
+            "GET /v1/users/tester/relationship"
+        ])
+
+        await model.bootstrapRuntime()
+
+        XCTAssertEqual(requests.count, 5)
+    }
+
     func testSaveConfigurationPersistsAndRebuildsRuntime() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-save-config-\(UUID().uuidString)", isDirectory: true)
