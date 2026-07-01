@@ -1685,7 +1685,8 @@ final class AppViewModel: ObservableObject {
         ActiveWorkSummaryBuilder().build(
             tasks: runningTasks,
             activities: capabilityActivities,
-            events: interactionEvents
+            events: interactionEvents,
+            generatedDrafts: generatedPluginDrafts
         )
     }
 
