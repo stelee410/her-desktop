@@ -1074,6 +1074,34 @@ final class AppViewModel: ObservableObject {
         mcpDiscoveredTools = []
     }
 
+    func stageMCPDiscoveredToolPlugin(
+        _ tool: MCPDiscoveredTool,
+        endpointURL: String,
+        name: String = "",
+        description: String = "",
+        requiresApproval: Bool = true
+    ) {
+        let cleanURL = endpointURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanURL.isEmpty else {
+            lastError = "MCP endpoint URL is required before drafting a plugin."
+            messages.append(ChatMessage(role: .tool, content: "MCP Plugin Draft Failed\n\(lastError ?? "")"))
+            saveSessionSnapshot()
+            return
+        }
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanDescription = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        stageDraftPlugin(
+            named: cleanName.isEmpty ? pluginName(forMCPToolName: tool.name) : cleanName,
+            description: cleanDescription.isEmpty ? mcpToolDescription(tool) : cleanDescription,
+            kind: "mcp",
+            requiresApproval: requiresApproval,
+            mcpEndpointURL: cleanURL,
+            mcpMethodName: "tools/call",
+            mcpToolName: tool.name,
+            mcpInputSchemaJSON: tool.rawInputSchema
+        )
+    }
+
     @discardableResult
     func stagePluginPackageJSON(_ text: String, source: String = "pasted-package") -> Bool {
         do {
@@ -1260,6 +1288,24 @@ final class AppViewModel: ObservableObject {
         let existingIDs = plugins.map(\.id).filter { $0 != package.manifest.id }
         try PluginPackageValidator().validate(package, existingPluginIDs: existingIDs)
         return package
+    }
+
+    private func pluginName(forMCPToolName toolName: String) -> String {
+        let words = toolName
+            .replacingOccurrences(of: "[^A-Za-z0-9]+", with: " ", options: .regularExpression)
+            .split(separator: " ")
+            .prefix(4)
+            .map { word in
+                word.prefix(1).uppercased() + word.dropFirst().lowercased()
+            }
+        let base = words.isEmpty ? "MCP Tool" : words.joined(separator: " ")
+        return "\(base) MCP"
+    }
+
+    private func mcpToolDescription(_ tool: MCPDiscoveredTool) -> String {
+        let description = tool.description.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !description.isEmpty { return description }
+        return "Calls the \(tool.name) MCP tool through a local bridge."
     }
 
     private func makeDraftPluginPackage(

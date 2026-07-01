@@ -2027,37 +2027,42 @@ private struct VibePluginComposerSheet: View {
                     if !model.mcpDiscoveredTools.isEmpty {
                         VStack(spacing: 6) {
                             ForEach(Array(model.mcpDiscoveredTools.prefix(6))) { tool in
-                                Button {
-                                    pluginMCPMethod = "tools/call"
-                                    pluginMCPToolName = tool.name
-                                    pluginMCPInputSchemaJSON = tool.rawInputSchema
-                                    if pluginDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                        pluginDescription = tool.description.isEmpty
-                                            ? "Calls the \(tool.name) MCP tool."
-                                            : tool.description
-                                    }
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "shippingbox")
-                                            .foregroundStyle(AppTheme.coral)
-                                            .frame(width: 18)
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(tool.name)
-                                                .font(.caption.weight(.semibold))
-                                                .foregroundStyle(AppTheme.ink)
-                                                .lineLimit(1)
-                                            Text(tool.inputSchemaSummary.isEmpty ? "No input schema" : tool.inputSchemaSummary)
-                                                .font(.caption2)
-                                                .foregroundStyle(AppTheme.muted)
-                                                .lineLimit(1)
+                                HStack(spacing: 8) {
+                                    Button {
+                                        applyMCPTool(tool)
+                                    } label: {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "shippingbox")
+                                                .foregroundStyle(AppTheme.coral)
+                                                .frame(width: 18)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(tool.name)
+                                                    .font(.caption.weight(.semibold))
+                                                    .foregroundStyle(AppTheme.ink)
+                                                    .lineLimit(1)
+                                                Text(tool.inputSchemaSummary.isEmpty ? "No input schema" : tool.inputSchemaSummary)
+                                                    .font(.caption2)
+                                                    .foregroundStyle(AppTheme.muted)
+                                                    .lineLimit(1)
+                                            }
+                                            Spacer()
                                         }
-                                        Spacer()
                                     }
-                                    .padding(8)
-                                    .background(Color.white.opacity(0.42))
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .buttonStyle(.plain)
+                                    .help("Use this discovered tool in the composer fields")
+
+                                    Button {
+                                        draftMCPTool(tool)
+                                    } label: {
+                                        Image(systemName: "shippingbox.fill")
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help("Draft a plugin from this discovered MCP tool")
+                                    .disabled(!hasMCPURL || isBusy)
                                 }
-                                .buttonStyle(.plain)
+                                .padding(8)
+                                .background(Color.white.opacity(0.42))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
                             }
                         }
                     }
@@ -2256,6 +2261,30 @@ private struct VibePluginComposerSheet: View {
         pluginCommandPath = ""
         pluginCommandArguments = ""
         pluginPackageJSON = ""
+    }
+
+    private func applyMCPTool(_ tool: MCPDiscoveredTool) {
+        pluginKind = "mcp"
+        pluginMCPMethod = "tools/call"
+        pluginMCPToolName = tool.name
+        pluginMCPInputSchemaJSON = tool.rawInputSchema
+        if pluginDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            pluginDescription = tool.description.isEmpty
+                ? "Calls the \(tool.name) MCP tool."
+                : tool.description
+        }
+    }
+
+    private func draftMCPTool(_ tool: MCPDiscoveredTool) {
+        model.stageMCPDiscoveredToolPlugin(
+            tool,
+            endpointURL: pluginURL,
+            name: pluginName,
+            description: effectiveDescription,
+            requiresApproval: pluginRequiresApproval
+        )
+        reset()
+        isPresented = false
     }
 
     private var canStagePackageJSON: Bool {

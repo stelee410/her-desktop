@@ -475,6 +475,45 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.auditEvents.contains { $0.type == "mcp.tools_discovered" })
     }
 
+    func testStageMCPDiscoveredToolPluginBuildsDraftFromDiscovery() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-mcp-discovered-draft-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        let model = AppViewModel(config: config, cwd: cwd.path)
+        let tool = MCPDiscoveredTool(
+            name: "filesystem.read_file",
+            description: "Read a text file from the local MCP bridge.",
+            inputSchemaSummary: "path*:string, max_chars:integer",
+            rawInputSchema: """
+            {
+              "type": "object",
+              "properties": {
+                "path": {"type": "string", "description": "File path to read."},
+                "max_chars": {"type": "integer", "description": "Maximum characters."}
+              },
+              "required": ["path"]
+            }
+            """
+        )
+
+        model.stageMCPDiscoveredToolPlugin(tool, endpointURL: "http://localhost:8765/jsonrpc")
+
+        let draft = try XCTUnwrap(model.generatedPluginDrafts.first)
+        XCTAssertEqual(draft.manifest.name, "Filesystem Read File MCP")
+        let capability = try XCTUnwrap(draft.manifest.capabilities.first)
+        XCTAssertEqual(capability.kind, "mcp")
+        XCTAssertEqual(capability.adapter?.url, "http://localhost:8765/jsonrpc")
+        XCTAssertEqual(capability.adapter?.methodName, "tools/call")
+        XCTAssertEqual(capability.adapter?.toolName, "filesystem.read_file")
+        let fields = CapabilityInputSchema.fields(for: capability)
+        XCTAssertEqual(fields.map(\.name), ["path", "max_chars"])
+        XCTAssertEqual(fields.first?.required, true)
+        XCTAssertTrue(draft.package.files.first { $0.path == "SKILL.md" }?.content.contains("- toolName: filesystem.read_file") == true)
+        XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Draft Created") })
+    }
+
     func testInspectorDraftInstallsCommandPluginWithApprovalAndArguments() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-command-plugin-\(UUID().uuidString)", isDirectory: true)
