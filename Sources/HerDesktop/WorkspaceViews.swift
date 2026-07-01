@@ -250,6 +250,7 @@ private struct ProjectsWorkspaceView: View {
 private struct ToolsWorkspaceView: View {
     @EnvironmentObject private var model: AppViewModel
     @State private var runTarget: CapabilityRunTarget?
+    @State private var removalCandidate: PluginManifest?
 
     var body: some View {
         WorkspacePage(title: "Tools", subtitle: "\(model.plugins.count) plugins · \(capabilityCount) capabilities") {
@@ -274,6 +275,25 @@ private struct ToolsWorkspaceView: View {
                                     Text("\(plugin.capabilities.count)")
                                         .font(.caption2)
                                         .foregroundStyle(AppTheme.muted)
+                                    if !plugin.id.hasPrefix("builtin.") {
+                                        Button {
+                                            model.exportPlugin(plugin)
+                                        } label: {
+                                            Image(systemName: "square.and.arrow.up")
+                                        }
+                                        .buttonStyle(.borderless)
+                                        .foregroundStyle(AppTheme.muted)
+                                        .help("Export plugin package")
+
+                                        Button {
+                                            removalCandidate = plugin
+                                        } label: {
+                                            Image(systemName: "trash")
+                                        }
+                                        .buttonStyle(.borderless)
+                                        .foregroundStyle(AppTheme.muted)
+                                        .help("Remove plugin")
+                                    }
                                 }
                                 ForEach(plugin.capabilities) { capability in
                                     let summary = PluginCapabilityDisplaySummary(plugin: plugin, capability: capability)
@@ -363,10 +383,34 @@ private struct ToolsWorkspaceView: View {
             CapabilityRunSheet(target: target)
                 .environmentObject(model)
         }
+        .alert("Remove Plugin?", isPresented: removalBinding) {
+            Button("Cancel", role: .cancel) {
+                removalCandidate = nil
+            }
+            Button("Remove", role: .destructive) {
+                if let plugin = removalCandidate {
+                    Task { await model.removePlugin(plugin) }
+                }
+                removalCandidate = nil
+            }
+        } message: {
+            Text(removalCandidate.map { "Remove \($0.name) from the local plugin directory. Built-in plugins are kept read-only." } ?? "")
+        }
     }
 
     private var capabilityCount: Int {
         model.plugins.flatMap(\.capabilities).count
+    }
+
+    private var removalBinding: Binding<Bool> {
+        Binding(
+            get: { removalCandidate != nil },
+            set: { visible in
+                if !visible {
+                    removalCandidate = nil
+                }
+            }
+        )
     }
 
     private func icon(for kind: String) -> String {
