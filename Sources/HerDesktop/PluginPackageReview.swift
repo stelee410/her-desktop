@@ -272,6 +272,15 @@ struct PluginPackageReview: Equatable {
                 requiresApproval: approval
             )
         }
+        if id == "workspace.replaceText" {
+            return PermissionSummary(
+                id: id,
+                title: "Workspace Text Replacement",
+                detail: "Replaces exact approved text inside a UTF-8 workspace file.",
+                systemImage: "text.cursor",
+                requiresApproval: approval
+            )
+        }
         if id == "native.inspectAttachment" {
             return PermissionSummary(
                 id: id,

@@ -95,6 +95,47 @@
       "adapter" : {
         "type" : "native"
       },
+      "description" : "Replace exact text inside an approved UTF-8 workspace file.",
+      "id" : "workspace.replaceText",
+      "inputSchema" : {
+        "properties" : {
+          "expected_replacements" : {
+            "description" : "Optional exact occurrence count required before editing.",
+            "type" : "integer"
+          },
+          "path" : {
+            "description" : "Workspace-relative path, or an absolute path inside the current workspace.",
+            "type" : "string"
+          },
+          "replace_all" : {
+            "description" : "Whether to replace every occurrence instead of only the first.",
+            "type" : "boolean"
+          },
+          "replacement" : {
+            "description" : "Replacement text. May be empty to delete the search text.",
+            "type" : "string"
+          },
+          "search" : {
+            "description" : "Exact text to find in the UTF-8 file.",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "path",
+          "search",
+          "replacement"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "workspace.replaceText",
+      "kind" : "native",
+      "requiresApproval" : true,
+      "title" : "Replace text"
+    },
+    {
+      "adapter" : {
+        "type" : "native"
+      },
       "description" : "Save the current actionable work plan into Her Desktop state.",
       "id" : "workspace.plan",
       "inputSchema" : {
@@ -163,7 +204,7 @@
       "title" : "Save work plan"
     }
   ],
-  "description" : "Read local context, summarize files, write approved text artifacts, and prepare work plans with explicit approval.",
+  "description" : "Read local context, summarize files, write or edit approved text artifacts, and prepare work plans with explicit approval.",
   "id" : "builtin.workspace",
   "name" : "Workspace",
   "systemPromptAddendum" : "Workspace actions require user approval before file mutation or shell execution.",

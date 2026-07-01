@@ -217,7 +217,7 @@ flowchart TB
     exec2 --> localAudit
 ```
 
-`workspace.plan` writes the current plan into `.her/workspace/work-plan.json`. That plan feeds the Projects Current Plan panel, the Inspector Active Plan card, the Agent Loop Plan phase, and the Active Work State prompt block as app-observed state data. `workspace.search` and `workspace.writeTextFile` stay on the same plugin-first path: they are manifest-declared, approval-bound, and handled by the native adapter so local filename/content search and artifact writes can be audited like any other capability call.
+`workspace.plan` writes the current plan into `.her/workspace/work-plan.json`. That plan feeds the Projects Current Plan panel, the Inspector Active Plan card, the Agent Loop Plan phase, and the Active Work State prompt block as app-observed state data. `workspace.search`, `workspace.writeTextFile`, and `workspace.replaceText` stay on the same plugin-first path: they are manifest-declared, approval-bound, and handled by the native adapter so local filename/content search and artifact edits can be audited like any other capability call.
 
 ## 白板图到实现模块的映射
 

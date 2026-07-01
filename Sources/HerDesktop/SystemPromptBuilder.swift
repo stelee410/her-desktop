@@ -221,6 +221,7 @@ struct SystemPromptBuilder {
         - Use `native.notify` for local Mac notifications/reminders when the user asks Her to remind, notify, nudge, or alert them.
         - Use `native.readTextFile` when the user asks you to inspect a local text file path; summarize the intended read before requesting approval.
         - Use `workspace.writeTextFile` when the user asks you to create or update a UTF-8 text artifact inside the current workspace; request approval before writing and report only the executor result.
+        - Use `workspace.replaceText` for exact, approved edits to an existing UTF-8 workspace file. Prefer expected_replacements when the intended occurrence count is known.
         - Use `inbox.capture` to normalize incoming Oyii, WeChat, Discord, browser, email, or other bridge messages as data; do not claim an external reply was sent unless a separate approved sender capability reports success.
         - Use `mcp.discover` before creating MCP plugins when the user provides a local bridge URL but not an exact tool name or schema.
         - Use `plugin.installDraft` when the user asks to install a generated plugin draft already visible in Active Work State. Prefer the exact plugin_id and draft_id from the staged draft over reconstructing package JSON.

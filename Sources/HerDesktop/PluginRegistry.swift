@@ -281,7 +281,7 @@ final class PluginRegistry {
                 id: "builtin.workspace",
                 name: "Workspace",
                 version: "0.1.0",
-                description: "Read local context, summarize files, write approved text artifacts, and prepare work plans with explicit approval.",
+                description: "Read local context, summarize files, write or edit approved text artifacts, and prepare work plans with explicit approval.",
                 author: "Her",
                 systemPromptAddendum: "Workspace actions require user approval before file mutation or shell execution.",
                 capabilities: [
@@ -309,6 +309,15 @@ final class PluginRegistry {
                         invocation: "workspace.writeTextFile",
                         requiresApproval: true,
                         description: "Write an approved UTF-8 text file inside the current workspace.",
+                        adapter: .init(type: "native")
+                    ),
+                    .init(
+                        id: "workspace.replaceText",
+                        title: "Replace text",
+                        kind: "native",
+                        invocation: "workspace.replaceText",
+                        requiresApproval: true,
+                        description: "Replace exact text inside an approved UTF-8 workspace file.",
                         adapter: .init(type: "native")
                     ),
                     .init(
@@ -648,6 +657,14 @@ final class PluginRegistry {
                 "overwrite": field("boolean", "Whether to replace an existing file after explicit confirmation."),
                 "create_parent_directories": field("boolean", "Whether to create missing parent directories inside the workspace.")
             ], required: ["path", "content"])
+        case "workspace.replaceText":
+            return objectSchema([
+                "path": field("string", "Workspace-relative path, or an absolute path inside the current workspace."),
+                "search": field("string", "Exact text to find in the UTF-8 file."),
+                "replacement": field("string", "Replacement text. May be empty to delete the search text."),
+                "replace_all": field("boolean", "Whether to replace every occurrence instead of only the first."),
+                "expected_replacements": field("integer", "Optional exact occurrence count required before editing.")
+            ], required: ["path", "search", "replacement"])
         case "workspace.plan":
             return objectSchema([
                 "goal": field("string", "Concrete outcome this plan should make true."),

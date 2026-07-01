@@ -113,6 +113,8 @@ final class CapabilityExecutor {
             return searchWorkspace(arguments: invocation.arguments)
         case "workspace.writeTextFile":
             return writeWorkspaceTextFile(arguments: invocation.arguments)
+        case "workspace.replaceText":
+            return replaceWorkspaceText(arguments: invocation.arguments)
         case "workspace.plan":
             return CapabilityResult(
                 title: "Workspace Plan",
@@ -352,6 +354,112 @@ final class CapabilityExecutor {
         } catch {
             return CapabilityResult(
                 title: "Workspace Write Failed",
+                content: error.localizedDescription,
+                requiresUserApproval: false
+            )
+        }
+    }
+
+    private func replaceWorkspaceText(arguments: [String: Any]) -> CapabilityResult {
+        let rawPath = clean(arguments["path"] as? String, fallback: clean(arguments["file_path"] as? String, fallback: ""))
+        let search = arguments["search"] as? String ?? arguments["old_text"] as? String ?? ""
+        let replacement = arguments["replacement"] as? String ?? arguments["new_text"] as? String ?? ""
+        let replaceAll = bool(arguments["replace_all"], fallback: false)
+        let expectedReplacements: Int?
+        if arguments["expected_replacements"] != nil {
+            expectedReplacements = Int(number(arguments["expected_replacements"], fallback: 0))
+        } else {
+            expectedReplacements = nil
+        }
+
+        guard !rawPath.isEmpty else {
+            return CapabilityResult(
+                title: "Workspace Replace Failed",
+                content: "Missing required path.",
+                requiresUserApproval: false
+            )
+        }
+        guard !search.isEmpty else {
+            return CapabilityResult(
+                title: "Workspace Replace Failed",
+                content: "Missing required search text.",
+                requiresUserApproval: false
+            )
+        }
+
+        let root = workspaceRoot.standardizedFileURL
+        let url = resolveLocalFilePath(rawPath).standardizedFileURL
+        guard isWorkspaceWritablePath(url, root: root) else {
+            return CapabilityResult(
+                title: "Workspace Replace Failed",
+                content: "Refusing to edit outside the workspace or inside local state/build directories: \(url.path)",
+                requiresUserApproval: false
+            )
+        }
+
+        do {
+            var isDirectory: ObjCBool = false
+            guard fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory), !isDirectory.boolValue else {
+                return CapabilityResult(
+                    title: "Workspace Replace Failed",
+                    content: "File does not exist or is a directory: \(url.path)",
+                    requiresUserApproval: false
+                )
+            }
+            let data = try Data(contentsOf: url)
+            guard !data.contains(0), let text = String(data: data, encoding: .utf8) else {
+                return CapabilityResult(
+                    title: "Workspace Replace Failed",
+                    content: "File is not valid UTF-8 text or appears to be binary: \(url.path)",
+                    requiresUserApproval: false
+                )
+            }
+
+            let occurrences = text.components(separatedBy: search).count - 1
+            guard occurrences > 0 else {
+                return CapabilityResult(
+                    title: "Workspace Replace Failed",
+                    content: "Search text was not found in \(url.path).",
+                    requiresUserApproval: false
+                )
+            }
+            if let expectedReplacements, expectedReplacements > 0, occurrences != expectedReplacements {
+                return CapabilityResult(
+                    title: "Workspace Replace Failed",
+                    content: "Expected \(expectedReplacements) replacement(s), but found \(occurrences) occurrence(s) in \(url.path).",
+                    requiresUserApproval: false
+                )
+            }
+
+            let updated: String
+            let replacementsMade: Int
+            if replaceAll {
+                updated = text.replacingOccurrences(of: search, with: replacement)
+                replacementsMade = occurrences
+            } else if let range = text.range(of: search) {
+                updated = text.replacingCharacters(in: range, with: replacement)
+                replacementsMade = 1
+            } else {
+                updated = text
+                replacementsMade = 0
+            }
+
+            try updated.write(to: url, atomically: true, encoding: .utf8)
+            return CapabilityResult(
+                title: "Workspace Text Replaced",
+                content: """
+                path: \(url.path)
+                relative_path: \(relativePath(for: url, under: root))
+                occurrences_found: \(occurrences)
+                replacements_made: \(replacementsMade)
+                replace_all: \(replaceAll)
+                characters_written: \(updated.count)
+                """,
+                requiresUserApproval: false
+            )
+        } catch {
+            return CapabilityResult(
+                title: "Workspace Replace Failed",
                 content: error.localizedDescription,
                 requiresUserApproval: false
             )

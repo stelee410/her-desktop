@@ -104,6 +104,15 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual((writeProperties["overwrite"] as? [String: Any])?["type"] as? String, "boolean")
         XCTAssertEqual(writeParameters["required"] as? [String], ["path", "content"])
 
+        let replace = try XCTUnwrap(toolFunction(named: "workspace_replaceText", in: catalog))
+        let replaceParameters = try XCTUnwrap(replace["parameters"] as? [String: Any])
+        let replaceProperties = try XCTUnwrap(replaceParameters["properties"] as? [String: Any])
+
+        XCTAssertEqual((replaceProperties["search"] as? [String: Any])?["type"] as? String, "string")
+        XCTAssertEqual((replaceProperties["replacement"] as? [String: Any])?["type"] as? String, "string")
+        XCTAssertEqual((replaceProperties["expected_replacements"] as? [String: Any])?["type"] as? String, "integer")
+        XCTAssertEqual(replaceParameters["required"] as? [String], ["path", "search", "replacement"])
+
         let installDraft = try XCTUnwrap(toolFunction(named: "plugin_installDraft", in: catalog))
         let installDraftParameters = try XCTUnwrap(installDraft["parameters"] as? [String: Any])
         let installDraftProperties = try XCTUnwrap(installDraftParameters["properties"] as? [String: Any])
@@ -506,6 +515,22 @@ final class CapabilityRuntimeTests: XCTestCase {
             "content",
             "create_parent_directories",
             "overwrite"
+        ])
+    }
+
+    func testBuiltInWorkspaceReplaceTextRequiresApproval() {
+        let registry = PluginRegistry(config: .empty)
+        let capability = registry.capability(id: "workspace.replaceText")
+
+        XCTAssertEqual(capability?.kind, "native")
+        XCTAssertEqual(capability?.adapter?.type, "native")
+        XCTAssertEqual(capability?.requiresApproval, true)
+        XCTAssertEqual(CapabilityInputSchema.fields(for: capability!).map(\.name), [
+            "path",
+            "search",
+            "replacement",
+            "expected_replacements",
+            "replace_all"
         ])
     }
 
@@ -1017,6 +1042,100 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(stateWrite.title, "Workspace Write Failed")
         XCTAssertTrue(stateWrite.content.contains("Refusing to write"))
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent(".her/secret.txt").path))
+    }
+
+    @MainActor
+    func testWorkspaceReplaceTextReplacesFirstOccurrence() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-executor-replace-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let file = root.appendingPathComponent("note.md")
+        try "alpha beta beta".write(to: file, atomically: true, encoding: .utf8)
+        let executor = CapabilityExecutor(registry: PluginRegistry(config: .empty), baseDirectory: root.path)
+
+        let result = await executor.execute(CapabilityInvocation(
+            toolCallID: "call_replace",
+            functionName: "workspace_replaceText",
+            capabilityID: "workspace.replaceText",
+            arguments: [
+                "path": "note.md",
+                "search": "beta",
+                "replacement": "gamma"
+            ]
+        ))
+
+        XCTAssertEqual(result.title, "Workspace Text Replaced")
+        XCTAssertTrue(result.content.contains("occurrences_found: 2"))
+        XCTAssertTrue(result.content.contains("replacements_made: 1"))
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), "alpha gamma beta")
+    }
+
+    @MainActor
+    func testWorkspaceReplaceTextCanReplaceAllWithExpectedCount() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-executor-replace-all-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let file = root.appendingPathComponent("note.md")
+        try "todo\ntodo\n".write(to: file, atomically: true, encoding: .utf8)
+        let executor = CapabilityExecutor(registry: PluginRegistry(config: .empty), baseDirectory: root.path)
+
+        let result = await executor.execute(CapabilityInvocation(
+            toolCallID: "call_replace_all",
+            functionName: "workspace_replaceText",
+            capabilityID: "workspace.replaceText",
+            arguments: [
+                "path": "note.md",
+                "search": "todo",
+                "replacement": "done",
+                "replace_all": true,
+                "expected_replacements": 2
+            ]
+        ))
+
+        XCTAssertEqual(result.title, "Workspace Text Replaced")
+        XCTAssertTrue(result.content.contains("replacements_made: 2"))
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), "done\ndone\n")
+    }
+
+    @MainActor
+    func testWorkspaceReplaceTextRejectsMismatchAndLocalState() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-executor-replace-guard-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent(".her"), withIntermediateDirectories: true)
+        let file = root.appendingPathComponent("note.md")
+        try "same same".write(to: file, atomically: true, encoding: .utf8)
+        let executor = CapabilityExecutor(registry: PluginRegistry(config: .empty), baseDirectory: root.path)
+
+        let mismatch = await executor.execute(CapabilityInvocation(
+            toolCallID: "call_replace_mismatch",
+            functionName: "workspace_replaceText",
+            capabilityID: "workspace.replaceText",
+            arguments: [
+                "path": "note.md",
+                "search": "same",
+                "replacement": "changed",
+                "expected_replacements": 1
+            ]
+        ))
+
+        XCTAssertEqual(mismatch.title, "Workspace Replace Failed")
+        XCTAssertTrue(mismatch.content.contains("Expected 1 replacement"))
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), "same same")
+
+        let stateEdit = await executor.execute(CapabilityInvocation(
+            toolCallID: "call_replace_state",
+            functionName: "workspace_replaceText",
+            capabilityID: "workspace.replaceText",
+            arguments: [
+                "path": ".her/session.json",
+                "search": "x",
+                "replacement": "y"
+            ]
+        ))
+
+        XCTAssertEqual(stateEdit.title, "Workspace Replace Failed")
+        XCTAssertTrue(stateEdit.content.contains("Refusing to edit"))
     }
 
     @MainActor

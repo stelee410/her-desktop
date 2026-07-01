@@ -125,6 +125,37 @@ final class PluginPackageReviewTests: XCTestCase {
         XCTAssertEqual(review.riskLevel, .medium)
     }
 
+    func testWorkspaceReplacePermissionIsExplicit() {
+        let package = PluginPackage(
+            manifest: PluginManifest(
+                id: "local.workspace-replacer",
+                name: "Workspace Replacer",
+                version: "0.1.0",
+                description: "Workspace replacement package.",
+                author: "Test",
+                systemPromptAddendum: nil,
+                capabilities: [
+                    .init(
+                        id: "workspace.replaceText",
+                        title: "Replace",
+                        kind: "native",
+                        invocation: "workspace.replaceText",
+                        requiresApproval: true,
+                        adapter: .init(type: "native")
+                    )
+                ]
+            ),
+            files: []
+        )
+
+        let review = PluginPackageReview(package: package)
+
+        XCTAssertEqual(review.permissionSummaries.first?.title, "Workspace Text Replacement")
+        XCTAssertEqual(review.permissionSummaries.first?.detail, "Replaces exact approved text inside a UTF-8 workspace file.")
+        XCTAssertEqual(review.permissionSummaries.first?.requiresApproval, true)
+        XCTAssertEqual(review.riskLevel, .medium)
+    }
+
     func testCapabilitySummaryIncludesInputFields() {
         let review = PluginPackageReview(package: package(
             kind: "webservice",
