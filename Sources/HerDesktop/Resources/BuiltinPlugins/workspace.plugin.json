@@ -24,6 +24,41 @@
       "adapter" : {
         "type" : "native"
       },
+      "description" : "Search workspace file names and approved UTF-8 file contents.",
+      "id" : "workspace.search",
+      "inputSchema" : {
+        "properties" : {
+          "include_content" : {
+            "description" : "Whether to search UTF-8 file contents in addition to file names.",
+            "type" : "boolean"
+          },
+          "max_file_bytes" : {
+            "description" : "Maximum file size to read when include_content is true.",
+            "type" : "integer"
+          },
+          "max_results" : {
+            "description" : "Maximum number of matching files to return.",
+            "type" : "integer"
+          },
+          "query" : {
+            "description" : "Case-insensitive text to search for in file names and UTF-8 content.",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "query"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "workspace.search",
+      "kind" : "native",
+      "requiresApproval" : true,
+      "title" : "Search workspace"
+    },
+    {
+      "adapter" : {
+        "type" : "native"
+      },
       "description" : "Save the current actionable work plan into Her Desktop state.",
       "id" : "workspace.plan",
       "inputSchema" : {

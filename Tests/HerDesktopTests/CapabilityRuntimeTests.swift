@@ -432,6 +432,21 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(capability?.requiresApproval, true)
     }
 
+    func testBuiltInWorkspaceSearchRequiresApproval() {
+        let registry = PluginRegistry(config: .empty)
+        let capability = registry.capability(id: "workspace.search")
+
+        XCTAssertEqual(capability?.kind, "native")
+        XCTAssertEqual(capability?.adapter?.type, "native")
+        XCTAssertEqual(capability?.requiresApproval, true)
+        XCTAssertEqual(CapabilityInputSchema.fields(for: capability!).map(\.name), [
+            "query",
+            "include_content",
+            "max_file_bytes",
+            "max_results"
+        ])
+    }
+
     func testBuiltInNativeSpeakRequiresApproval() {
         let registry = PluginRegistry(config: .empty)
         let capability = registry.capability(id: "native.speak")
@@ -835,6 +850,50 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(result.title, "Workspace Inspect")
         XCTAssertTrue(result.content.contains("cwd: \(root.path)"))
         XCTAssertTrue(result.content.contains("workspace-note.txt"))
+    }
+
+    @MainActor
+    func testWorkspaceSearchFindsNamesAndUtf8ContentInsideWorkspace() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-executor-search-\(UUID().uuidString)", isDirectory: true)
+        let nested = root.appendingPathComponent("Sources", isDirectory: true)
+        let hiddenState = root.appendingPathComponent(".her", isDirectory: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: hiddenState, withIntermediateDirectories: true)
+        try "Needle appears in content.".write(
+            to: nested.appendingPathComponent("Feature.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "This filename should match even without content.".write(
+            to: root.appendingPathComponent("needle-notes.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "Needle inside local state should stay hidden.".write(
+            to: hiddenState.appendingPathComponent("secret.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let executor = CapabilityExecutor(registry: PluginRegistry(config: .empty), baseDirectory: root.path)
+
+        let result = await executor.execute(CapabilityInvocation(
+            toolCallID: "call_search",
+            functionName: "workspace_search",
+            capabilityID: "workspace.search",
+            arguments: [
+                "query": "needle",
+                "include_content": true,
+                "max_results": 10
+            ]
+        ))
+
+        XCTAssertEqual(result.title, "Workspace Search")
+        XCTAssertTrue(result.content.contains("Sources/Feature.swift"))
+        XCTAssertTrue(result.content.contains("line 1: Needle appears in content."))
+        XCTAssertTrue(result.content.contains("needle-notes.md [filename]"))
+        XCTAssertFalse(result.content.contains("secret.txt"))
+        XCTAssertFalse(result.requiresUserApproval)
     }
 
     @MainActor

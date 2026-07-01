@@ -109,6 +109,8 @@ final class CapabilityExecutor {
         switch invocation.capabilityID {
         case "workspace.inspect":
             return inspectWorkspace(arguments: invocation.arguments)
+        case "workspace.search":
+            return searchWorkspace(arguments: invocation.arguments)
         case "workspace.plan":
             return CapabilityResult(
                 title: "Workspace Plan",
@@ -173,6 +175,100 @@ final class CapabilityExecutor {
             cwd: \(root.path)
             files:
             \(listed.isEmpty ? "(no top-level files)" : listed)
+            """,
+            requiresUserApproval: false
+        )
+    }
+
+    private func searchWorkspace(arguments: [String: Any]) -> CapabilityResult {
+        let query = clean(
+            arguments["query"] as? String,
+            fallback: clean(arguments["request"] as? String, fallback: "")
+        )
+        guard !query.isEmpty else {
+            return CapabilityResult(
+                title: "Workspace Search Failed",
+                content: "Missing required query.",
+                requiresUserApproval: false
+            )
+        }
+
+        let maxResults = min(max(Int(number(arguments["max_results"], fallback: 20)), 1), 80)
+        let includeContent = bool(arguments["include_content"], fallback: true)
+        let maxFileBytes = min(max(Int(number(arguments["max_file_bytes"], fallback: 256_000)), 1_024), 1_000_000)
+        let root = workspaceRoot.standardizedFileURL
+        let lowerQuery = query.localizedLowercase
+        var results: [String] = []
+        var scannedFiles = 0
+        var skippedBinary = 0
+
+        guard let enumerator = fileManager.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return CapabilityResult(
+                title: "Workspace Search Failed",
+                content: "Could not enumerate workspace: \(root.path)",
+                requiresUserApproval: false
+            )
+        }
+
+        for case let url as URL in enumerator {
+            if shouldSkipSearchURL(url, root: root) {
+                enumerator.skipDescendants()
+                continue
+            }
+            let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
+            if values?.isDirectory == true {
+                continue
+            }
+            scannedFiles += 1
+            let relativePath = relativePath(for: url, under: root)
+            var matchedLines: [String] = []
+            let filenameMatches = relativePath.localizedLowercase.contains(lowerQuery)
+
+            if includeContent, (values?.fileSize ?? 0) <= maxFileBytes {
+                do {
+                    let data = try Data(contentsOf: url)
+                    if data.contains(0) {
+                        skippedBinary += 1
+                    } else if let text = String(data: data, encoding: .utf8) {
+                        matchedLines = matchingLines(in: text, query: lowerQuery)
+                    }
+                } catch {
+                    // Search should keep moving when a single file cannot be read.
+                }
+            }
+
+            guard filenameMatches || !matchedLines.isEmpty else { continue }
+            var item = "- \(relativePath)"
+            if filenameMatches {
+                item += " [filename]"
+            }
+            if !matchedLines.isEmpty {
+                item += "\n" + matchedLines
+                    .prefix(3)
+                    .map { "  \($0)" }
+                    .joined(separator: "\n")
+            }
+            results.append(item)
+            if results.count >= maxResults {
+                break
+            }
+        }
+
+        return CapabilityResult(
+            title: "Workspace Search",
+            content: """
+            cwd: \(root.path)
+            query: \(query)
+            include_content: \(includeContent)
+            scanned_files: \(scannedFiles)
+            skipped_binary_files: \(skippedBinary)
+            results_returned: \(results.count)
+
+            \(results.isEmpty ? "(no matches)" : results.joined(separator: "\n"))
             """,
             requiresUserApproval: false
         )
@@ -1003,6 +1099,22 @@ final class CapabilityExecutor {
         }
     }
 
+    private func bool(_ value: Any?, fallback: Bool) -> Bool {
+        switch value {
+        case let bool as Bool:
+            return bool
+        case let number as NSNumber:
+            return number.boolValue
+        case let string as String:
+            let normalized = string.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if ["true", "yes", "1", "on"].contains(normalized) { return true }
+            if ["false", "no", "0", "off"].contains(normalized) { return false }
+            return fallback
+        default:
+            return fallback
+        }
+    }
+
     private var agentMemClient: AgentMemClient {
         AgentMemClient(config: config, session: urlSession)
     }
@@ -1026,6 +1138,43 @@ final class CapabilityExecutor {
             return URL(fileURLWithPath: expanded)
         }
         return workspaceRoot.appendingPathComponent(expanded)
+    }
+
+    private func shouldSkipSearchURL(_ url: URL, root: URL) -> Bool {
+        let relative = relativePath(for: url, under: root)
+        let components = relative.split(separator: "/").map(String.init)
+        return components.contains { component in
+            [
+                ".git",
+                ".build",
+                ".her",
+                ".swiftpm",
+                ".codegraph",
+                "node_modules",
+                "DerivedData"
+            ].contains(component)
+        }
+    }
+
+    private func relativePath(for url: URL, under root: URL) -> String {
+        let rootPath = root.standardizedFileURL.path
+        let path = url.standardizedFileURL.path
+        guard path.hasPrefix(rootPath + "/") else {
+            return url.lastPathComponent
+        }
+        return String(path.dropFirst(rootPath.count + 1))
+    }
+
+    private func matchingLines(in text: String, query: String) -> [String] {
+        text.components(separatedBy: .newlines)
+            .enumerated()
+            .compactMap { index, line in
+                guard line.localizedLowercase.contains(query) else { return nil }
+                let compacted = line
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .replacingOccurrences(of: "\t", with: " ")
+                return "line \(index + 1): \(String(compacted.prefix(180)))"
+            }
     }
 
     private func adapterForDraft(kind: String, arguments: [String: Any]) -> PluginManifest.CapabilityAdapter? {

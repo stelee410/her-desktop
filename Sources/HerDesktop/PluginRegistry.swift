@@ -294,6 +294,15 @@ final class PluginRegistry {
                         adapter: .init(type: "native")
                     ),
                     .init(
+                        id: "workspace.search",
+                        title: "Search workspace",
+                        kind: "native",
+                        invocation: "workspace.search",
+                        requiresApproval: true,
+                        description: "Search workspace file names and approved UTF-8 file contents.",
+                        adapter: .init(type: "native")
+                    ),
+                    .init(
                         id: "workspace.plan",
                         title: "Save work plan",
                         kind: "native",
@@ -616,6 +625,13 @@ final class PluginRegistry {
             return objectSchema([
                 "max_files": field("integer", "Maximum number of workspace files to summarize.")
             ])
+        case "workspace.search":
+            return objectSchema([
+                "query": field("string", "Case-insensitive text to search for in file names and UTF-8 content."),
+                "include_content": field("boolean", "Whether to search UTF-8 file contents in addition to file names."),
+                "max_results": field("integer", "Maximum number of matching files to return."),
+                "max_file_bytes": field("integer", "Maximum file size to read when include_content is true.")
+            ], required: ["query"])
         case "workspace.plan":
             return objectSchema([
                 "goal": field("string", "Concrete outcome this plan should make true."),
