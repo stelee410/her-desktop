@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct InspectorView: View {
     @EnvironmentObject private var model: AppViewModel
@@ -2076,6 +2077,7 @@ private struct VibePluginComposerSheet: View {
     @Binding var pluginCommandArguments: String
     @Binding var pluginPackageJSON: String
     @State private var vibeBrief = ""
+    @State private var isPackageImporterPresented = false
 
     private let kinds = ["skill", "webservice", "mcp", "command", "native"]
     private let methods = ["POST", "GET"]
@@ -2232,16 +2234,26 @@ private struct VibePluginComposerSheet: View {
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(3...7)
 
-            Button {
-                if model.stagePluginPackageJSON(pluginPackageJSON, source: "composer-json") {
-                    reset()
-                    isPresented = false
+            HStack {
+                Button {
+                    if model.stagePluginPackageJSON(pluginPackageJSON, source: "composer-json") {
+                        reset()
+                        isPresented = false
+                    }
+                } label: {
+                    Label("Stage JSON Package", systemImage: "doc.badge.plus")
                 }
-            } label: {
-                Label("Stage JSON Package", systemImage: "doc.badge.plus")
+                .buttonStyle(.bordered)
+                .disabled(!canStagePackageJSON || isBusy)
+
+                Button {
+                    isPackageImporterPresented = true
+                } label: {
+                    Label("Import Package File", systemImage: "tray.and.arrow.down")
+                }
+                .buttonStyle(.bordered)
+                .disabled(isBusy)
             }
-            .buttonStyle(.bordered)
-            .disabled(!canStagePackageJSON || isBusy)
 
             HStack {
                 Button {
@@ -2360,6 +2372,20 @@ private struct VibePluginComposerSheet: View {
         .padding(22)
         .frame(width: 560)
         .background(AppTheme.windowBackground)
+        .fileImporter(
+            isPresented: $isPackageImporterPresented,
+            allowedContentTypes: [.json, .plainText],
+            allowsMultipleSelection: false
+        ) { result in
+            if case let .success(urls) = result,
+               let url = urls.first,
+               model.stagePluginPackageFile(url, source: "composer-file") {
+                reset()
+                isPresented = false
+            } else if case let .failure(error) = result {
+                model.reportPluginPackageImportError(error, source: "composer-file")
+            }
+        }
     }
 
     private var canSubmit: Bool {

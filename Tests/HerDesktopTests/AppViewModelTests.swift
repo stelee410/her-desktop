@@ -1460,6 +1460,31 @@ final class AppViewModelTests: XCTestCase {
         })
     }
 
+    func testStagePluginPackageFileImportsPackageForReview() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-import-plugin-package-file-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        let package = samplePackage(id: "local.file-imported", name: "File Imported")
+        let packageURL = root.appendingPathComponent("local.file-imported.plugin-package.json")
+        try JSONEncoder.pretty.encode(package).write(to: packageURL)
+
+        let model = AppViewModel(config: config, cwd: cwd.path)
+        let imported = model.stagePluginPackageFile(packageURL, source: "test-file")
+
+        XCTAssertTrue(imported)
+        XCTAssertEqual(model.generatedPluginDrafts.map(\.manifest.id), ["local.file-imported"])
+        XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Package Imported") })
+        let audit = try AuditEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(audit.contains { event in
+            event.type == "plugin.draft_staged"
+            && event.metadata["pluginID"] == "local.file-imported"
+            && event.metadata["source"] == "test-file:local.file-imported.plugin-package.json"
+        })
+    }
+
     func testStagePluginPackageJSONRejectsInvalidPayload() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-import-plugin-package-invalid-\(UUID().uuidString)", isDirectory: true)

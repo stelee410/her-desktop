@@ -1475,6 +1475,43 @@ final class AppViewModel: ObservableObject {
         return result.title == "Plugin Package Imported"
     }
 
+    @discardableResult
+    func stagePluginPackageFile(_ url: URL, source: String = "plugin-package-file") -> Bool {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer {
+            if scoped {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        do {
+            let text = try String(contentsOf: url, encoding: .utf8)
+            let sourceLabel = "\(source):\(url.lastPathComponent)"
+            return stagePluginPackageJSON(text, source: sourceLabel)
+        } catch {
+            reportPluginPackageImportError(error, source: source, fileName: url.lastPathComponent)
+            return false
+        }
+    }
+
+    func reportPluginPackageImportError(_ error: Error, source: String, fileName: String = "") {
+        lastError = error.localizedDescription
+        var metadata = ["source": source]
+        if !fileName.isEmpty {
+            metadata["file"] = fileName
+        }
+        audit(
+            type: "plugin.package_import_failed",
+            summary: error.localizedDescription,
+            metadata: metadata
+        )
+        messages.append(ChatMessage(
+            role: .tool,
+            content: "Plugin Package Import Failed\n\(error.localizedDescription)"
+        ))
+        saveSessionSnapshot()
+    }
+
     private func stagePluginPackageCapability(arguments: [String: Any]) -> CapabilityResult {
         let packageJSON = stringArgument(
             arguments,
