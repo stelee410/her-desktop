@@ -95,6 +95,15 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(commandArguments["type"] as? String, "string")
         XCTAssertEqual(draftParameters["required"] as? [String], ["name", "description"])
 
+        let write = try XCTUnwrap(toolFunction(named: "workspace_writeTextFile", in: catalog))
+        let writeParameters = try XCTUnwrap(write["parameters"] as? [String: Any])
+        let writeProperties = try XCTUnwrap(writeParameters["properties"] as? [String: Any])
+
+        XCTAssertEqual((writeProperties["path"] as? [String: Any])?["type"] as? String, "string")
+        XCTAssertEqual((writeProperties["content"] as? [String: Any])?["type"] as? String, "string")
+        XCTAssertEqual((writeProperties["overwrite"] as? [String: Any])?["type"] as? String, "boolean")
+        XCTAssertEqual(writeParameters["required"] as? [String], ["path", "content"])
+
         let installDraft = try XCTUnwrap(toolFunction(named: "plugin_installDraft", in: catalog))
         let installDraftParameters = try XCTUnwrap(installDraft["parameters"] as? [String: Any])
         let installDraftProperties = try XCTUnwrap(installDraftParameters["properties"] as? [String: Any])
@@ -482,6 +491,21 @@ final class CapabilityRuntimeTests: XCTestCase {
             "include_content",
             "max_file_bytes",
             "max_results"
+        ])
+    }
+
+    func testBuiltInWorkspaceWriteTextFileRequiresApproval() {
+        let registry = PluginRegistry(config: .empty)
+        let capability = registry.capability(id: "workspace.writeTextFile")
+
+        XCTAssertEqual(capability?.kind, "native")
+        XCTAssertEqual(capability?.adapter?.type, "native")
+        XCTAssertEqual(capability?.requiresApproval, true)
+        XCTAssertEqual(CapabilityInputSchema.fields(for: capability!).map(\.name), [
+            "path",
+            "content",
+            "create_parent_directories",
+            "overwrite"
         ])
     }
 
@@ -932,6 +956,67 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertTrue(result.content.contains("needle-notes.md [filename]"))
         XCTAssertFalse(result.content.contains("secret.txt"))
         XCTAssertFalse(result.requiresUserApproval)
+    }
+
+    @MainActor
+    func testWorkspaceWriteTextFileWritesInsideWorkspace() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-executor-write-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let executor = CapabilityExecutor(registry: PluginRegistry(config: .empty), baseDirectory: root.path)
+
+        let result = await executor.execute(CapabilityInvocation(
+            toolCallID: "call_write",
+            functionName: "workspace_writeTextFile",
+            capabilityID: "workspace.writeTextFile",
+            arguments: [
+                "path": "docs/result.md",
+                "content": "# Result\n\nApproved artifact."
+            ]
+        ))
+
+        let file = root.appendingPathComponent("docs/result.md")
+        XCTAssertEqual(result.title, "Workspace Text File Written")
+        XCTAssertTrue(result.content.contains("relative_path: docs/result.md"))
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), "# Result\n\nApproved artifact.")
+        XCTAssertFalse(result.requiresUserApproval)
+    }
+
+    @MainActor
+    func testWorkspaceWriteTextFileRejectsOverwriteAndLocalState() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-executor-write-guard-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try "original".write(to: root.appendingPathComponent("existing.md"), atomically: true, encoding: .utf8)
+        let executor = CapabilityExecutor(registry: PluginRegistry(config: .empty), baseDirectory: root.path)
+
+        let overwrite = await executor.execute(CapabilityInvocation(
+            toolCallID: "call_write_existing",
+            functionName: "workspace_writeTextFile",
+            capabilityID: "workspace.writeTextFile",
+            arguments: [
+                "path": "existing.md",
+                "content": "replacement"
+            ]
+        ))
+
+        XCTAssertEqual(overwrite.title, "Workspace Write Failed")
+        XCTAssertTrue(overwrite.content.contains("File already exists"))
+        XCTAssertEqual(try String(contentsOf: root.appendingPathComponent("existing.md"), encoding: .utf8), "original")
+
+        let stateWrite = await executor.execute(CapabilityInvocation(
+            toolCallID: "call_write_state",
+            functionName: "workspace_writeTextFile",
+            capabilityID: "workspace.writeTextFile",
+            arguments: [
+                "path": ".her/secret.txt",
+                "content": "do not write"
+            ]
+        ))
+
+        XCTAssertEqual(stateWrite.title, "Workspace Write Failed")
+        XCTAssertTrue(stateWrite.content.contains("Refusing to write"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent(".her/secret.txt").path))
     }
 
     @MainActor

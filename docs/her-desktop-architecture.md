@@ -217,7 +217,7 @@ flowchart TB
     exec2 --> localAudit
 ```
 
-`workspace.plan` writes the current plan into `.her/workspace/work-plan.json`. That plan feeds the Projects Current Plan panel, the Inspector Active Plan card, the Agent Loop Plan phase, and the Active Work State prompt block as app-observed state data. `workspace.search` stays on the same plugin-first path: it is manifest-declared, approval-bound, and handled by the native adapter so local filename/content search can be audited like any other capability call.
+`workspace.plan` writes the current plan into `.her/workspace/work-plan.json`. That plan feeds the Projects Current Plan panel, the Inspector Active Plan card, the Agent Loop Plan phase, and the Active Work State prompt block as app-observed state data. `workspace.search` and `workspace.writeTextFile` stay on the same plugin-first path: they are manifest-declared, approval-bound, and handled by the native adapter so local filename/content search and artifact writes can be audited like any other capability call.
 
 ## 白板图到实现模块的映射
 
@@ -241,7 +241,7 @@ flowchart LR
         inbox2["Local Inbox Bridge<br/>capture-only event intake"]
         speech["Native Speech Layer<br/>macOS STT/TTS, future realtime channel"]
         cap["Plugin Capability<br/>manifest + inputSchema + approval"]
-        native2["Native Adapter<br/>notifications, workspace search, file read, attachment inspect, speak"]
+        native2["Native Adapter<br/>notifications, workspace search/write, file read, attachment inspect, speak"]
         webservice2["WebService Adapter<br/>AgentLLM media or third-party APIs"]
         skill2["Skill Adapter<br/>bundled/local SKILL.md"]
         mcpAdapter["MCP Adapter<br/>local JSON-RPC tools/call"]

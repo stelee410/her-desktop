@@ -263,6 +263,15 @@ struct PluginPackageReview: Equatable {
                 requiresApproval: approval
             )
         }
+        if id == "workspace.writeTextFile" {
+            return PermissionSummary(
+                id: id,
+                title: "Workspace File Write",
+                detail: "Writes approved UTF-8 text inside the current workspace.",
+                systemImage: "square.and.pencil",
+                requiresApproval: approval
+            )
+        }
         if id == "native.inspectAttachment" {
             return PermissionSummary(
                 id: id,

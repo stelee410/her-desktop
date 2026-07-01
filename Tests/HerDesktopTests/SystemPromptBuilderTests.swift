@@ -91,6 +91,7 @@ final class SystemPromptBuilderTests: XCTestCase {
         XCTAssertTrue(prompt.contains("AgentMem retrieval is per-turn context"))
         XCTAssertTrue(prompt.contains("no secret material in generated artifacts"))
         XCTAssertTrue(prompt.contains("Live or voice modes should be shorter"))
+        XCTAssertTrue(prompt.contains("Use `workspace.writeTextFile`"))
         XCTAssertTrue(prompt.contains("Use `plugin.installDraft`"))
         XCTAssertTrue(prompt.contains("exact plugin_id and draft_id"))
         XCTAssertTrue(prompt.contains("Use `plugin.discardDraft`"))

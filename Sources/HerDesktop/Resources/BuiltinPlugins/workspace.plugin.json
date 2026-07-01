@@ -59,6 +59,42 @@
       "adapter" : {
         "type" : "native"
       },
+      "description" : "Write an approved UTF-8 text file inside the current workspace.",
+      "id" : "workspace.writeTextFile",
+      "inputSchema" : {
+        "properties" : {
+          "content" : {
+            "description" : "UTF-8 text content to write.",
+            "type" : "string"
+          },
+          "create_parent_directories" : {
+            "description" : "Whether to create missing parent directories inside the workspace.",
+            "type" : "boolean"
+          },
+          "overwrite" : {
+            "description" : "Whether to replace an existing file after explicit confirmation.",
+            "type" : "boolean"
+          },
+          "path" : {
+            "description" : "Workspace-relative path, or an absolute path inside the current workspace.",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "path",
+          "content"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "workspace.writeTextFile",
+      "kind" : "native",
+      "requiresApproval" : true,
+      "title" : "Write text file"
+    },
+    {
+      "adapter" : {
+        "type" : "native"
+      },
       "description" : "Save the current actionable work plan into Her Desktop state.",
       "id" : "workspace.plan",
       "inputSchema" : {
@@ -127,7 +163,7 @@
       "title" : "Save work plan"
     }
   ],
-  "description" : "Read local context, summarize files, and prepare work plans with explicit approval.",
+  "description" : "Read local context, summarize files, write approved text artifacts, and prepare work plans with explicit approval.",
   "id" : "builtin.workspace",
   "name" : "Workspace",
   "systemPromptAddendum" : "Workspace actions require user approval before file mutation or shell execution.",

@@ -94,6 +94,37 @@ final class PluginPackageReviewTests: XCTestCase {
         XCTAssertEqual(review.riskLevel, .medium)
     }
 
+    func testWorkspaceWritePermissionIsExplicit() {
+        let package = PluginPackage(
+            manifest: PluginManifest(
+                id: "local.workspace-writer",
+                name: "Workspace Writer",
+                version: "0.1.0",
+                description: "Workspace writer package.",
+                author: "Test",
+                systemPromptAddendum: nil,
+                capabilities: [
+                    .init(
+                        id: "workspace.writeTextFile",
+                        title: "Write",
+                        kind: "native",
+                        invocation: "workspace.writeTextFile",
+                        requiresApproval: true,
+                        adapter: .init(type: "native")
+                    )
+                ]
+            ),
+            files: []
+        )
+
+        let review = PluginPackageReview(package: package)
+
+        XCTAssertEqual(review.permissionSummaries.first?.title, "Workspace File Write")
+        XCTAssertEqual(review.permissionSummaries.first?.detail, "Writes approved UTF-8 text inside the current workspace.")
+        XCTAssertEqual(review.permissionSummaries.first?.requiresApproval, true)
+        XCTAssertEqual(review.riskLevel, .medium)
+    }
+
     func testCapabilitySummaryIncludesInputFields() {
         let review = PluginPackageReview(package: package(
             kind: "webservice",

@@ -111,6 +111,8 @@ final class CapabilityExecutor {
             return inspectWorkspace(arguments: invocation.arguments)
         case "workspace.search":
             return searchWorkspace(arguments: invocation.arguments)
+        case "workspace.writeTextFile":
+            return writeWorkspaceTextFile(arguments: invocation.arguments)
         case "workspace.plan":
             return CapabilityResult(
                 title: "Workspace Plan",
@@ -272,6 +274,88 @@ final class CapabilityExecutor {
             """,
             requiresUserApproval: false
         )
+    }
+
+    private func writeWorkspaceTextFile(arguments: [String: Any]) -> CapabilityResult {
+        let rawPath = clean(arguments["path"] as? String, fallback: clean(arguments["file_path"] as? String, fallback: ""))
+        let contentValue = arguments["content"] ?? arguments["text"]
+        let overwrite = bool(arguments["overwrite"], fallback: false)
+        let createParentDirectories = bool(arguments["create_parent_directories"], fallback: true)
+
+        guard !rawPath.isEmpty else {
+            return CapabilityResult(
+                title: "Workspace Write Failed",
+                content: "Missing required path.",
+                requiresUserApproval: false
+            )
+        }
+        guard let content = contentValue as? String else {
+            return CapabilityResult(
+                title: "Workspace Write Failed",
+                content: "Missing required content.",
+                requiresUserApproval: false
+            )
+        }
+
+        let root = workspaceRoot.standardizedFileURL
+        let url = resolveLocalFilePath(rawPath).standardizedFileURL
+        guard isWorkspaceWritablePath(url, root: root) else {
+            return CapabilityResult(
+                title: "Workspace Write Failed",
+                content: "Refusing to write outside the workspace or into local state/build directories: \(url.path)",
+                requiresUserApproval: false
+            )
+        }
+
+        var isDirectory: ObjCBool = false
+        if fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) {
+            guard !isDirectory.boolValue else {
+                return CapabilityResult(
+                    title: "Workspace Write Failed",
+                    content: "Path is a directory: \(url.path)",
+                    requiresUserApproval: false
+                )
+            }
+            guard overwrite else {
+                return CapabilityResult(
+                    title: "Workspace Write Failed",
+                    content: "File already exists. Set overwrite=true only after the user confirms replacing it: \(url.path)",
+                    requiresUserApproval: false
+                )
+            }
+        }
+
+        do {
+            let parent = url.deletingLastPathComponent()
+            if !fileManager.fileExists(atPath: parent.path) {
+                guard createParentDirectories else {
+                    return CapabilityResult(
+                        title: "Workspace Write Failed",
+                        content: "Parent directory does not exist: \(parent.path)",
+                        requiresUserApproval: false
+                    )
+                }
+                try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
+            }
+            try content.write(to: url, atomically: true, encoding: .utf8)
+            return CapabilityResult(
+                title: "Workspace Text File Written",
+                content: """
+                path: \(url.path)
+                relative_path: \(relativePath(for: url, under: root))
+                characters_written: \(content.count)
+                bytes_written: \(Data(content.utf8).count)
+                overwritten: \(overwrite)
+                """,
+                requiresUserApproval: false
+            )
+        } catch {
+            return CapabilityResult(
+                title: "Workspace Write Failed",
+                content: error.localizedDescription,
+                requiresUserApproval: false
+            )
+        }
     }
 
     private func draftPlugin(arguments: [String: Any]) -> CapabilityResult {
@@ -1146,6 +1230,13 @@ final class CapabilityExecutor {
                 "DerivedData"
             ].contains(component)
         }
+    }
+
+    private func isWorkspaceWritablePath(_ url: URL, root: URL) -> Bool {
+        let rootPath = root.standardizedFileURL.path
+        let path = url.standardizedFileURL.path
+        guard path.hasPrefix(rootPath + "/") else { return false }
+        return !shouldSkipSearchURL(url, root: root)
     }
 
     private func relativePath(for url: URL, under root: URL) -> String {

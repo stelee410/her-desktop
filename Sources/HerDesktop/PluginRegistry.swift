@@ -281,7 +281,7 @@ final class PluginRegistry {
                 id: "builtin.workspace",
                 name: "Workspace",
                 version: "0.1.0",
-                description: "Read local context, summarize files, and prepare work plans with explicit approval.",
+                description: "Read local context, summarize files, write approved text artifacts, and prepare work plans with explicit approval.",
                 author: "Her",
                 systemPromptAddendum: "Workspace actions require user approval before file mutation or shell execution.",
                 capabilities: [
@@ -300,6 +300,15 @@ final class PluginRegistry {
                         invocation: "workspace.search",
                         requiresApproval: true,
                         description: "Search workspace file names and approved UTF-8 file contents.",
+                        adapter: .init(type: "native")
+                    ),
+                    .init(
+                        id: "workspace.writeTextFile",
+                        title: "Write text file",
+                        kind: "native",
+                        invocation: "workspace.writeTextFile",
+                        requiresApproval: true,
+                        description: "Write an approved UTF-8 text file inside the current workspace.",
                         adapter: .init(type: "native")
                     ),
                     .init(
@@ -632,6 +641,13 @@ final class PluginRegistry {
                 "max_results": field("integer", "Maximum number of matching files to return."),
                 "max_file_bytes": field("integer", "Maximum file size to read when include_content is true.")
             ], required: ["query"])
+        case "workspace.writeTextFile":
+            return objectSchema([
+                "path": field("string", "Workspace-relative path, or an absolute path inside the current workspace."),
+                "content": field("string", "UTF-8 text content to write."),
+                "overwrite": field("boolean", "Whether to replace an existing file after explicit confirmation."),
+                "create_parent_directories": field("boolean", "Whether to create missing parent directories inside the workspace.")
+            ], required: ["path", "content"])
         case "workspace.plan":
             return objectSchema([
                 "goal": field("string", "Concrete outcome this plan should make true."),
