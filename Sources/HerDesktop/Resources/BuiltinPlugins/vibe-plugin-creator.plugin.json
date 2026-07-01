@@ -101,6 +101,34 @@
       "kind" : "native",
       "requiresApproval" : true,
       "title" : "Install generated plugin"
+    },
+    {
+      "adapter" : {
+        "type" : "native"
+      },
+      "description" : "Remove an installed local plugin after explicit user approval.",
+      "id" : "plugin.remove",
+      "inputSchema" : {
+        "properties" : {
+          "confirmed" : {
+            "description" : "True only after the user explicitly confirms removal.",
+            "type" : "boolean"
+          },
+          "plugin_id" : {
+            "description" : "Installed local plugin id to remove, such as local.example.",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "plugin_id",
+          "confirmed"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "plugin.remove",
+      "kind" : "native",
+      "requiresApproval" : true,
+      "title" : "Remove local plugin"
     }
   ],
   "description" : "Turns a conversational extension idea into a plugin manifest and installable capability package.",

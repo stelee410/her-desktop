@@ -95,6 +95,13 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(commandArguments["type"] as? String, "string")
         XCTAssertEqual(draftParameters["required"] as? [String], ["name", "description"])
 
+        let remove = try XCTUnwrap(toolFunction(named: "plugin_remove", in: catalog))
+        let removeParameters = try XCTUnwrap(remove["parameters"] as? [String: Any])
+        let removeProperties = try XCTUnwrap(removeParameters["properties"] as? [String: Any])
+
+        XCTAssertEqual((removeProperties["plugin_id"] as? [String: Any])?["type"] as? String, "string")
+        XCTAssertEqual(removeParameters["required"] as? [String], ["plugin_id", "confirmed"])
+
         let notify = try XCTUnwrap(toolFunction(named: "native_notify", in: catalog))
         let notifyParameters = try XCTUnwrap(notify["parameters"] as? [String: Any])
         let notifyProperties = try XCTUnwrap(notifyParameters["properties"] as? [String: Any])
@@ -168,6 +175,17 @@ final class CapabilityRuntimeTests: XCTestCase {
 
         XCTAssertEqual(capability?.id, "plugin.install")
         XCTAssertEqual(capability?.requiresApproval, true)
+    }
+
+    func testBuiltInPluginRemoveRequiresApproval() {
+        let registry = PluginRegistry(config: .empty)
+        let capability = registry.capability(id: "plugin.remove")
+
+        XCTAssertEqual(capability?.id, "plugin.remove")
+        XCTAssertEqual(capability?.kind, "native")
+        XCTAssertEqual(capability?.adapter?.type, "native")
+        XCTAssertEqual(capability?.requiresApproval, true)
+        XCTAssertEqual(CapabilityInputSchema.fields(for: capability!).map(\.name), ["plugin_id", "confirmed"])
     }
 
     @MainActor
@@ -502,6 +520,58 @@ final class CapabilityRuntimeTests: XCTestCase {
         try registry.remove(pluginID: "local.removable")
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: pluginRoot.path))
+    }
+
+    @MainActor
+    func testPluginRemoveCapabilityDeletesInstalledLocalPlugin() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-plugin-remove-capability-\(UUID().uuidString)", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.path
+        let registry = PluginRegistry(config: config)
+        let manifest = PluginManifest(
+            id: "local.capremove",
+            name: "Capability Remove",
+            version: "0.1.0",
+            description: "Temporary plugin",
+            author: nil,
+            systemPromptAddendum: nil,
+            capabilities: []
+        )
+        try registry.install(package: PluginPackage(manifest: manifest, files: []))
+        let executor = CapabilityExecutor(registry: registry)
+
+        let result = await executor.execute(CapabilityInvocation(
+            toolCallID: "call_remove",
+            functionName: "plugin_remove",
+            capabilityID: "plugin.remove",
+            arguments: [
+                "plugin_id": "local.capremove",
+                "confirmed": true
+            ]
+        ))
+
+        XCTAssertEqual(result.title, "Plugin Removed")
+        XCTAssertTrue(result.content.contains("Capability Remove"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("local.capremove").path))
+    }
+
+    @MainActor
+    func testPluginRemoveCapabilityRejectsBuiltIns() async throws {
+        let executor = CapabilityExecutor(registry: PluginRegistry(config: .empty))
+
+        let result = await executor.execute(CapabilityInvocation(
+            toolCallID: "call_remove_builtin",
+            functionName: "plugin_remove",
+            capabilityID: "plugin.remove",
+            arguments: [
+                "plugin_id": "builtin.workspace",
+                "confirmed": true
+            ]
+        ))
+
+        XCTAssertEqual(result.title, "Plugin Remove Failed")
+        XCTAssertTrue(result.content.contains("Only local plugins"))
     }
 
     func testRegistryReplacingExistingLocalPluginRemovesStaleFiles() throws {

@@ -461,6 +461,7 @@ final class AppViewModel: ObservableObject {
         captureExternalInboxEventIfNeeded(invocation: invocation, result: result)
         captureGeneratedPluginDraft(from: result, source: toolCall.function.name)
         captureInstalledPluginIfNeeded(invocation: invocation, result: result, approved: false)
+        captureRemovedPluginIfNeeded(invocation: invocation, result: result, approved: false)
         messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
         auditCapabilityExecution(invocation: invocation, result: result, approved: false)
         Task {
@@ -812,6 +813,7 @@ final class AppViewModel: ObservableObject {
         captureExternalInboxEventIfNeeded(invocation: invocation, result: result)
         captureGeneratedPluginDraft(from: result, source: invocation.functionName)
         captureInstalledPluginIfNeeded(invocation: invocation, result: result, approved: false)
+        captureRemovedPluginIfNeeded(invocation: invocation, result: result, approved: false)
         messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
         auditCapabilityExecution(invocation: invocation, result: result, approved: false)
         Task {
@@ -1599,6 +1601,7 @@ final class AppViewModel: ObservableObject {
         refreshWebServiceArtifacts()
         captureExternalInboxEventIfNeeded(invocation: approval.invocation, result: result)
         captureInstalledPluginIfNeeded(invocation: approval.invocation, result: result, approved: true)
+        captureRemovedPluginIfNeeded(invocation: approval.invocation, result: result, approved: true)
         messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
         audit(
             type: "approval.approved",
@@ -1881,6 +1884,49 @@ final class AppViewModel: ObservableObject {
             return PluginPackage(manifest: manifest, files: [])
         }
         return nil
+    }
+
+    private func captureRemovedPluginIfNeeded(
+        invocation: CapabilityInvocation,
+        result: CapabilityResult,
+        approved: Bool
+    ) {
+        guard invocation.capabilityID == "plugin.remove",
+              result.title == "Plugin Removed" else {
+            return
+        }
+        let pluginID = stringArgument(invocation.arguments, keys: ["plugin_id"], fallback: "")
+        guard !pluginID.isEmpty else { return }
+        let manifest = plugins.first { $0.id == pluginID }
+        pendingApprovals.removeAll { $0.invocation.capabilityID.hasPrefix(pluginID + ".") }
+        audit(
+            type: "plugin.removed",
+            summary: "Removed local plugin \(manifest?.name ?? pluginID) through plugin.remove capability.",
+            metadata: [
+                "pluginID": pluginID,
+                "pluginName": manifest?.name ?? pluginID,
+                "capabilityCount": String(manifest?.capabilities.count ?? 0),
+                "source": "plugin.remove capability",
+                "functionName": invocation.functionName,
+                "toolCallID": invocation.toolCallID,
+                "approved": String(approved)
+            ]
+        )
+        if let manifest {
+            recordPluginLifecycleEvent(
+                action: .removed,
+                manifest: manifest,
+                fileCount: 0,
+                source: "plugin.remove capability",
+                summary: "Removed local plugin \(manifest.name) through plugin.remove capability.",
+                metadata: [
+                    "functionName": invocation.functionName,
+                    "toolCallID": invocation.toolCallID,
+                    "approved": String(approved)
+                ]
+            )
+        }
+        rebuildRunningTasks()
     }
 
     private func captureExternalInboxEventIfNeeded(invocation: CapabilityInvocation, result: CapabilityResult) {

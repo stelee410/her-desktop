@@ -306,7 +306,7 @@ flowchart TB
 - 插件库能展示内置与本地插件，能通过统一 capability runner 执行。
 - 需要副作用的能力必须进入 approval queue，用户可以批准或拒绝。
 - MCP 接入不写死具体 server，用户给本地 bridge URL 后可以发现工具并生成插件。
-- 生成的插件包必须可审核、可持久化、可安装、可导出。
+- 生成的插件包必须可审核、可持久化、可安装、可导出；本地插件也必须能通过 approved `plugin.remove` capability 对话式移除。
 - 新内置扩展必须能通过新增 bundled `*.plugin.json` 资源进入 registry，不能依赖额外 Swift 注册列表。
 - 附件、webservice 产物、inbox 事件、审计事件都要落到 `.her/`，不能只存在内存里。
 

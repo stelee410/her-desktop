@@ -637,6 +637,58 @@ final class AppViewModelTests: XCTestCase {
         })
     }
 
+    func testApprovedPluginRemoveCapabilityDeletesLocalPluginAndRecordsLifecycle() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-remove-capability-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+
+        let model = AppViewModel(config: config, cwd: cwd.path)
+        await model.installDraftPlugin(
+            named: "Capability Disposable",
+            description: "A temporary helper.",
+            kind: "skill"
+        )
+        let pluginRoot = URL(fileURLWithPath: config.pluginDirectory)
+            .appendingPathComponent("local.capability-disposable", isDirectory: true)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: pluginRoot.appendingPathComponent("plugin.json").path))
+        let approval = PendingApproval(
+            title: "Remove local plugin",
+            detail: "Remove local.capability-disposable",
+            invocation: CapabilityInvocation(
+                toolCallID: "call-plugin-remove",
+                functionName: "plugin_remove",
+                capabilityID: "plugin.remove",
+                arguments: [
+                    "plugin_id": "local.capability-disposable",
+                    "confirmed": true
+                ]
+            ),
+            activityID: nil
+        )
+
+        await model.approve(approval)
+
+        XCTAssertFalse(model.plugins.contains { $0.id == "local.capability-disposable" })
+        XCTAssertFalse(FileManager.default.fileExists(atPath: pluginRoot.path))
+        XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Removed") })
+        let audit = try AuditEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(audit.contains { event in
+            event.type == "plugin.removed"
+            && event.metadata["pluginID"] == "local.capability-disposable"
+            && event.metadata["source"] == "plugin.remove capability"
+            && event.metadata["approved"] == "true"
+        })
+        let pluginEvents = try PluginEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(pluginEvents.contains { event in
+            event.action == .removed
+            && event.pluginID == "local.capability-disposable"
+            && event.source == "plugin.remove capability"
+            && event.metadata["approved"] == "true"
+        })
+    }
+
     func testExportPluginWritesPluginPackageToWorkspace() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-export-plugin-\(UUID().uuidString)", isDirectory: true)

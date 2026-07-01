@@ -346,6 +346,15 @@ final class PluginRegistry {
                         invocation: "plugin.install",
                         requiresApproval: true,
                         adapter: .init(type: "native")
+                    ),
+                    .init(
+                        id: "plugin.remove",
+                        title: "Remove local plugin",
+                        kind: "native",
+                        invocation: "plugin.remove",
+                        requiresApproval: true,
+                        description: "Remove an installed local plugin after explicit user approval.",
+                        adapter: .init(type: "native")
                     )
                 ]
             ),
@@ -616,6 +625,11 @@ final class PluginRegistry {
                 "manifest_json": field("string", "A complete plugin manifest JSON object."),
                 "confirmed": field("boolean", "True only after the user explicitly confirms installation.")
             ], required: ["confirmed"])
+        case "plugin.remove":
+            return objectSchema([
+                "plugin_id": field("string", "Installed local plugin id to remove, such as local.example."),
+                "confirmed": field("boolean", "True only after the user explicitly confirms removal.")
+            ], required: ["plugin_id", "confirmed"])
         case "native.notify":
             return objectSchema([
                 "title": field("string", "Short notification title."),

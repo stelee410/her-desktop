@@ -119,6 +119,8 @@ final class CapabilityExecutor {
             return draftPlugin(arguments: invocation.arguments)
         case "plugin.install":
             return installPlugin(arguments: invocation.arguments)
+        case "plugin.remove":
+            return removePlugin(arguments: invocation.arguments)
         case "native.notify":
             return await executeNativeNotification(arguments: invocation.arguments)
         case "native.readTextFile":
@@ -919,6 +921,46 @@ final class CapabilityExecutor {
         } catch {
             return CapabilityResult(
                 title: "Plugin Install Failed",
+                content: error.localizedDescription,
+                requiresUserApproval: false
+            )
+        }
+    }
+
+    private func removePlugin(arguments: [String: Any]) -> CapabilityResult {
+        guard arguments["confirmed"] as? Bool == true else {
+            return CapabilityResult(
+                title: "Plugin Remove Needs Confirmation",
+                content: "Removing a plugin needs explicit confirmation. Set confirmed=true only after the user approves.",
+                requiresUserApproval: true
+            )
+        }
+        let pluginID = clean(arguments["plugin_id"] as? String, fallback: "")
+        guard !pluginID.isEmpty else {
+            return CapabilityResult(
+                title: "Plugin Remove Failed",
+                content: "plugin_id is required.",
+                requiresUserApproval: false
+            )
+        }
+        guard pluginID.hasPrefix("local.") else {
+            return CapabilityResult(
+                title: "Plugin Remove Failed",
+                content: "Only local plugins can be removed through plugin.remove.",
+                requiresUserApproval: false
+            )
+        }
+        let manifest = registry.loadPlugins().first { $0.id == pluginID }
+        do {
+            try registry.remove(pluginID: pluginID)
+            return CapabilityResult(
+                title: "Plugin Removed",
+                content: "\(manifest?.name ?? pluginID) (\(pluginID)) was removed from the local plugin directory.",
+                requiresUserApproval: false
+            )
+        } catch {
+            return CapabilityResult(
+                title: "Plugin Remove Failed",
                 content: error.localizedDescription,
                 requiresUserApproval: false
             )
