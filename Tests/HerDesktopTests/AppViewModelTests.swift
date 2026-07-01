@@ -1350,6 +1350,46 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(draft.manifest.id, "local.research-scout")
     }
 
+    func testVibeUpdateContextSummarizesInstalledLocalPlugin() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-vibe-update-context-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        let pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let pluginRoot = pluginDirectory.appendingPathComponent("local.research-scout", isDirectory: true)
+        try FileManager.default.createDirectory(at: pluginRoot, withIntermediateDirectories: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = pluginDirectory.path
+        config.agentLLMAPIKey = "test-secret-key"
+        let package = samplePackage(
+            id: "local.research-scout",
+            name: "Research Scout",
+            requiresApproval: true,
+            skillContent: """
+            # Research Scout
+            Use careful source uncertainty.
+            api_key: test-secret-key
+            """
+        )
+        try JSONEncoder.pretty.encode(package.manifest)
+            .write(to: pluginRoot.appendingPathComponent("plugin.json"), options: .atomic)
+        try package.files[0].content
+            .write(to: pluginRoot.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        let model = AppViewModel(config: config, cwd: cwd.path)
+
+        let plugin = try XCTUnwrap(model.plugins.first { $0.id == "local.research-scout" })
+        let context = model.vibeUpdateContext(for: plugin)
+
+        XCTAssertTrue(context.contains("Installed package to update"))
+        XCTAssertTrue(context.contains("- id: local.research-scout"))
+        XCTAssertTrue(context.contains("local.research-scout.run"))
+        XCTAssertTrue(context.contains("package_files"))
+        XCTAssertTrue(context.contains("### SKILL.md"))
+        XCTAssertTrue(context.contains("Use careful source uncertainty."))
+        XCTAssertTrue(context.contains("Update rule: return a complete replacement PluginPackage"))
+        XCTAssertFalse(context.contains("test-secret-key"))
+        XCTAssertTrue(context.contains("[redacted]"))
+    }
+
     func testAIVibePluginGenerationRepairsInvalidPackageOnce() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-ai-vibe-plugin-repair-\(UUID().uuidString)", isDirectory: true)

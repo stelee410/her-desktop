@@ -1192,6 +1192,104 @@ final class AppViewModel: ObservableObject {
         saveSessionSnapshot()
     }
 
+    func vibeUpdateContext(for plugin: PluginManifest) -> String {
+        do {
+            let package = try pluginRegistry.package(pluginID: plugin.id)
+            return SecretRedactor.redact(pluginUpdateContext(for: package), config: config)
+        } catch {
+            let fallback = """
+            Installed plugin summary:
+            - id: \(plugin.id)
+            - name: \(plugin.name)
+            - version: \(plugin.version)
+            - description: \(plugin.description)
+            - package_files: unavailable (\(error.localizedDescription))
+
+            capabilities:
+            \(plugin.capabilities.map(pluginCapabilityContextLine).joined(separator: "\n"))
+            """
+            return SecretRedactor.redact(fallback, config: config)
+        }
+    }
+
+    private func pluginUpdateContext(for package: PluginPackage) -> String {
+        let manifest = package.manifest
+        let review = PluginPackageReview(package: package, catalogManifests: catalogManifestsAfterInstalling(manifest))
+        let fileLines = review.fileSummaries.map { file in
+            "- \(file.path) (\(file.lineCount) line(s), \(file.byteCount) byte(s))"
+        }
+        let excerpts = package.files
+            .filter { shouldIncludePluginUpdateExcerpt(path: $0.path) }
+            .prefix(6)
+            .map { file in
+                """
+                ### \(file.path)
+                \(pluginUpdateExcerpt(file.content))
+                """
+            }
+            .joined(separator: "\n\n")
+        return """
+        Installed package to update:
+        - id: \(manifest.id)
+        - name: \(manifest.name)
+        - version: \(manifest.version)
+        - description: \(manifest.description)
+        - author: \(manifest.author ?? "unspecified")
+        - risk: \(review.riskLevel.rawValue)
+
+        capabilities:
+        \(manifest.capabilities.map(pluginCapabilityContextLine).joined(separator: "\n"))
+
+        package_files:
+        \(fileLines.isEmpty ? "(none)" : fileLines.joined(separator: "\n"))
+
+        key_file_excerpts:
+        \(excerpts.isEmpty ? "(none)" : excerpts)
+
+        Update rule: return a complete replacement PluginPackage using the same plugin id, not a partial patch.
+        """
+    }
+
+    private func pluginCapabilityContextLine(_ capability: PluginManifest.Capability) -> String {
+        var fields = [
+            "kind=\(capability.kind)",
+            "invocation=\(capability.invocation)",
+            capability.requiresApproval ? "approval_required" : "no_approval"
+        ]
+        if let adapter = capability.adapter {
+            fields.append("adapter=\(adapter.type)")
+            if let url = adapter.url { fields.append("url=\(url)") }
+            if let method = adapter.method { fields.append("method=\(method)") }
+            if let methodName = adapter.methodName { fields.append("methodName=\(methodName)") }
+            if let toolName = adapter.toolName { fields.append("toolName=\(toolName)") }
+            if let skillFile = adapter.skillFile { fields.append("skillFile=\(skillFile)") }
+            if let command = adapter.command { fields.append("command=\(command)") }
+        }
+        let inputFields = CapabilityInputSchema.fields(for: capability).map(\.name).joined(separator: ", ")
+        if !inputFields.isEmpty {
+            fields.append("inputFields=\(inputFields)")
+        }
+        return "- \(capability.id): \(capability.title) [\(fields.joined(separator: ", "))]"
+    }
+
+    private func shouldIncludePluginUpdateExcerpt(path: String) -> Bool {
+        let lowercased = path.lowercased()
+        return lowercased == "plugin.json"
+            || lowercased == "skill.md"
+            || lowercased == "readme.md"
+            || lowercased.hasSuffix(".md")
+            || lowercased.hasSuffix(".json")
+    }
+
+    private func pluginUpdateExcerpt(_ content: String) -> String {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prefix = String(trimmed.prefix(3_000))
+        if trimmed.count <= prefix.count {
+            return prefix.isEmpty ? "(empty)" : prefix
+        }
+        return "\(prefix)\n... [truncated]"
+    }
+
     private func exportPluginCapability(arguments: [String: Any]) -> CapabilityResult {
         guard arguments["confirmed"] as? Bool == true else {
             return CapabilityResult(

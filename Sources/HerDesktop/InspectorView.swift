@@ -16,6 +16,8 @@ struct InspectorView: View {
     @State private var pluginCommandPath = ""
     @State private var pluginCommandArguments = ""
     @State private var pluginPackageJSON = ""
+    @State private var pluginUpdateTargetID = ""
+    @State private var pluginExistingPackageContext = ""
 
     var body: some View {
         ScrollView {
@@ -66,7 +68,22 @@ struct InspectorView: View {
                     pluginCommandArguments: $pluginCommandArguments,
                     pluginPackageJSON: $pluginPackageJSON
                 )
-                PluginLibraryCard()
+                PluginLibraryCard(
+                    pluginName: $pluginName,
+                    pluginDescription: $pluginDescription,
+                    pluginKind: $pluginKind,
+                    pluginRequiresApproval: $pluginRequiresApproval,
+                    pluginURL: $pluginURL,
+                    pluginMethod: $pluginMethod,
+                    pluginMCPMethod: $pluginMCPMethod,
+                    pluginMCPToolName: $pluginMCPToolName,
+                    pluginMCPInputSchemaJSON: $pluginMCPInputSchemaJSON,
+                    pluginCommandPath: $pluginCommandPath,
+                    pluginCommandArguments: $pluginCommandArguments,
+                    pluginPackageJSON: $pluginPackageJSON,
+                    pluginUpdateTargetID: $pluginUpdateTargetID,
+                    pluginExistingPackageContext: $pluginExistingPackageContext
+                )
             }
             .padding(18)
         }
@@ -85,7 +102,9 @@ struct InspectorView: View {
                 pluginMCPInputSchemaJSON: $pluginMCPInputSchemaJSON,
                 pluginCommandPath: $pluginCommandPath,
                 pluginCommandArguments: $pluginCommandArguments,
-                pluginPackageJSON: $pluginPackageJSON
+                pluginPackageJSON: $pluginPackageJSON,
+                pluginUpdateTargetID: $pluginUpdateTargetID,
+                pluginExistingPackageContext: $pluginExistingPackageContext
             )
             .environmentObject(model)
         }
@@ -2076,6 +2095,8 @@ private struct VibePluginComposerSheet: View {
     @Binding var pluginCommandPath: String
     @Binding var pluginCommandArguments: String
     @Binding var pluginPackageJSON: String
+    @Binding var pluginUpdateTargetID: String
+    @Binding var pluginExistingPackageContext: String
     @State private var vibeBrief = ""
     @State private var isPackageImporterPresented = false
 
@@ -2101,6 +2122,33 @@ private struct VibePluginComposerSheet: View {
             TextField("Describe the extension in one paragraph...", text: $vibeBrief, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(3...6)
+
+            if isUpdatingPlugin {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .foregroundStyle(AppTheme.coral)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Updating \(pluginUpdateTargetID)")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppTheme.ink)
+                        Text("AI generation will reuse this local plugin id and treat the installed package as context.")
+                            .font(.caption2)
+                            .foregroundStyle(AppTheme.muted)
+                    }
+                    Spacer()
+                    Button {
+                        pluginUpdateTargetID = ""
+                        pluginExistingPackageContext = ""
+                    } label: {
+                        Image(systemName: "xmark.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Clear update target")
+                }
+                .padding(10)
+                .background(Color.white.opacity(0.45))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
 
             TextField("Plugin name", text: $pluginName)
                 .textFieldStyle(.roundedBorder)
@@ -2277,7 +2325,8 @@ private struct VibePluginComposerSheet: View {
                     Label("Local Draft", systemImage: "shippingbox")
                 }
                 .buttonStyle(.bordered)
-                .disabled(!canSubmit || isBusy)
+                .disabled(!canSubmit || isBusy || isUpdatingPlugin)
+                .help(isUpdatingPlugin ? "Use AI Draft or AI Install to update an installed local plugin with package context." : "Stage a local draft from the visible fields")
 
                 Spacer()
 
@@ -2305,7 +2354,8 @@ private struct VibePluginComposerSheet: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(AppTheme.coral)
-                .disabled(!canSubmit || isBusy)
+                .disabled(!canSubmit || isBusy || isUpdatingPlugin)
+                .help(isUpdatingPlugin ? "Use AI Draft or AI Install to update an installed local plugin with package context." : "Install a local plugin from the visible fields")
             }
             .controlSize(.regular)
 
@@ -2326,13 +2376,15 @@ private struct VibePluginComposerSheet: View {
                             commandPath: pluginCommandPath,
                             commandArguments: pluginCommandArguments,
                             vibeBrief: vibeBrief,
+                            updatePluginID: pluginUpdateTargetID,
+                            existingPackageContext: pluginExistingPackageContext,
                             installImmediately: false
                         )
                         reset()
                         isPresented = false
                     }
                 } label: {
-                    Label("AI Draft", systemImage: "sparkles")
+                    Label(isUpdatingPlugin ? "AI Update Draft" : "AI Draft", systemImage: "sparkles")
                 }
                 .buttonStyle(.bordered)
                 .disabled(!canSubmit || isBusy || !model.config.hasLLMKey)
@@ -2355,13 +2407,15 @@ private struct VibePluginComposerSheet: View {
                             commandPath: pluginCommandPath,
                             commandArguments: pluginCommandArguments,
                             vibeBrief: vibeBrief,
+                            updatePluginID: pluginUpdateTargetID,
+                            existingPackageContext: pluginExistingPackageContext,
                             installImmediately: true
                         )
                         reset()
                         isPresented = false
                     }
                 } label: {
-                    Label("AI Install", systemImage: "wand.and.sparkles")
+                    Label(isUpdatingPlugin ? "AI Update Install" : "AI Install", systemImage: "wand.and.sparkles")
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(AppTheme.coral)
@@ -2408,6 +2462,10 @@ private struct VibePluginComposerSheet: View {
         model.connectionState == .thinking || model.connectionState == .working
     }
 
+    private var isUpdatingPlugin: Bool {
+        !pluginUpdateTargetID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var effectiveDescription: String {
         let description = pluginDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         let brief = vibeBrief.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2436,6 +2494,8 @@ private struct VibePluginComposerSheet: View {
         pluginCommandPath = ""
         pluginCommandArguments = ""
         pluginPackageJSON = ""
+        pluginUpdateTargetID = ""
+        pluginExistingPackageContext = ""
     }
 
     private func applyMCPTool(_ tool: MCPDiscoveredTool) {
@@ -2494,6 +2554,20 @@ private struct VibePluginComposerSheet: View {
 
 private struct PluginLibraryCard: View {
     @EnvironmentObject private var model: AppViewModel
+    @Binding var pluginName: String
+    @Binding var pluginDescription: String
+    @Binding var pluginKind: String
+    @Binding var pluginRequiresApproval: Bool
+    @Binding var pluginURL: String
+    @Binding var pluginMethod: String
+    @Binding var pluginMCPMethod: String
+    @Binding var pluginMCPToolName: String
+    @Binding var pluginMCPInputSchemaJSON: String
+    @Binding var pluginCommandPath: String
+    @Binding var pluginCommandArguments: String
+    @Binding var pluginPackageJSON: String
+    @Binding var pluginUpdateTargetID: String
+    @Binding var pluginExistingPackageContext: String
     @State private var runTarget: CapabilityRunTarget?
     @State private var removalCandidate: PluginManifest?
 
@@ -2519,6 +2593,15 @@ private struct PluginLibraryCard: View {
                                 .font(.caption2)
                                 .foregroundStyle(AppTheme.muted)
                             if !plugin.id.hasPrefix("builtin.") {
+                                Button {
+                                    prepareAIUpdate(for: plugin)
+                                } label: {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                }
+                                .buttonStyle(.borderless)
+                                .foregroundStyle(AppTheme.muted)
+                                .help("Update plugin with AI")
+
                                 Button {
                                     model.exportPlugin(plugin)
                                 } label: {
@@ -2626,6 +2709,36 @@ private struct PluginLibraryCard: View {
         case "native": return "macwindow"
         default: return "puzzlepiece.extension"
         }
+    }
+
+    private func prepareAIUpdate(for plugin: PluginManifest) {
+        let capability = plugin.capabilities.first
+        let adapter = capability?.adapter
+        pluginName = plugin.name
+        pluginDescription = """
+        Update the installed local plugin \(plugin.name). Preserve its useful behavior, keep the same plugin id, and return a complete replacement package.
+        """
+        pluginKind = capability?.kind ?? "skill"
+        pluginRequiresApproval = capability?.requiresApproval ?? true
+        pluginURL = adapter?.url ?? ""
+        pluginMethod = adapter?.method ?? "POST"
+        pluginMCPMethod = adapter?.methodName ?? ""
+        pluginMCPToolName = adapter?.toolName ?? ""
+        pluginMCPInputSchemaJSON = inputSchemaJSON(for: capability)
+        pluginCommandPath = adapter?.command ?? ""
+        pluginCommandArguments = adapter?.arguments?.joined(separator: "\n") ?? ""
+        pluginPackageJSON = ""
+        pluginUpdateTargetID = plugin.id
+        pluginExistingPackageContext = model.vibeUpdateContext(for: plugin)
+        model.isVibePluginComposerPresented = true
+    }
+
+    private func inputSchemaJSON(for capability: PluginManifest.Capability?) -> String {
+        guard let inputSchema = capability?.inputSchema,
+              let data = try? JSONEncoder.pretty.encode(inputSchema) else {
+            return ""
+        }
+        return String(data: data, encoding: .utf8) ?? ""
     }
 }
 
