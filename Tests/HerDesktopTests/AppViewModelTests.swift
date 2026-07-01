@@ -151,6 +151,38 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(model.messages.last?.content, "我看过工作区，也整理好了计划。")
     }
 
+    func testPluginDraftToolResultReturnsStagedReviewContextToModel() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-plugin-draft-tool-result-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        let fakeLLM = FakeLLM(responses: [
+            .toolCall(
+                id: "call_plugin_draft",
+                name: "plugin_draft",
+                arguments: #"{"name":"Dialog Draft","description":"Created from model tool use.","capability_kind":"skill","requires_approval":true}"#
+            ),
+            .assistantText("草稿已经进入 review queue，我可以等你确认后安装。")
+        ])
+        let model = AppViewModel(config: config, cwd: cwd.path, agentLLM: fakeLLM)
+
+        await model.send("帮我生成一个本地扩展草稿")
+
+        let draft = try XCTUnwrap(model.generatedPluginDrafts.first)
+        XCTAssertEqual(draft.manifest.id, "local.dialog-draft")
+        XCTAssertEqual(fakeLLM.requests.count, 2)
+        let toolResult = try XCTUnwrap(fakeLLM.requests[1].last)
+        XCTAssertEqual(toolResult.role, "tool")
+        XCTAssertEqual(toolResult.name, "plugin_draft")
+        XCTAssertTrue(toolResult.content?.contains("draft_id: \(draft.id.uuidString)") == true)
+        XCTAssertTrue(toolResult.content?.contains("plugin.installDraft arguments") == true)
+        XCTAssertTrue(toolResult.content?.contains(#""plugin_id":"local.dialog-draft""#) == true)
+        XCTAssertFalse(toolResult.content?.contains(#""manifest""#) == true)
+        XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Package Draft") })
+        XCTAssertEqual(model.messages.last?.content, "草稿已经进入 review queue，我可以等你确认后安装。")
+    }
+
     func testSendRecordsNormalizedInteractionEventAndAudit() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-interaction-event-\(UUID().uuidString)", isDirectory: true)

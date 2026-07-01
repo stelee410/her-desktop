@@ -517,17 +517,20 @@ final class AppViewModel: ObservableObject {
         finishCapabilityActivity(activityID, result: result)
         refreshWebServiceArtifacts()
         captureExternalInboxEventIfNeeded(invocation: invocation, result: result)
-        let capturedPluginDraft = captureGeneratedPluginDraft(from: result, source: toolCall.function.name)
+        let capturedPluginDraftContent = captureGeneratedPluginDraft(from: result, source: toolCall.function.name)
         captureInstalledPluginIfNeeded(invocation: invocation, result: result, approved: false)
         captureRemovedPluginIfNeeded(invocation: invocation, result: result, approved: false)
-        if !capturedPluginDraft {
+        if capturedPluginDraftContent == nil {
             messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
         }
         auditCapabilityExecution(invocation: invocation, result: result, approved: false)
         Task {
-            await persistCapabilityMemory(invocation: invocation, result: result, approved: false)
+            let memoryResult = capturedPluginDraftContent.map {
+                CapabilityResult(title: "Plugin Package Draft", content: $0, requiresUserApproval: false)
+            } ?? result
+            await persistCapabilityMemory(invocation: invocation, result: memoryResult, approved: false)
         }
-        return ToolCallHandlingResult(content: result.content, needsApproval: false)
+        return ToolCallHandlingResult(content: capturedPluginDraftContent ?? result.content, needsApproval: false)
     }
 
     func setSpeakAssistantReplies(_ enabled: Bool) {
@@ -1065,15 +1068,18 @@ final class AppViewModel: ObservableObject {
         finishCapabilityActivity(activityID, result: result)
         refreshWebServiceArtifacts()
         captureExternalInboxEventIfNeeded(invocation: invocation, result: result)
-        let capturedPluginDraft = captureGeneratedPluginDraft(from: result, source: invocation.functionName)
+        let capturedPluginDraftContent = captureGeneratedPluginDraft(from: result, source: invocation.functionName)
         captureInstalledPluginIfNeeded(invocation: invocation, result: result, approved: false)
         captureRemovedPluginIfNeeded(invocation: invocation, result: result, approved: false)
-        if !capturedPluginDraft {
+        if capturedPluginDraftContent == nil {
             messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
         }
         auditCapabilityExecution(invocation: invocation, result: result, approved: false)
         Task {
-            await persistCapabilityMemory(invocation: invocation, result: result, approved: false)
+            let memoryResult = capturedPluginDraftContent.map {
+                CapabilityResult(title: "Plugin Package Draft", content: $0, requiresUserApproval: false)
+            } ?? result
+            await persistCapabilityMemory(invocation: invocation, result: memoryResult, approved: false)
         }
         saveSessionSnapshot()
         await reloadPlugins()
@@ -2613,23 +2619,21 @@ final class AppViewModel: ObservableObject {
     }
 
     @discardableResult
-    private func captureGeneratedPluginDraft(from result: CapabilityResult, source: String) -> Bool {
+    private func captureGeneratedPluginDraft(from result: CapabilityResult, source: String) -> String? {
         guard result.title == "Plugin Package Draft",
               let data = result.content.data(using: .utf8),
               let package = try? JSONDecoder().decode(PluginPackage.self, from: data) else {
-            return false
+            return nil
         }
         let documented = PluginPackageReviewDocumenter().documented(package)
         let draft = stageGeneratedPluginPackage(documented, source: source)
-        messages.append(ChatMessage(
-            role: .tool,
-            content: pluginDraftReviewContent(
-                title: "Plugin Package Draft",
-                draft: draft,
-                summary: "Staged \(documented.manifest.name) (\(documented.manifest.id)) for review."
-            )
-        ))
-        return true
+        let content = pluginDraftReviewContent(
+            title: "Plugin Package Draft",
+            draft: draft,
+            summary: "Staged \(documented.manifest.name) (\(documented.manifest.id)) for review."
+        )
+        messages.append(ChatMessage(role: .tool, content: content))
+        return content
     }
 
     private func captureInstalledPluginIfNeeded(
