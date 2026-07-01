@@ -38,9 +38,9 @@ flowchart TB
             session["session.json<br/>stable session id + transcript"]
             attachments["attachments/<br/>copied local inputs"]
             plugins["plugins/<br/>installed local extensions"]
-            drafts["plugin-drafts/<br/>vibe-coded packages awaiting review"]
-            workspace["workspace/<br/>artifacts, exports, generated files"]
-            audit["audit + inbox events<br/>observable side effects"]
+        drafts["plugin-drafts/<br/>vibe-coded packages awaiting review"]
+        workspace["workspace/<br/>artifacts, exports, generated files"]
+        audit["audit + inbox + plugin events<br/>observable side effects"]
         end
 
         subgraph extensions["Extension Runtime"]
@@ -179,7 +179,7 @@ flowchart TB
         localSession[".her/session.json"]
         localPlugins[".her/plugins + plugin-drafts"]
         localData[".her/attachments + workspace artifacts"]
-        localAudit[".her/audit + inbox events"]
+        localAudit[".her/logs + inbox events<br/>audit + plugin lifecycle"]
     end
 
     subgraph L5["Layer 5 - Independent Agent Services"]

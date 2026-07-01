@@ -33,6 +33,11 @@ enum HerWorkspacePaths {
             .appendingPathComponent("logs", isDirectory: true)
     }
 
+    static func pluginEventsPath(cwd: String = FileManager.default.currentDirectoryPath) -> URL {
+        logsDirectory(cwd: cwd)
+            .appendingPathComponent("plugin-events.jsonl")
+    }
+
     static func inboxDirectory(cwd: String = FileManager.default.currentDirectoryPath) -> URL {
         localAgentDirectory(cwd: cwd)
             .appendingPathComponent("inbox", isDirectory: true)

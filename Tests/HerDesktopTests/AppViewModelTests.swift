@@ -590,6 +590,12 @@ final class AppViewModelTests: XCTestCase {
             event.type == "plugin.removed"
             && event.metadata["pluginID"] == "local.disposable-helper"
         })
+        let pluginEvents = try PluginEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(pluginEvents.contains { event in
+            event.action == .removed
+            && event.pluginID == "local.disposable-helper"
+            && event.source == "plugin-library"
+        })
     }
 
     func testExportPluginWritesPluginPackageToWorkspace() async throws {
@@ -720,6 +726,15 @@ final class AppViewModelTests: XCTestCase {
             event.type == "plugin.draft_staged"
             && event.metadata["pluginID"] == "local.meeting-brief"
         })
+        let pluginEvents = try PluginEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(pluginEvents.contains { event in
+            event.action == .staged
+            && event.pluginID == "local.meeting-brief"
+            && event.source == "vibe-composer"
+            && event.capabilityCount == 1
+            && event.fileCount == 2
+        })
+        XCTAssertEqual(model.pluginEvents.first?.action, .staged)
     }
 
     func testAIVibePluginGenerationSendsBriefToAgentLLM() async throws {
@@ -851,6 +866,40 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(model.auditEvents.first?.metadata["pluginID"], "local.new")
     }
 
+    func testViewModelLoadsRecentPluginLifecycleEventsOnStartup() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-load-plugin-events-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        let store = PluginEventStore(cwd: cwd.path)
+        try store.append(PluginLifecycleEvent(
+            createdAt: Date(timeIntervalSince1970: 100),
+            action: .staged,
+            pluginID: "local.old",
+            pluginName: "Old",
+            version: "0.1.0",
+            source: "vibe-composer",
+            summary: "Older event.",
+            capabilityCount: 1,
+            fileCount: 2
+        ))
+        try store.append(PluginLifecycleEvent(
+            createdAt: Date(timeIntervalSince1970: 200),
+            action: .installed,
+            pluginID: "local.new",
+            pluginName: "New",
+            version: "0.2.0",
+            source: "plugin.draft",
+            summary: "Newer event.",
+            capabilityCount: 2,
+            fileCount: 3
+        ))
+
+        let model = AppViewModel(config: .empty, cwd: cwd.path)
+
+        XCTAssertEqual(model.pluginEvents.map(\.pluginID), ["local.new", "local.old"])
+        XCTAssertEqual(model.pluginEvents.first?.action, .installed)
+    }
+
     func testGeneratedPluginDraftCanBeInstalledFromReviewQueue() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-generated-plugin-\(UUID().uuidString)", isDirectory: true)
@@ -883,6 +932,12 @@ final class AppViewModelTests: XCTestCase {
             event.type == "plugin.installed"
             && event.metadata["pluginID"] == "local.generated"
             && event.metadata["source"] == "plugin.draft"
+        })
+        let pluginEvents = try PluginEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(pluginEvents.contains { event in
+            event.action == .installed
+            && event.pluginID == "local.generated"
+            && event.source == "plugin.draft"
         })
     }
 
@@ -919,6 +974,12 @@ final class AppViewModelTests: XCTestCase {
             event.type == "plugin.updated"
             && event.metadata["pluginID"] == "local.generated"
             && event.metadata["source"] == "plugin.draft"
+        })
+        let pluginEvents = try PluginEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(pluginEvents.contains { event in
+            event.action == .updated
+            && event.pluginID == "local.generated"
+            && event.source == "plugin.draft"
         })
     }
 

@@ -47,6 +47,7 @@ struct InspectorView: View {
                 CapabilityActivityCard()
                 WebServiceArtifactsCard()
                 GeneratedPluginDraftsCard()
+                PluginLifecycleCard()
                 AuditTrailCard()
                 StateCard()
                 PluginCreatorCard(
@@ -912,6 +913,97 @@ private struct PluginDraftReviewSheet: View {
         case .medium: return AppTheme.coral
         case .high: return .red
         }
+    }
+}
+
+private struct PluginLifecycleCard: View {
+    @EnvironmentObject private var model: AppViewModel
+
+    var body: some View {
+        Panel(title: "Plugin Timeline", trailing: model.pluginEvents.isEmpty ? "Quiet" : "\(model.pluginEvents.count)") {
+            if model.pluginEvents.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .foregroundStyle(AppTheme.muted)
+                    Text("Plugin drafts, installs, updates, exports, and removals will be tracked here.")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.muted)
+                    Spacer()
+                }
+                .padding(.vertical, 4)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(model.pluginEvents) { event in
+                        HStack(alignment: .top, spacing: 9) {
+                            Image(systemName: icon(for: event.action))
+                                .foregroundStyle(color(for: event.action))
+                                .frame(width: 18)
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack(spacing: 6) {
+                                    Text(event.pluginName)
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(AppTheme.ink)
+                                        .lineLimit(1)
+                                    Text(event.action.title)
+                                        .font(.caption2.weight(.medium))
+                                        .foregroundStyle(color(for: event.action))
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Color.white.opacity(0.52))
+                                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                                    Spacer(minLength: 0)
+                                }
+                                Text("\(event.pluginID) · v\(event.version) · \(event.source)")
+                                    .font(.caption2)
+                                    .foregroundStyle(AppTheme.muted)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .textSelection(.enabled)
+                                Text(event.summary)
+                                    .font(.caption2)
+                                    .foregroundStyle(AppTheme.muted)
+                                    .lineLimit(2)
+                                Text("\(countLabel(event.capabilityCount, singular: "capability")) · \(countLabel(event.fileCount, singular: "file")) · \(event.createdAt.formatted(date: .omitted, time: .shortened))")
+                                    .font(.caption2)
+                                    .foregroundStyle(AppTheme.muted.opacity(0.82))
+                                    .lineLimit(1)
+                            }
+                        }
+                        .padding(9)
+                        .background(Color.white.opacity(0.42))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+            }
+        }
+        .onAppear {
+            model.refreshPluginEvents()
+        }
+    }
+
+    private func icon(for action: PluginLifecycleAction) -> String {
+        switch action {
+        case .staged: return "shippingbox"
+        case .installed: return "checkmark.seal"
+        case .updated: return "arrow.triangle.2.circlepath"
+        case .discarded: return "trash"
+        case .removed: return "minus.circle"
+        case .exported: return "square.and.arrow.up"
+        case .importFailed, .installFailed, .removeFailed, .exportFailed: return "exclamationmark.triangle"
+        }
+    }
+
+    private func color(for action: PluginLifecycleAction) -> Color {
+        switch action {
+        case .staged, .updated: return AppTheme.coral
+        case .installed, .exported: return .green
+        case .discarded, .removed: return AppTheme.muted
+        case .importFailed, .installFailed, .removeFailed, .exportFailed: return .red
+        }
+    }
+
+    private func countLabel(_ count: Int, singular: String) -> String {
+        "\(count) \(singular)\(count == 1 ? "" : "s")"
     }
 }
 

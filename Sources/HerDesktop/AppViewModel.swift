@@ -15,6 +15,7 @@ final class AppViewModel: ObservableObject {
     @Published var plugins: [PluginManifest]
     @Published var pendingApprovals: [PendingApproval]
     @Published var generatedPluginDrafts: [GeneratedPluginDraft]
+    @Published var pluginEvents: [PluginLifecycleEvent]
     @Published var capabilityActivities: [CapabilityActivity]
     @Published var auditEvents: [AuditEvent]
     @Published var interactionEvents: [InteractionEvent]
@@ -34,6 +35,7 @@ final class AppViewModel: ObservableObject {
     private var sessionStore: SessionStore
     private var auditStore: AuditEventStore
     private var inboxEventStore: InboxEventStore
+    private var pluginEventStore: PluginEventStore
     private var pluginDraftStore: PluginDraftStore
     private var webServiceArtifactStore: WebServiceArtifactStore
     private var attachmentStore: AttachmentStore
@@ -77,6 +79,7 @@ final class AppViewModel: ObservableObject {
         self.sessionStore = sessionStore
         self.auditStore = AuditEventStore(cwd: cwd)
         self.inboxEventStore = InboxEventStore(cwd: cwd)
+        self.pluginEventStore = PluginEventStore(cwd: cwd)
         self.webServiceArtifactStore = WebServiceArtifactStore(cwd: cwd)
         let pluginDraftStore = PluginDraftStore(cwd: cwd)
         self.pluginDraftStore = pluginDraftStore
@@ -94,6 +97,7 @@ final class AppViewModel: ObservableObject {
         self.plugins = loadedPlugins
         self.pendingApprovals = []
         self.generatedPluginDrafts = restoredDrafts
+        self.pluginEvents = AppViewModel.recentPluginEvents(from: (try? pluginEventStore.loadAll()) ?? [])
         self.capabilityActivities = []
         self.auditEvents = AppViewModel.recentAuditEvents(from: (try? auditStore.loadAll()) ?? [])
         self.interactionEvents = AppViewModel.recentInteractionEvents(from: (try? inboxEventStore.loadAll()) ?? [])
@@ -591,6 +595,14 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    func refreshPluginEvents() {
+        do {
+            pluginEvents = Self.recentPluginEvents(from: try pluginEventStore.loadAll())
+        } catch {
+            lastError = "Could not load plugin lifecycle log: \(error.localizedDescription)"
+        }
+    }
+
     func refreshWebServiceArtifacts() {
         do {
             webServiceArtifacts = try webServiceArtifactStore.loadAll()
@@ -884,6 +896,13 @@ final class AppViewModel: ObservableObject {
                     "pluginName": plugin.name,
                     "capabilityCount": String(plugin.capabilities.count)
                 ]
+            )
+            recordPluginLifecycleEvent(
+                action: .removed,
+                manifest: plugin,
+                fileCount: 0,
+                source: "plugin-library",
+                summary: "Removed local plugin \(plugin.name)."
             )
             saveSessionSnapshot()
             await reloadPlugins()
@@ -1884,6 +1903,7 @@ final class AppViewModel: ObservableObject {
         )
         auditStore = AuditEventStore(cwd: runtimeCwd)
         inboxEventStore = InboxEventStore(cwd: runtimeCwd)
+        pluginEventStore = PluginEventStore(cwd: runtimeCwd)
         webServiceArtifactStore = WebServiceArtifactStore(cwd: runtimeCwd)
         serviceHealthVerifier = ServiceHealthVerifier(config: updated)
         plugins = pluginRegistry.loadPlugins()
@@ -2064,6 +2084,74 @@ final class AppViewModel: ObservableObject {
         merged["capabilityCount"] = String(package.manifest.capabilities.count)
         merged["fileCount"] = String(package.files.count)
         audit(type: type, summary: summary, metadata: merged)
+        if let action = Self.pluginLifecycleAction(for: type) {
+            recordPluginLifecycleEvent(
+                action: action,
+                package: package,
+                source: metadata["source"] ?? "unknown",
+                summary: summary,
+                metadata: metadata
+            )
+        }
+    }
+
+    private func recordPluginLifecycleEvent(
+        action: PluginLifecycleAction,
+        package: PluginPackage,
+        source: String,
+        summary: String,
+        metadata: [String: String] = [:]
+    ) {
+        recordPluginLifecycleEvent(
+            action: action,
+            manifest: package.manifest,
+            fileCount: package.files.count,
+            source: source,
+            summary: summary,
+            metadata: metadata
+        )
+    }
+
+    private func recordPluginLifecycleEvent(
+        action: PluginLifecycleAction,
+        manifest: PluginManifest,
+        fileCount: Int,
+        source: String,
+        summary: String,
+        metadata: [String: String] = [:]
+    ) {
+        do {
+            let event = PluginLifecycleEvent(
+                action: action,
+                pluginID: manifest.id,
+                pluginName: manifest.name,
+                version: manifest.version,
+                source: source,
+                summary: summary,
+                capabilityCount: manifest.capabilities.count,
+                fileCount: fileCount,
+                metadata: metadata
+            )
+            try pluginEventStore.append(event)
+            pluginEvents = Self.recentPluginEvents(from: pluginEvents + [event])
+        } catch {
+            lastError = "Could not write plugin lifecycle log: \(error.localizedDescription)"
+        }
+    }
+
+    private static func pluginLifecycleAction(for auditType: String) -> PluginLifecycleAction? {
+        switch auditType {
+        case "plugin.draft_staged": return .staged
+        case "plugin.installed": return .installed
+        case "plugin.updated": return .updated
+        case "plugin.draft_discarded": return .discarded
+        case "plugin.exported": return .exported
+        case "plugin.install_failed": return .installFailed
+        case "plugin.remove_failed": return .removeFailed
+        case "plugin.export_failed": return .exportFailed
+        case "plugin.package_import_failed": return .importFailed
+        default: return nil
+        }
     }
 
     private func auditCapabilityExecution(
@@ -2123,6 +2211,10 @@ final class AppViewModel: ObservableObject {
     }
 
     private static func recentAuditEvents(from events: [AuditEvent], limit: Int = 12) -> [AuditEvent] {
+        Array(events.sorted { $0.createdAt > $1.createdAt }.prefix(limit))
+    }
+
+    private static func recentPluginEvents(from events: [PluginLifecycleEvent], limit: Int = 12) -> [PluginLifecycleEvent] {
         Array(events.sorted { $0.createdAt > $1.createdAt }.prefix(limit))
     }
 
