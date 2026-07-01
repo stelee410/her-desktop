@@ -399,8 +399,9 @@ flowchart LR
 2. AgentLLMAPI 是模型和多模态网关，负责模型路由、上游健康、成本、协议兼容和媒体生成。
 3. AgentMem 是长期关系与记忆中枢，负责检索、写入、关系视图、后台反思和记忆衰减。
 4. Infiniti-Agent 的价值不应直接复制 CLI，而应抽象为运行纪律：分层 prompt、有界 tool loop、会话健康、外部桥接、潜意识式 writeback。
-5. 插件系统是扩展性的核心。新能力应该先成为 manifest + adapter + approval contract，而不是先写进 AppViewModel。
-6. 外部入口，如 Oyii、Discord、WeChat、浏览器、Email，应该先进 Inbox/Event，再由用户或策略决定是否回复和执行。
+5. 记忆不是单层事实库。当前对话、已验证 tool result、App 状态、AgentMem 检索、Companion State、Dream Context、plugin lifecycle event 都是不同可信度的 evidence layer；检索不到不等于不存在。
+6. 插件系统是扩展性的核心。新能力应该先成为 manifest + adapter + approval contract，而不是先写进 AppViewModel。
+7. 外部入口，如 Oyii、Discord、WeChat、浏览器、Email，应该先进 Inbox/Event，再由用户或策略决定是否回复和执行。
 
 ## MCP Adapter Contract
 

@@ -108,6 +108,7 @@ Built-in extensions use the same manifest shape and are bundled from `Sources/He
 Built-in skill resources, such as `workspace-plan.SKILL.md` and `partner-brief.SKILL.md`, live in `Sources/HerDesktop/Resources/` and are read through the same `skillFile` adapter contract as installed plugins.
 Native built-ins that still need AppViewModel state, such as `reflection.snapshot`, also enter through a manifest-declared capability so UI actions, model tool calls, approval policy, audit logs, and future local plugins keep one mental model.
 Prompt defaults are bundled from `Sources/HerDesktop/Resources/SOUL.md` and `Sources/HerDesktop/Resources/INFINITI.md`; workspace-local `SOUL.md`, `AGENTS.md`, `AGENT.md`, `INFINITI.md`, `CLAUDE.md`, or `.claude/CLAUDE.md` still override them.
+The system prompt follows Infiniti Agent's memory layering discipline: current chat, verified tool results, app state, AgentMem retrieval, companion profile, Dream Context, and plugin lifecycle events are separate evidence layers. Retrieved memory is relevant background, not a complete database dump; missing retrieval should not be treated as proof that a user preference, plugin state, or prior decision does not exist.
 
 When adding a new built-in extension, keep it plugin-first:
 

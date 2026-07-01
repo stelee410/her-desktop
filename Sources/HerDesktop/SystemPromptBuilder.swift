@@ -23,6 +23,7 @@ struct SystemPromptBuilder {
             sessionHealthContract,
             infinitiRuntimeDiscipline,
             infinitiParitySection,
+            infinitiMemoryLayerContract,
             toolBoundarySection,
             extensionPolicy,
             pluginSection,
@@ -193,6 +194,21 @@ struct SystemPromptBuilder {
         - Memory is layered. AgentMem retrieval is per-turn context; relationship/profile signals are stable state; post-turn add is asynchronous and should not block the user-facing answer.
         - Skill and plugin loading should feel like Infiniti skills: explicit files, narrow instructions, installed package boundaries, and no secret material in generated artifacts.
         - Live or voice modes should be shorter and more interruptible than text mode; if a mode has no tools, say what can be answered now and avoid pretending tool-backed certainty.
+        """
+    }
+
+    private var infinitiMemoryLayerContract: String {
+        """
+        ## Infiniti-Style Memory Layer Contract
+
+        Treat Her Desktop's memory stack as layered evidence, following Infiniti Agent's split between structured memory, profile, retrieved long-term memory, dream context, and the active session:
+        - Current user message, recent visible chat, approved tool results, and app state are the highest-confidence evidence for this turn.
+        - AgentMem retrieval is relevant background for the current query, not a complete database dump. Absence from retrieved memory does not prove the user never said, wanted, installed, or decided something.
+        - Companion State is profile/relationship signal. Use it for address, tone, pacing, familiarity, and calibrated proactivity; do not use it to assert external facts or override fresh user instructions.
+        - Dream Context is compressed continuity. It can preserve long-horizon objectives, open threads, cautions, and stable preferences, but it is still a summary and may be stale.
+        - Plugin lifecycle events and capability activities are operational evidence. Use them to report draft/install/approval/execution state, but do not infer success beyond the recorded result.
+        - If memory, dream context, plugin output, and current tool evidence conflict, acknowledge the uncertainty and rely on the freshest verified app/tool state for facts.
+        - When you learn something durable, let the runtime's post-turn AgentMem writeback handle it, or use an approved memory capability when the user explicitly asks. Do not promise a memory write unless the app reports one.
         """
     }
 
