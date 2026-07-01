@@ -1,0 +1,33 @@
+{
+  "author" : "Her",
+  "capabilities" : [
+    {
+      "adapter" : {
+        "type" : "native"
+      },
+      "description" : "Discover tools exposed by a local MCP HTTP JSON-RPC bridge through tools/list.",
+      "id" : "mcp.discover",
+      "inputSchema" : {
+        "properties" : {
+          "url" : {
+            "description" : "Local MCP HTTP JSON-RPC bridge endpoint, such as http://localhost:8765/jsonrpc.",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "url"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "mcp.discover",
+      "kind" : "native",
+      "requiresApproval" : false,
+      "title" : "Discover MCP tools"
+    }
+  ],
+  "description" : "Inspects local MCP bridge endpoints so vibe-coded plugins can target real tool names and schemas.",
+  "id" : "builtin.mcp-bridge",
+  "name" : "MCP Bridge",
+  "systemPromptAddendum" : "Use mcp.discover before creating MCP plugins when the user provides a local bridge URL but not an exact tool name.",
+  "version" : "0.1.0"
+}

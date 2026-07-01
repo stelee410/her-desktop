@@ -1,0 +1,608 @@
+import Foundation
+import SwiftUI
+
+enum ConnectionState: String, Codable {
+    case offline
+    case ready
+    case listening
+    case thinking
+    case speaking
+    case working
+    case error
+}
+
+enum WorkspaceSection: String, CaseIterable, Identifiable, Codable, Equatable {
+    case today
+    case memory
+    case projects
+    case tools
+    case agents
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .today: return "Today"
+        case .memory: return "Memory"
+        case .projects: return "Projects"
+        case .tools: return "Tools"
+        case .agents: return "Agents"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .today: return "sun.max"
+        case .memory: return "doc.text"
+        case .projects: return "briefcase"
+        case .tools: return "square.grid.2x2"
+        case .agents: return "circle.hexagongrid"
+        }
+    }
+}
+
+enum MessageRole: String, Codable, Identifiable {
+    case user
+    case assistant
+    case system
+    case tool
+
+    var id: String { rawValue }
+}
+
+struct ChatMessage: Identifiable, Codable, Equatable {
+    var id: UUID = UUID()
+    var role: MessageRole
+    var content: String
+    var createdAt: Date = Date()
+    var attachments: [MessageAttachment] = []
+
+    init(
+        id: UUID = UUID(),
+        role: MessageRole,
+        content: String,
+        createdAt: Date = Date(),
+        attachments: [MessageAttachment] = []
+    ) {
+        self.id = id
+        self.role = role
+        self.content = content
+        self.createdAt = createdAt
+        self.attachments = attachments
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case role
+        case content
+        case createdAt
+        case attachments
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        role = try container.decode(MessageRole.self, forKey: .role)
+        content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        attachments = try container.decodeIfPresent([MessageAttachment].self, forKey: .attachments) ?? []
+    }
+}
+
+struct MessageAttachment: Identifiable, Codable, Equatable {
+    enum Kind: String, Codable, Equatable {
+        case text
+        case image
+        case video
+        case audio
+        case pdf
+        case archive
+        case other
+    }
+
+    var id: UUID = UUID()
+    var originalName: String
+    var storedPath: String
+    var kind: Kind
+    var mimeType: String?
+    var byteCount: Int64
+    var summary: String
+    var textPreview: String?
+
+    var displayName: String {
+        originalName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? storedPath : originalName
+    }
+
+    var contextDescription: String {
+        var lines = [
+            "- \(displayName)",
+            "  kind: \(kind.rawValue)",
+            "  bytes: \(byteCount)",
+            "  stored_path: \(storedPath)",
+            "  summary: \(summary)"
+        ]
+        if let mimeType, !mimeType.isEmpty {
+            lines.insert("  mime_type: \(mimeType)", at: 3)
+        }
+        if let textPreview, !textPreview.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append("  text_preview:")
+            lines.append(textPreview.indentedForAttachmentContext())
+        }
+        return lines.joined(separator: "\n")
+    }
+}
+
+extension Array where Element == MessageAttachment {
+    var contextDescription: String {
+        guard !isEmpty else { return "" }
+        return """
+        Attached files:
+        \(map(\.contextDescription).joined(separator: "\n"))
+        """
+    }
+}
+
+private extension String {
+    func indentedForAttachmentContext() -> String {
+        components(separatedBy: .newlines)
+            .prefix(80)
+            .map { "    \($0)" }
+            .joined(separator: "\n")
+    }
+}
+
+struct RunningTask: Identifiable, Codable, Equatable {
+    var id: UUID = UUID()
+    var title: String
+    var progress: Double
+    var state: String
+}
+
+enum CapabilityActivityStatus: String, Codable, Equatable {
+    case pending
+    case running
+    case done
+    case failed
+    case denied
+}
+
+struct CapabilityActivity: Identifiable, Codable, Equatable {
+    var id: UUID = UUID()
+    var capabilityID: String
+    var functionName: String
+    var title: String
+    var status: CapabilityActivityStatus
+    var summary: String
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+}
+
+struct MemorySignal: Codable, Equatable {
+    var trust: Double
+    var confidence: Double
+    var moodLabel: String
+    var relationshipSummary: String
+
+    static let empty = MemorySignal(
+        trust: 0.72,
+        confidence: 0.68,
+        moodLabel: "Calm",
+        relationshipSummary: "Warming up"
+    )
+}
+
+struct AgentProfile: Codable, Equatable {
+    var displayName: String
+    var userDisplayName: String
+    var relationship: String
+    var memoryID: String
+    var known: Bool
+
+    static func empty(userID: String = "local-user") -> AgentProfile {
+        AgentProfile(
+            displayName: "Her",
+            userDisplayName: userID,
+            relationship: "Warming up",
+            memoryID: "",
+            known: false
+        )
+    }
+
+    static func fromRelationshipPayload(_ object: [String: Any], fallbackUserID: String) -> AgentProfile {
+        let stage = stringValue(object["stage"])
+        let bond = object["bond"] as? [String: Any]
+        let known = boolValue(object["known"]) ?? stage.map { $0 != "stranger" } ?? false
+        let displayName = stringValue(object["display_name"])
+            ?? stringValue(object["agent_display_name"])
+            ?? "Her"
+        let userDisplayName = stringValue(object["user_display_name"])
+            ?? stringValue(object["user_name"])
+            ?? stringValue(object["user_id"])
+            ?? fallbackUserID
+        let relationship = stringValue(object["relationship"])
+            ?? stringValue(object["relationship_summary"])
+            ?? relationshipSummary(stage: stage, bond: bond)
+            ?? (known ? "Known memory profile" : "Getting acquainted")
+        return AgentProfile(
+            displayName: displayName,
+            userDisplayName: userDisplayName,
+            relationship: relationship,
+            memoryID: stringValue(object["memory_id"]) ?? "",
+            known: known
+        )
+    }
+
+    private static func relationshipSummary(stage: String?, bond: [String: Any]?) -> String? {
+        guard let stage, !stage.isEmpty else { return nil }
+        var pieces = ["Stage: \(stage)"]
+        if let trust = doubleValue(bond?["trust"]) {
+            pieces.append("trust \(formatScore(trust))")
+        }
+        if let familiarity = doubleValue(bond?["familiarity"]) {
+            pieces.append("familiarity \(formatScore(familiarity))")
+        }
+        if let affection = doubleValue(bond?["affection"]) {
+            pieces.append("affection \(formatScore(affection))")
+        }
+        return pieces.joined(separator: " · ")
+    }
+
+    private static func stringValue(_ raw: Any?) -> String? {
+        guard let raw else { return nil }
+        if let string = raw as? String {
+            let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        return String(describing: raw)
+    }
+
+    private static func boolValue(_ raw: Any?) -> Bool? {
+        switch raw {
+        case let bool as Bool:
+            return bool
+        case let number as NSNumber:
+            return number.boolValue
+        case let string as String:
+            let lower = string.lowercased()
+            if ["true", "yes", "1"].contains(lower) { return true }
+            if ["false", "no", "0"].contains(lower) { return false }
+            return nil
+        default:
+            return nil
+        }
+    }
+
+    private static func doubleValue(_ raw: Any?) -> Double? {
+        switch raw {
+        case let double as Double:
+            return double
+        case let float as Float:
+            return Double(float)
+        case let int as Int:
+            return Double(int)
+        case let number as NSNumber:
+            return number.doubleValue
+        case let string as String:
+            return Double(string)
+        default:
+            return nil
+        }
+    }
+
+    private static func formatScore(_ value: Double) -> String {
+        String(format: "%.2f", value)
+    }
+}
+
+struct ToolDescriptor: Identifiable, Codable, Equatable {
+    var id: String
+    var name: String
+    var kind: String
+    var summary: String
+    var enabled: Bool
+}
+
+enum ServiceHealthState: String, Codable, Equatable {
+    case unknown
+    case checking
+    case online
+    case offline
+}
+
+struct ServiceHealth: Identifiable, Codable, Equatable {
+    var id: String
+    var name: String
+    var kind: String
+    var baseURL: URL?
+    var state: ServiceHealthState
+    var summary: String
+    var checkedAt: Date?
+}
+
+struct WebServiceArtifact: Identifiable, Equatable {
+    struct Request: Equatable {
+        var method: String
+        var url: String
+        var status: Int
+    }
+
+    struct Item: Identifiable, Equatable {
+        var id: String { "\(index)-\(file ?? url ?? type)" }
+        var index: Int
+        var type: String
+        var url: String?
+        var file: String?
+    }
+
+    var id: String
+    var capabilityID: String
+    var createdAt: Date
+    var request: Request
+    var manifestPath: String
+    var responseFile: String
+    var artifacts: [Item]
+
+    var localFiles: [String] {
+        artifacts.compactMap(\.file)
+    }
+
+    var remoteURLs: [String] {
+        artifacts.compactMap(\.url)
+    }
+
+    var primaryLocalImagePath: String? {
+        localFiles.first { path in
+            ["png", "jpg", "jpeg", "webp", "gif"].contains(URL(fileURLWithPath: path).pathExtension.lowercased())
+        }
+    }
+}
+
+struct HerAppConfig: Codable, Equatable {
+    var agentLLMBaseURL: URL
+    var agentLLMAPIKey: String
+    var agentLLMModel: String
+    var agentMemBaseURL: URL
+    var agentMemAPIKey: String
+    var agentCode: String
+    var userID: String
+    var pluginDirectory: String
+    var speakAssistantReplies: Bool
+    var speechVoiceIdentifier: String
+
+    var hasLLMKey: Bool { !agentLLMAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var hasMemKey: Bool { !agentMemAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    init(
+        agentLLMBaseURL: URL,
+        agentLLMAPIKey: String,
+        agentLLMModel: String,
+        agentMemBaseURL: URL,
+        agentMemAPIKey: String,
+        agentCode: String,
+        userID: String,
+        pluginDirectory: String,
+        speakAssistantReplies: Bool = false,
+        speechVoiceIdentifier: String = ""
+    ) {
+        self.agentLLMBaseURL = agentLLMBaseURL
+        self.agentLLMAPIKey = agentLLMAPIKey
+        self.agentLLMModel = agentLLMModel
+        self.agentMemBaseURL = agentMemBaseURL
+        self.agentMemAPIKey = agentMemAPIKey
+        self.agentCode = agentCode
+        self.userID = userID
+        self.pluginDirectory = pluginDirectory
+        self.speakAssistantReplies = speakAssistantReplies
+        self.speechVoiceIdentifier = speechVoiceIdentifier
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case agentLLMBaseURL
+        case agentLLMAPIKey
+        case agentLLMModel
+        case agentMemBaseURL
+        case agentMemAPIKey
+        case agentCode
+        case userID
+        case pluginDirectory
+        case speakAssistantReplies
+        case speechVoiceIdentifier
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        agentLLMBaseURL = try container.decode(URL.self, forKey: .agentLLMBaseURL)
+        agentLLMAPIKey = try container.decode(String.self, forKey: .agentLLMAPIKey)
+        agentLLMModel = try container.decode(String.self, forKey: .agentLLMModel)
+        agentMemBaseURL = try container.decode(URL.self, forKey: .agentMemBaseURL)
+        agentMemAPIKey = try container.decode(String.self, forKey: .agentMemAPIKey)
+        agentCode = try container.decode(String.self, forKey: .agentCode)
+        userID = try container.decode(String.self, forKey: .userID)
+        pluginDirectory = try container.decode(String.self, forKey: .pluginDirectory)
+        speakAssistantReplies = try container.decodeIfPresent(Bool.self, forKey: .speakAssistantReplies) ?? false
+        speechVoiceIdentifier = try container.decodeIfPresent(String.self, forKey: .speechVoiceIdentifier) ?? ""
+    }
+
+    static let empty = HerAppConfig(
+        agentLLMBaseURL: URL(string: "https://agentllm.linkyun.co")!,
+        agentLLMAPIKey: "",
+        agentLLMModel: "linkyun-default",
+        agentMemBaseURL: URL(string: "https://agentmem.oyii.ai")!,
+        agentMemAPIKey: "",
+        agentCode: "her-desktop",
+        userID: NSUserName().isEmpty ? "local-user" : NSUserName(),
+        pluginDirectory: ".her/plugins"
+    )
+}
+
+struct HerAppConfigDraft: Equatable {
+    var agentLLMBaseURL: String
+    var agentLLMAPIKey: String
+    var agentLLMModel: String
+    var agentMemBaseURL: String
+    var agentMemAPIKey: String
+    var agentCode: String
+    var userID: String
+    var pluginDirectory: String
+    var speakAssistantReplies: Bool
+    var speechVoiceIdentifier: String
+
+    init(config: HerAppConfig) {
+        self.agentLLMBaseURL = config.agentLLMBaseURL.absoluteString
+        self.agentLLMAPIKey = config.agentLLMAPIKey
+        self.agentLLMModel = config.agentLLMModel
+        self.agentMemBaseURL = config.agentMemBaseURL.absoluteString
+        self.agentMemAPIKey = config.agentMemAPIKey
+        self.agentCode = config.agentCode
+        self.userID = config.userID
+        self.pluginDirectory = config.pluginDirectory
+        self.speakAssistantReplies = config.speakAssistantReplies
+        self.speechVoiceIdentifier = config.speechVoiceIdentifier
+    }
+
+    func makeConfig() throws -> HerAppConfig {
+        let llmURL = try parseServiceURL(agentLLMBaseURL)
+        let memURL = try parseServiceURL(agentMemBaseURL)
+        return HerAppConfig(
+            agentLLMBaseURL: llmURL,
+            agentLLMAPIKey: agentLLMAPIKey.trimmingCharacters(in: .whitespacesAndNewlines),
+            agentLLMModel: agentLLMModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "linkyun-default" : agentLLMModel.trimmingCharacters(in: .whitespacesAndNewlines),
+            agentMemBaseURL: memURL,
+            agentMemAPIKey: agentMemAPIKey.trimmingCharacters(in: .whitespacesAndNewlines),
+            agentCode: agentCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "her-desktop" : agentCode.trimmingCharacters(in: .whitespacesAndNewlines),
+            userID: userID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "local-user" : userID.trimmingCharacters(in: .whitespacesAndNewlines),
+            pluginDirectory: pluginDirectory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? ".her/plugins" : pluginDirectory.trimmingCharacters(in: .whitespacesAndNewlines),
+            speakAssistantReplies: speakAssistantReplies,
+            speechVoiceIdentifier: speechVoiceIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    private func parseServiceURL(_ raw: String) throws -> URL {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: text),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              url.host?.isEmpty == false else {
+            throw ConfigError.invalidURL
+        }
+        return url
+    }
+
+    enum ConfigError: LocalizedError {
+        case invalidURL
+
+        var errorDescription: String? {
+            "AgentLLM and AgentMem base URLs must be valid URLs."
+        }
+    }
+}
+
+struct PluginManifest: Identifiable, Codable, Equatable {
+    struct CapabilityAdapter: Codable, Equatable {
+        var type: String
+        var url: String? = nil
+        var method: String? = nil
+        var methodName: String? = nil
+        var toolName: String? = nil
+        var headers: [String: String]? = nil
+        var bodyTemplate: String? = nil
+        var skillFile: String? = nil
+        var command: String? = nil
+        var arguments: [String]? = nil
+        var workingDirectory: String? = nil
+        var timeoutSeconds: Double? = nil
+    }
+
+    struct Capability: Codable, Equatable, Identifiable {
+        var id: String
+        var title: String
+        var kind: String
+        var invocation: String
+        var requiresApproval: Bool
+        var description: String? = nil
+        var inputSchema: [String: JSONValue]? = nil
+        var adapter: CapabilityAdapter? = nil
+    }
+
+    var id: String
+    var name: String
+    var version: String
+    var description: String
+    var author: String?
+    var systemPromptAddendum: String?
+    var capabilities: [Capability]
+}
+
+struct PluginPackage: Codable, Equatable {
+    struct FileItem: Codable, Equatable {
+        var path: String
+        var content: String
+    }
+
+    var manifest: PluginManifest
+    var files: [FileItem]
+}
+
+struct GeneratedPluginDraft: Identifiable, Codable, Equatable {
+    var id: UUID = UUID()
+    var package: PluginPackage
+    var source: String
+    var createdAt: Date = Date()
+
+    var manifest: PluginManifest { package.manifest }
+}
+
+enum JSONValue: Codable, Equatable, Sendable {
+    case string(String)
+    case number(Double)
+    case bool(Bool)
+    case object([String: JSONValue])
+    case array([JSONValue])
+    case null
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+        } else if let value = try? container.decode(Double.self) {
+            self = .number(value)
+        } else if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else if let value = try? container.decode([JSONValue].self) {
+            self = .array(value)
+        } else {
+            self = .object(try container.decode([String: JSONValue].self))
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let value):
+            try container.encode(value)
+        case .number(let value):
+            try container.encode(value)
+        case .bool(let value):
+            try container.encode(value)
+        case .object(let value):
+            try container.encode(value)
+        case .array(let value):
+            try container.encode(value)
+        case .null:
+            try container.encodeNil()
+        }
+    }
+
+    var anyValue: Any {
+        switch self {
+        case .string(let value): return value
+        case .number(let value): return value
+        case .bool(let value): return value
+        case .object(let value): return value.mapValues(\.anyValue)
+        case .array(let value): return value.map(\.anyValue)
+        case .null: return NSNull()
+        }
+    }
+}

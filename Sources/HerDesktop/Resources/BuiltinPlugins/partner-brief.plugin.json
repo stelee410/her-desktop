@@ -1,0 +1,34 @@
+{
+  "author" : "Her",
+  "capabilities" : [
+    {
+      "adapter" : {
+        "skillFile" : "partner-brief.SKILL.md",
+        "type" : "skill"
+      },
+      "description" : "Create a concise brief that balances emotional context, work intent, risks, and next actions.",
+      "id" : "partner.brief",
+      "inputSchema" : {
+        "properties" : {
+          "request" : {
+            "description" : "Messy idea, project situation, or decision to turn into a partner brief.",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "request"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "partner.brief",
+      "kind" : "skill",
+      "requiresApproval" : false,
+      "title" : "Prepare partner brief"
+    }
+  ],
+  "description" : "Turns a messy request into a compact companion-and-work brief with next actions.",
+  "id" : "builtin.partner-brief",
+  "name" : "Partner Brief",
+  "systemPromptAddendum" : "Use Partner Brief when the user asks to clarify strategy, priorities, risks, or an execution brief.",
+  "version" : "0.1.0"
+}

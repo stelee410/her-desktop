@@ -1,0 +1,111 @@
+{
+  "author" : "Her",
+  "capabilities" : [
+    {
+      "adapter" : {
+        "skillFile" : "vibe-plugin-creator.SKILL.md",
+        "type" : "skill"
+      },
+      "id" : "plugin.draft",
+      "inputSchema" : {
+        "properties" : {
+          "capability_kind" : {
+            "description" : "Adapter kind for the generated capability.",
+            "enum" : [
+              "skill",
+              "mcp",
+              "webservice",
+              "native",
+              "command"
+            ],
+            "type" : "string"
+          },
+          "command" : {
+            "description" : "Optional command executable path for command capabilities.",
+            "type" : "string"
+          },
+          "command_arguments" : {
+            "description" : "Optional fixed argument templates for command capabilities, one per line.",
+            "type" : "string"
+          },
+          "description" : {
+            "description" : "What the plugin should do.",
+            "type" : "string"
+          },
+          "method" : {
+            "description" : "Optional HTTP method for webservice capabilities.",
+            "enum" : [
+              "GET",
+              "POST"
+            ],
+            "type" : "string"
+          },
+          "method_name" : {
+            "description" : "Optional JSON-RPC method name for MCP bridge capabilities.",
+            "type" : "string"
+          },
+          "name" : {
+            "description" : "Human-readable plugin name.",
+            "type" : "string"
+          },
+          "requires_approval" : {
+            "description" : "Whether the generated capability should ask before execution.",
+            "type" : "boolean"
+          },
+          "tool_name" : {
+            "description" : "Optional MCP tool name when method_name is tools/call.",
+            "type" : "string"
+          },
+          "url" : {
+            "description" : "Optional web service endpoint or local MCP bridge URL.",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "name",
+          "description"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "plugin.draft",
+      "kind" : "skill",
+      "requiresApproval" : false,
+      "title" : "Draft plugin manifest"
+    },
+    {
+      "adapter" : {
+        "type" : "native"
+      },
+      "id" : "plugin.install",
+      "inputSchema" : {
+        "properties" : {
+          "confirmed" : {
+            "description" : "True only after the user explicitly confirms installation.",
+            "type" : "boolean"
+          },
+          "manifest_json" : {
+            "description" : "A complete plugin manifest JSON object.",
+            "type" : "string"
+          },
+          "package_json" : {
+            "description" : "Preferred: a PluginPackage JSON object with manifest and files.",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "confirmed"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "plugin.install",
+      "kind" : "native",
+      "requiresApproval" : true,
+      "title" : "Install generated plugin"
+    }
+  ],
+  "description" : "Turns a conversational extension idea into a plugin manifest and installable capability package.",
+  "id" : "builtin.vibe-plugin-creator",
+  "name" : "Vibe Plugin Creator",
+  "systemPromptAddendum" : "For plugin creation, produce a small manifest first, then implementation files after approval.",
+  "version" : "0.1.0"
+}

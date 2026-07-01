@@ -1,0 +1,12 @@
+{
+  "agentLLMBaseURL": "https://agentllm.linkyun.co",
+  "agentLLMAPIKey": "sk-REPLACE_ME",
+  "agentLLMModel": "linkyun-default",
+  "agentMemBaseURL": "https://agentmem.oyii.ai",
+  "agentMemAPIKey": "mem_REPLACE_ME",
+  "agentCode": "her-desktop",
+  "userID": "stelee",
+  "pluginDirectory": ".her/plugins",
+  "speakAssistantReplies": false,
+  "speechVoiceIdentifier": ""
+}

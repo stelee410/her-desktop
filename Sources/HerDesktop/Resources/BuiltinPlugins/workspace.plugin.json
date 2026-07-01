@@ -1,0 +1,53 @@
+{
+  "author" : "Her",
+  "capabilities" : [
+    {
+      "adapter" : {
+        "type" : "native"
+      },
+      "id" : "workspace.inspect",
+      "inputSchema" : {
+        "properties" : {
+          "max_files" : {
+            "description" : "Maximum number of workspace files to summarize.",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "invocation" : "workspace.inspect",
+      "kind" : "native",
+      "requiresApproval" : false,
+      "title" : "Inspect workspace"
+    },
+    {
+      "adapter" : {
+        "skillFile" : "workspace-plan.SKILL.md",
+        "type" : "skill"
+      },
+      "description" : "Prepare a scoped implementation plan from local workspace context.",
+      "id" : "workspace.plan",
+      "inputSchema" : {
+        "properties" : {
+          "request" : {
+            "description" : "Planning request or implementation goal.",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "request"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "workspace.plan",
+      "kind" : "skill",
+      "requiresApproval" : false,
+      "title" : "Plan code work"
+    }
+  ],
+  "description" : "Read local context, summarize files, and prepare work plans with explicit approval.",
+  "id" : "builtin.workspace",
+  "name" : "Workspace",
+  "systemPromptAddendum" : "Workspace actions require user approval before file mutation or shell execution.",
+  "version" : "0.1.0"
+}

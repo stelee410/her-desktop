@@ -1,0 +1,12 @@
+.DS_Store
+.build/
+.swiftpm/
+.her/
+.env
+.env.*
+.codegraph/
+DerivedData/
+Config/her-desktop.local.json
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/

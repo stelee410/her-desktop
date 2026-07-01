@@ -1,0 +1,53 @@
+{
+  "author" : "Her",
+  "capabilities" : [
+    {
+      "adapter" : {
+        "bodyTemplate" : "{\n  \"model\": {{json:model|gpt-image-1}},\n  \"prompt\": {{json:prompt}},\n  \"size\": {{json:size|1024x1024}},\n  \"n\": 1\n}",
+        "headers" : {
+          "Authorization" : "Bearer {{agent_llm_api_key}}",
+          "Content-Type" : "application/json"
+        },
+        "method" : "POST",
+        "type" : "webservice",
+        "url" : "{{agent_llm_base_url}}/v1/images/generations"
+      },
+      "description" : "Generate an image through AgentLLMAPI's OpenAI-compatible image endpoint. Use after user approval because it can incur network usage and cost.",
+      "id" : "agentllm.image.generate",
+      "inputSchema" : {
+        "properties" : {
+          "model" : {
+            "description" : "Optional image model or route alias. Defaults to gpt-image-1.",
+            "type" : "string"
+          },
+          "prompt" : {
+            "description" : "Detailed visual prompt for image generation.",
+            "type" : "string"
+          },
+          "size" : {
+            "description" : "Image size supported by the configured AgentLLM route.",
+            "enum" : [
+              "1024x1024",
+              "1024x1536",
+              "1536x1024"
+            ],
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "prompt"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "agentllm.image.generate",
+      "kind" : "webservice",
+      "requiresApproval" : true,
+      "title" : "Generate image"
+    }
+  ],
+  "description" : "AgentLLMAPI-backed creative media tools exposed through Her Desktop's plugin runtime.",
+  "id" : "builtin.agentllm-media",
+  "name" : "AgentLLM Media",
+  "systemPromptAddendum" : "Use AgentLLM Media when the user explicitly asks to generate visual assets. Ask for approval before spending network/model resources, and summarize returned URLs or artifacts clearly.",
+  "version" : "0.1.0"
+}
