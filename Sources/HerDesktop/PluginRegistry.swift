@@ -648,7 +648,7 @@ final class PluginRegistry {
                 version: "0.1.0",
                 description: "Surfaces product readiness, service health, plugin runtime state, and continuity signals through the plugin contract.",
                 author: "Her",
-                systemPromptAddendum: "Use product.diagnostics when the user asks whether Her Desktop is ready, configured, healthy, missing setup, or safe to extend. Treat it as read-only app state and never ask it to reveal secrets.",
+                systemPromptAddendum: "Use product.diagnostics when the user asks whether Her Desktop is ready, configured, healthy, missing setup, or safe to extend. Use product.exportDiagnostics when the user asks to export, save, share, or hand off a diagnostics/readiness report. Never reveal API keys or Memory keys.",
                 capabilities: [
                     .init(
                         id: "product.diagnostics",
@@ -660,6 +660,24 @@ final class PluginRegistry {
                         inputSchema: [
                             "type": .string("object"),
                             "properties": .object([:])
+                        ],
+                        adapter: .init(type: "native")
+                    ),
+                    .init(
+                        id: "product.exportDiagnostics",
+                        title: "Export product diagnostics",
+                        kind: "native",
+                        invocation: "product.exportDiagnostics",
+                        requiresApproval: true,
+                        description: "Write a local Markdown product diagnostics report after approval without exposing API keys or Memory keys.",
+                        inputSchema: [
+                            "type": .string("object"),
+                            "properties": .object([
+                                "filename": .object([
+                                    "type": .string("string"),
+                                    "description": .string("Optional Markdown filename for the diagnostics report.")
+                                ])
+                            ])
                         ],
                         adapter: .init(type: "native")
                     )
@@ -851,6 +869,10 @@ final class PluginRegistry {
             ])
         case "product.diagnostics":
             return objectSchema([:])
+        case "product.exportDiagnostics":
+            return objectSchema([
+                "filename": field("string", "Optional Markdown filename for the diagnostics report.")
+            ])
         case "inbox.capture":
             return objectSchema([
                 "attachment_paths": field("string", "Optional local file paths from the bridge host, one path per line."),

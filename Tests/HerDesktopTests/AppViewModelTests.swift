@@ -129,6 +129,44 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.pendingApprovals.isEmpty)
     }
 
+    func testProductDiagnosticsExportRequestsApproval() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-product-diagnostics-export-approval-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(config: .empty, cwd: root.path)
+
+        await model.requestProductDiagnosticsExport(filename: "handoff.md")
+
+        let approval = try XCTUnwrap(model.pendingApprovals.first)
+        XCTAssertEqual(approval.invocation.capabilityID, "product.exportDiagnostics")
+        XCTAssertEqual(approval.invocation.arguments["filename"] as? String, "handoff.md")
+        XCTAssertTrue(model.messages.contains { $0.content.contains("Approval Required") })
+    }
+
+    func testApprovedProductDiagnosticsExportWritesReportWithoutSecrets() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-product-diagnostics-export-\(UUID().uuidString)", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.agentLLMAPIKey = "configured-llm-key"
+        config.agentMemAPIKey = "configured-memory-key"
+        let model = AppViewModel(config: config, cwd: root.path)
+
+        await model.requestProductDiagnosticsExport(filename: "../handoff report.md")
+        let approval = try XCTUnwrap(model.pendingApprovals.first)
+        await model.approve(approval)
+
+        let reportURL = HerWorkspacePaths.diagnosticsDirectory(cwd: root.path)
+            .appendingPathComponent("handoff-report.md")
+        let content = try String(contentsOf: reportURL, encoding: .utf8)
+        XCTAssertTrue(content.contains("# Her Desktop Product Diagnostics"))
+        XCTAssertTrue(content.contains("product_readiness:"))
+        XCTAssertTrue(content.contains("agentllm_key_configured: true"))
+        XCTAssertTrue(content.contains("agentmem_memory_key_configured: true"))
+        XCTAssertFalse(content.contains("configured-llm-key"))
+        XCTAssertFalse(content.contains("configured-memory-key"))
+        XCTAssertTrue(model.messages.contains { $0.content.contains("Product Diagnostics Exported") })
+        XCTAssertTrue(model.pendingApprovals.isEmpty)
+    }
+
     func testDictationUpdatesDraftAndStopsWithoutSending() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-dictation-\(UUID().uuidString)", isDirectory: true)

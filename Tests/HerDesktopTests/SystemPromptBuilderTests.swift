@@ -106,6 +106,7 @@ final class SystemPromptBuilderTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Use `workspace.writeTextFile`"))
         XCTAssertTrue(prompt.contains("Use `workspace.replaceText`"))
         XCTAssertTrue(prompt.contains("Use `product.diagnostics`"))
+        XCTAssertTrue(prompt.contains("Use `product.exportDiagnostics`"))
         XCTAssertTrue(prompt.contains("reuse the returned `plugin.draft arguments`"))
         XCTAssertTrue(prompt.contains("Use `plugin.listDrafts`"))
         XCTAssertTrue(prompt.contains("Use `plugin.listInstalled`"))

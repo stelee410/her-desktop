@@ -28,6 +28,11 @@ enum HerWorkspacePaths {
             .appendingPathComponent("plugin-exports", isDirectory: true)
     }
 
+    static func diagnosticsDirectory(cwd: String = FileManager.default.currentDirectoryPath) -> URL {
+        workspaceDirectory(cwd: cwd)
+            .appendingPathComponent("diagnostics", isDirectory: true)
+    }
+
     static func webServiceArtifactDirectory(cwd: String = FileManager.default.currentDirectoryPath) -> URL {
         workspaceDirectory(cwd: cwd)
             .appendingPathComponent("webservice-artifacts", isDirectory: true)

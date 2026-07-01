@@ -596,6 +596,13 @@ final class CapabilityRuntimeTests: XCTestCase {
                 .requiresApproval,
             false
         )
+        XCTAssertEqual(
+            plugins.first { $0.id == "builtin.product-diagnostics" }?
+                .capabilities
+                .first { $0.id == "product.exportDiagnostics" }?
+                .requiresApproval,
+            true
+        )
     }
 
     func testBundledBuiltInCapabilitiesDeclareInputSchemasInManifests() {
@@ -627,6 +634,10 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(
             CapabilityInputSchema.fields(for: registry.capability(id: "product.diagnostics")!).map(\.name),
             []
+        )
+        XCTAssertEqual(
+            CapabilityInputSchema.fields(for: registry.capability(id: "product.exportDiagnostics")!).map(\.name),
+            ["filename"]
         )
     }
 

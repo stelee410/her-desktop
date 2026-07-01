@@ -242,6 +242,12 @@ final class CapabilityExecutor {
                 content: "Product diagnostics are handled by the Her Desktop app state because readiness depends on live services, queues, plugins, and session context.",
                 requiresUserApproval: false
             )
+        case "product.exportDiagnostics":
+            return CapabilityResult(
+                title: "Product Diagnostics Export Unavailable",
+                content: "Product diagnostics export is handled by the Her Desktop app state because the report is generated from live readiness, services, queues, plugins, and session context.",
+                requiresUserApproval: false
+            )
         case "inbox.capture":
             return executeInboxCapture(arguments: invocation.arguments)
         case "agentmem.query":
@@ -695,6 +701,13 @@ final class CapabilityExecutor {
                 return CapabilityResult(
                     title: "Product Diagnostics Unavailable",
                     content: "Product diagnostics are handled by the Her Desktop app state because readiness depends on live services, queues, plugins, and session context.",
+                    requiresUserApproval: false
+                )
+            }
+            if capability.id == "product.exportDiagnostics" {
+                return CapabilityResult(
+                    title: "Product Diagnostics Export Unavailable",
+                    content: "Product diagnostics export is handled by the Her Desktop app state because the report is generated from live readiness, services, queues, plugins, and session context.",
                     requiresUserApproval: false
                 )
             }
