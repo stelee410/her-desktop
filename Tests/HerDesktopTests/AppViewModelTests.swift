@@ -1945,6 +1945,23 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(lastMessage.contains("\"confirmed\":true"))
     }
 
+    func testPluginListDraftsUsesDisambiguatedCallableFunctionNames() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-plugin-list-drafts-collision-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        let model = AppViewModel(config: config, cwd: cwd.path)
+        model.stageGeneratedPluginPackage(collidingPackage(), source: "plugin.draft")
+
+        await model.runCapability(capabilityID: "plugin.listDrafts", arguments: [:])
+
+        let lastMessage = try XCTUnwrap(model.messages.last?.content)
+        XCTAssertTrue(lastMessage.contains("Collision (local.collision)"))
+        XCTAssertTrue(lastMessage.contains("callable_functions: local_same_run_"))
+        XCTAssertFalse(lastMessage.contains("callable_functions: local_same_run\n"))
+    }
+
     func testPluginInstallDraftFailureListsRetryArguments() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-plugin-install-draft-retry-\(UUID().uuidString)", isDirectory: true)
@@ -2548,6 +2565,24 @@ final class AppViewModelTests: XCTestCase {
                 ]
             ),
             files: [.init(path: "SKILL.md", content: skillContent ?? "# \(name)")]
+        )
+    }
+
+    private func collidingPackage() -> PluginPackage {
+        PluginPackage(
+            manifest: PluginManifest(
+                id: "local.collision",
+                name: "Collision",
+                version: "0.1.0",
+                description: "Collision helper.",
+                author: "Test",
+                systemPromptAddendum: nil,
+                capabilities: [
+                    .init(id: "local.same.run", title: "Run Dot", kind: "skill", invocation: "local.same.run", requiresApproval: false),
+                    .init(id: "local_same_run", title: "Run Underscore", kind: "skill", invocation: "local_same_run", requiresApproval: false)
+                ]
+            ),
+            files: []
         )
     }
 

@@ -74,8 +74,9 @@ struct ActiveWorkSummaryBuilder {
 
         let recentDrafts = generatedDrafts.prefix(maxGeneratedDrafts).map { draft in
             let review = PluginPackageReview(package: draft.package)
+            let functionNamesByCapabilityID = CapabilityToolCatalog.functionNamesByCapabilityID(for: draft.manifest)
             let functions = draft.manifest.capabilities
-                .map { CapabilityToolCatalog.functionName(for: $0.id) }
+                .map { functionNamesByCapabilityID[$0.id] ?? CapabilityToolCatalog.functionName(for: $0.id) }
                 .joined(separator: ", ")
             let installPreview = review.installStepSummaries
                 .prefix(3)

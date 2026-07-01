@@ -159,6 +159,23 @@ final class ActiveWorkSummaryBuilderTests: XCTestCase {
         XCTAssertTrue(summary.contains("Adds local_research-scout_run"))
     }
 
+    func testBuildUsesDisambiguatedFunctionNamesForCollidingDraftCapabilities() {
+        let draft = GeneratedPluginDraft(
+            package: collidingPackage(),
+            source: "plugin.draft"
+        )
+
+        let summary = ActiveWorkSummaryBuilder(draftSummaryLimit: 260).build(
+            tasks: [],
+            activities: [],
+            generatedDrafts: [draft]
+        )
+
+        XCTAssertTrue(summary.contains("Collision (local.collision)"))
+        XCTAssertTrue(summary.contains("functions: local_same_run_"))
+        XCTAssertFalse(summary.contains("functions: local_same_run."))
+    }
+
     func testBuildIncludesCurrentWorkPlanAsStateData() {
         let plan = WorkPlan(
             goal: "Make workspace planning durable.",
@@ -182,5 +199,23 @@ final class ActiveWorkSummaryBuilderTests: XCTestCase {
         XCTAssertTrue(summary.contains("[done] Add plan store"))
         XCTAssertTrue(summary.contains("[in_progress] Show plan in Projects"))
         XCTAssertTrue(summary.contains("Verification: swift test --filter WorkPlanStoreTests"))
+    }
+
+    private func collidingPackage() -> PluginPackage {
+        PluginPackage(
+            manifest: PluginManifest(
+                id: "local.collision",
+                name: "Collision",
+                version: "0.1.0",
+                description: "Collision helper.",
+                author: "Test",
+                systemPromptAddendum: nil,
+                capabilities: [
+                    .init(id: "local.same.run", title: "Run Dot", kind: "skill", invocation: "local.same.run", requiresApproval: false),
+                    .init(id: "local_same_run", title: "Run Underscore", kind: "skill", invocation: "local_same_run", requiresApproval: false)
+                ]
+            ),
+            files: []
+        )
     }
 }

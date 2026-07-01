@@ -2088,8 +2088,9 @@ final class AppViewModel: ObservableObject {
 
         let summaries = generatedPluginDrafts.map { draft in
             let review = PluginPackageReview(package: draft.package)
+            let functionNamesByCapabilityID = CapabilityToolCatalog.functionNamesByCapabilityID(for: draft.manifest)
             let functions = draft.manifest.capabilities
-                .map { CapabilityToolCatalog.functionName(for: $0.id) }
+                .map { functionNamesByCapabilityID[$0.id] ?? CapabilityToolCatalog.functionName(for: $0.id) }
                 .joined(separator: ", ")
             let installArguments = """
             {"plugin_id":"\(draft.manifest.id)","draft_id":"\(draft.id.uuidString)","confirmed":true}
@@ -2134,8 +2135,9 @@ final class AppViewModel: ObservableObject {
         }
 
         let summaries = localPlugins.map { plugin in
+            let functionNamesByCapabilityID = CapabilityToolCatalog.functionNamesByCapabilityID(for: plugin)
             let functions = plugin.capabilities
-                .map { CapabilityToolCatalog.functionName(for: $0.id) }
+                .map { functionNamesByCapabilityID[$0.id] ?? CapabilityToolCatalog.functionName(for: $0.id) }
                 .joined(separator: ", ")
             let exportArguments = """
             {"plugin_id":"\(plugin.id)","confirmed":true}
@@ -2177,8 +2179,9 @@ final class AppViewModel: ObservableObject {
         do {
             let package = try pluginRegistry.package(pluginID: pluginID)
             let review = PluginPackageReview(package: package)
+            let functionNamesByCapabilityID = CapabilityToolCatalog.functionNamesByCapabilityID(for: package.manifest)
             let capabilityLines = package.manifest.capabilities.map { capability in
-                let functionName = CapabilityToolCatalog.functionName(for: capability.id)
+                let functionName = functionNamesByCapabilityID[capability.id] ?? CapabilityToolCatalog.functionName(for: capability.id)
                 let adapter = capability.adapter?.type ?? capability.kind
                 let approval = capability.requiresApproval ? "approval_required" : "no_approval"
                 let fields = CapabilityInputSchema.fields(for: capability)
@@ -3150,8 +3153,9 @@ final class AppViewModel: ObservableObject {
         summary: String
     ) -> String {
         let review = PluginPackageReview(package: draft.package)
+        let functionNamesByCapabilityID = CapabilityToolCatalog.functionNamesByCapabilityID(for: draft.manifest)
         let functions = draft.manifest.capabilities
-            .map { CapabilityToolCatalog.functionName(for: $0.id) }
+            .map { functionNamesByCapabilityID[$0.id] ?? CapabilityToolCatalog.functionName(for: $0.id) }
             .joined(separator: ", ")
         let installArguments = """
         {"plugin_id":"\(draft.manifest.id)","draft_id":"\(draft.id.uuidString)","confirmed":true}

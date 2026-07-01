@@ -33,6 +33,16 @@ final class PluginPackageReviewTests: XCTestCase {
         })
     }
 
+    func testInstallStepSummariesUseDisambiguatedFunctionNames() {
+        let review = PluginPackageReview(package: collidingPackage())
+
+        XCTAssertTrue(review.installStepSummaries.contains { step in
+            step.title == "Callable Functions"
+            && step.detail.contains("local_same_run_")
+            && !step.detail.contains("local_same_run, local_same_run")
+        })
+    }
+
     func testCommandPackageIsHighRisk() {
         let review = PluginPackageReview(package: package(
             kind: "command",
@@ -428,6 +438,24 @@ final class PluginPackageReviewTests: XCTestCase {
                 ]
             ),
             files: files
+        )
+    }
+
+    private func collidingPackage() -> PluginPackage {
+        PluginPackage(
+            manifest: PluginManifest(
+                id: "local.collision",
+                name: "Collision",
+                version: "0.1.0",
+                description: "Collision package.",
+                author: "Test",
+                systemPromptAddendum: nil,
+                capabilities: [
+                    .init(id: "local.same.run", title: "Run Dot", kind: "skill", invocation: "local.same.run", requiresApproval: false),
+                    .init(id: "local_same_run", title: "Run Underscore", kind: "skill", invocation: "local_same_run", requiresApproval: false)
+                ]
+            ),
+            files: []
         )
     }
 }

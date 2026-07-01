@@ -74,6 +74,14 @@ struct CapabilityToolCatalog {
         return clipped.isEmpty ? "capability" : clipped
     }
 
+    static func functionNamesByCapabilityID(for manifest: PluginManifest) -> [String: String] {
+        Dictionary(
+            uniqueKeysWithValues: build(from: [manifest]).functionToCapability.map { functionName, capabilityID in
+                (capabilityID, functionName)
+            }
+        )
+    }
+
     private static func uniqueFunctionName(baseName: String, capabilityID: String?, usedNames: inout Set<String>) -> String {
         let resolved: String
         if let capabilityID {

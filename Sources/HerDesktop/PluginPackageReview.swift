@@ -129,8 +129,9 @@ struct PluginPackageReview: Equatable {
 
     private static func installStepSummaries(for package: PluginPackage) -> [InstallStepSummary] {
         let manifest = package.manifest
+        let functionNamesByCapabilityID = CapabilityToolCatalog.functionNamesByCapabilityID(for: manifest)
         let functionNames = manifest.capabilities
-            .map { CapabilityToolCatalog.functionName(for: $0.id) }
+            .map { functionNamesByCapabilityID[$0.id] ?? CapabilityToolCatalog.functionName(for: $0.id) }
             .joined(separator: ", ")
         let approvalDetail: String
         if manifest.capabilities.isEmpty {
