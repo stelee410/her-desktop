@@ -763,6 +763,7 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(add?.kind, "native")
         XCTAssertEqual(add?.adapter?.type, "native")
         XCTAssertEqual(add?.requiresApproval, true)
+        XCTAssertEqual(CapabilityInputSchema.fields(for: add!).map(\.name), ["agent_response", "source", "summary", "user_input"])
     }
 
     func testRegistryInstallsPackageFiles() throws {
@@ -2174,7 +2175,7 @@ final class CapabilityRuntimeTests: XCTestCase {
             XCTAssertEqual(request.httpMethod, "POST")
             XCTAssertEqual(request.url?.absoluteString, "https://agentmem.test/v1/memory/query")
             XCTAssertEqual(request.value(forHTTPHeaderField: "X-Memory-API-Key"), "mem_test_key")
-            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Agent-API-Key"), "mem_test_key")
+            XCTAssertNil(request.value(forHTTPHeaderField: "X-Agent-API-Key"))
             let body = try XCTUnwrap(Self.bodyData(from: request))
             let object = try JSONSerialization.jsonObject(with: body) as? [String: Any]
             XCTAssertNil(object?["agent_code"])
@@ -2234,7 +2235,9 @@ final class CapabilityRuntimeTests: XCTestCase {
             XCTAssertNil(object?["user_id"])
             XCTAssertEqual(object?["user_input"] as? String, userInput)
             XCTAssertEqual(object?["agent_response"] as? String, agentResponse)
-            XCTAssertNil(object?["metadata"])
+            let metadata = object?["metadata"] as? [String: Any]
+            XCTAssertEqual(metadata?["source"] as? String, "test")
+            XCTAssertEqual(metadata?["capability_id"] as? String, "agentmem.add")
             let response = HTTPURLResponse(
                 url: request.url!,
                 statusCode: 200,
@@ -2265,6 +2268,68 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertTrue(result.content.contains("status: queued"))
         XCTAssertTrue(result.content.contains("task_id: task_123"))
         XCTAssertTrue(result.content.contains("user_input_characters: \(userInput.count)"))
+        XCTAssertFalse(result.content.contains("mem_test_key"))
+        XCTAssertFalse(result.requiresUserApproval)
+    }
+
+    @MainActor
+    func testAgentMemAddSummaryUsesV7SummarySchema() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-agentmem-summary-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        var config = HerAppConfig.empty
+        config.agentMemBaseURL = URL(string: "https://agentmem.test")!
+        config.agentMemAPIKey = "mem_test_key"
+        config.agentCode = "her-test"
+        config.userID = "user-test"
+        let summary = "User prefers concise implementation reviews; unresolved work is the desktop AgentMem integration."
+        let session = mockSession { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.url?.absoluteString, "https://agentmem.test/v1/memory/add")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Memory-API-Key"), "mem_test_key")
+            XCTAssertNil(request.value(forHTTPHeaderField: "X-Agent-API-Key"))
+            XCTAssertNotNil(request.value(forHTTPHeaderField: "Idempotency-Key"))
+            let body = try XCTUnwrap(Self.bodyData(from: request))
+            let object = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+            XCTAssertEqual(object?["summary"] as? String, summary)
+            XCTAssertNil(object?["user_input"])
+            XCTAssertNil(object?["agent_response"])
+            XCTAssertNil(object?["agent_code"])
+            XCTAssertNil(object?["user_id"])
+            let metadata = object?["metadata"] as? [String: Any]
+            XCTAssertEqual(metadata?["source"] as? String, "test-summary")
+            XCTAssertEqual(metadata?["capability_id"] as? String, "agentmem.add")
+            XCTAssertEqual(metadata?["writeback_mode"] as? String, "summary")
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data(#"{"status":"queued","task_id":"task_summary"}"#.utf8))
+        }
+        let executor = CapabilityExecutor(
+            registry: PluginRegistry(config: config),
+            config: config,
+            baseDirectory: root.path,
+            urlSession: session
+        )
+
+        let result = await executor.execute(CapabilityInvocation(
+            toolCallID: "call_mem_summary",
+            functionName: "agentmem_add",
+            capabilityID: "agentmem.add",
+            arguments: [
+                "summary": summary,
+                "source": "test-summary"
+            ]
+        ))
+
+        XCTAssertEqual(result.title, "AgentMem Add Result")
+        XCTAssertTrue(result.content.contains("status: queued"))
+        XCTAssertTrue(result.content.contains("task_id: task_summary"))
+        XCTAssertTrue(result.content.contains("mode: summary"))
+        XCTAssertTrue(result.content.contains("summary_characters: \(summary.count)"))
         XCTAssertFalse(result.content.contains("mem_test_key"))
         XCTAssertFalse(result.requiresUserApproval)
     }

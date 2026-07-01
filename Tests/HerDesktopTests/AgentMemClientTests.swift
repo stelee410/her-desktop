@@ -45,7 +45,7 @@ final class AgentMemClientTests: XCTestCase {
             XCTAssertEqual(request.timeoutInterval, 12)
             XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
             XCTAssertEqual(request.value(forHTTPHeaderField: "X-Memory-API-Key"), "mem_test")
-            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Agent-API-Key"), "mem_test")
+            XCTAssertNil(request.value(forHTTPHeaderField: "X-Agent-API-Key"))
             XCTAssertNotNil(request.value(forHTTPHeaderField: "Idempotency-Key"))
 
             let body = try XCTUnwrap(Self.bodyData(from: request))
@@ -55,7 +55,8 @@ final class AgentMemClientTests: XCTestCase {
             XCTAssertEqual(object?["session_id"] as? String, "session-1")
             XCTAssertEqual(object?["user_input"] as? String, "hello")
             XCTAssertEqual(object?["agent_response"] as? String, "hi")
-            XCTAssertNil(object?["metadata"])
+            let metadata = object?["metadata"] as? [String: Any]
+            XCTAssertEqual(metadata?["surface"] as? String, "mac")
 
             let response = HTTPURLResponse(
                 url: request.url!,
@@ -78,6 +79,42 @@ final class AgentMemClientTests: XCTestCase {
         XCTAssertEqual(response.taskID, "task-1")
     }
 
+    func testAddSummaryUsesAgentMemV7SummarySchema() async throws {
+        var config = HerAppConfig.empty
+        config.agentMemBaseURL = URL(string: "https://agentmem.test")!
+        config.agentMemAPIKey = "mem_test"
+
+        let session = mockSession { request in
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.url?.absoluteString, "https://agentmem.test/v1/memory/add")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Memory-API-Key"), "mem_test")
+            XCTAssertNotNil(request.value(forHTTPHeaderField: "Idempotency-Key"))
+
+            let body = try XCTUnwrap(Self.bodyData(from: request))
+            let object = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+            XCTAssertEqual(object?["session_id"] as? String, "session-summary")
+            XCTAssertEqual(object?["summary"] as? String, "User prefers concise architecture critique.")
+            XCTAssertNil(object?["user_input"])
+            XCTAssertNil(object?["agent_response"])
+            XCTAssertNil(object?["agent_code"])
+            XCTAssertNil(object?["user_id"])
+            let metadata = object?["metadata"] as? [String: Any]
+            XCTAssertEqual(metadata?["writeback_mode"] as? String, "summary")
+
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data(#"{"status":"queued","task_id":"task-summary"}"#.utf8))
+        }
+        let client = AgentMemClient(config: config, session: session)
+
+        let response = try await client.addSummary(
+            "User prefers concise architecture critique.",
+            sessionID: "session-summary",
+            metadata: ["writeback_mode": "summary"]
+        )
+
+        XCTAssertEqual(response.taskID, "task-summary")
+    }
+
     func testQueryReadsKeyBoundMemoryContext() async throws {
         var config = HerAppConfig.empty
         config.agentMemBaseURL = URL(string: "https://agentmem.test")!
@@ -89,7 +126,8 @@ final class AgentMemClientTests: XCTestCase {
             XCTAssertEqual(request.httpMethod, "POST")
             XCTAssertEqual(request.url?.absoluteString, "https://agentmem.test/v1/memory/query")
             XCTAssertEqual(request.timeoutInterval, 12)
-            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Agent-API-Key"), "mem_test")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Memory-API-Key"), "mem_test")
+            XCTAssertNil(request.value(forHTTPHeaderField: "X-Agent-API-Key"))
 
             let body = try XCTUnwrap(Self.bodyData(from: request))
             let object = try JSONSerialization.jsonObject(with: body) as? [String: Any]
@@ -116,7 +154,7 @@ final class AgentMemClientTests: XCTestCase {
         XCTAssertEqual(response.timingMs, 4.2)
     }
 
-    func testQueryFallsBackToScopedPayloadWhenDevAgentMemRequiresUserID() async throws {
+    func testQueryDoesNotFallbackToScopedPayloadWhenAgentMemRejectsMissingUserID() async throws {
         var config = HerAppConfig.empty
         config.agentMemBaseURL = URL(string: "https://agentmem.test")!
         config.agentMemAPIKey = "mem_test"
@@ -134,19 +172,21 @@ final class AgentMemClientTests: XCTestCase {
                 let response = HTTPURLResponse(url: request.url!, statusCode: 422, httpVersion: nil, headerFields: nil)!
                 return (response, Data(#"{"detail":[{"type":"missing","loc":["body","user_id"],"msg":"Field required"}]}"#.utf8))
             }
-            XCTAssertEqual(object?["agent_code"] as? String, "her-desktop")
-            XCTAssertEqual(object?["user_id"] as? String, "stelee")
-            XCTAssertEqual(object?["session_id"] as? String, "session-legacy")
-            XCTAssertEqual(object?["query"] as? String, "architecture")
-            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
-            return (response, Data(#"{"injected_context":"legacy context","retrieved_memories":[],"timing_ms":9.1}"#.utf8))
+            XCTFail("AgentMem V7 data-plane calls must not retry with user_id or agent_code.")
+            let response = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!
+            return (response, Data())
         }
         let client = AgentMemClient(config: config, session: session)
 
-        let response = try await client.query("architecture", sessionID: "session-legacy", topK: 2)
+        do {
+            _ = try await client.query("architecture", sessionID: "session-legacy", topK: 2)
+            XCTFail("Expected query to surface the V7 validation error.")
+        } catch ServiceError.httpStatus(let status, let body) {
+            XCTAssertEqual(status, 422)
+            XCTAssertTrue(body.contains("user_id"))
+        }
 
-        XCTAssertEqual(attempt, 2)
-        XCTAssertEqual(response.injectedContext, "legacy context")
+        XCTAssertEqual(attempt, 1)
     }
 
     func testRelationshipUsesMemoryKeyBoundRelationshipEndpoint() async throws {
@@ -160,7 +200,8 @@ final class AgentMemClientTests: XCTestCase {
             XCTAssertEqual(request.httpMethod, "GET")
             XCTAssertEqual(request.url?.path, "/v1/memory/relationship")
             XCTAssertEqual(request.timeoutInterval, 12)
-            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Agent-API-Key"), "mem_test")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Memory-API-Key"), "mem_test")
+            XCTAssertNil(request.value(forHTTPHeaderField: "X-Agent-API-Key"))
 
             let response = HTTPURLResponse(
                 url: request.url!,
@@ -203,7 +244,7 @@ final class AgentMemClientTests: XCTestCase {
         XCTAssertEqual(mood?["label"] as? String, "焦虑警觉")
     }
 
-    func testAddFallsBackToScopedPayloadWhenDevAgentMemRequiresUserID() async throws {
+    func testAddDoesNotFallbackToScopedPayloadWhenAgentMemRejectsMissingUserID() async throws {
         var config = HerAppConfig.empty
         config.agentMemBaseURL = URL(string: "https://agentmem.test")!
         config.agentMemAPIKey = "mem_test"
@@ -221,27 +262,26 @@ final class AgentMemClientTests: XCTestCase {
                 let response = HTTPURLResponse(url: request.url!, statusCode: 422, httpVersion: nil, headerFields: nil)!
                 return (response, Data(#"{"detail":[{"type":"missing","loc":["body","user_id"],"msg":"Field required"}]}"#.utf8))
             }
-            XCTAssertEqual(object?["agent_code"] as? String, "her-desktop")
-            XCTAssertEqual(object?["user_id"] as? String, "stelee")
-            XCTAssertEqual(object?["session_id"] as? String, "session-legacy")
-            let metadata = object?["metadata"] as? [String: Any]
-            XCTAssertEqual(metadata?["surface"] as? String, "mac")
-            XCTAssertEqual(object?["user_input"] as? String, "hello")
-            XCTAssertEqual(object?["agent_response"] as? String, "hi")
-            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
-            return (response, Data(#"{"status":"queued","task_id":"legacy-task"}"#.utf8))
+            XCTFail("AgentMem V7 data-plane calls must not retry with user_id or agent_code.")
+            let response = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!
+            return (response, Data())
         }
         let client = AgentMemClient(config: config, session: session)
 
-        let response = try await client.add(
-            userInput: "hello",
-            agentResponse: "hi",
-            sessionID: "session-legacy",
-            metadata: ["surface": "mac"]
-        )
+        do {
+            _ = try await client.add(
+                userInput: "hello",
+                agentResponse: "hi",
+                sessionID: "session-legacy",
+                metadata: ["surface": "mac"]
+            )
+            XCTFail("Expected add to surface the V7 validation error.")
+        } catch ServiceError.httpStatus(let status, let body) {
+            XCTAssertEqual(status, 422)
+            XCTAssertTrue(body.contains("user_id"))
+        }
 
-        XCTAssertEqual(attempt, 2)
-        XCTAssertEqual(response.taskID, "legacy-task")
+        XCTAssertEqual(attempt, 1)
     }
 
     func testRelationshipFallsBackToIdentityForLegacyAgentMem() async throws {

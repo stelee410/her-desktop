@@ -591,6 +591,10 @@ final class PluginRegistry {
                         inputSchema: [
                             "type": .string("object"),
                             "properties": .object([
+                                "summary": .object([
+                                    "type": .string("string"),
+                                    "description": .string("AgentMem V7 session summary to save instead of user_input plus agent_response.")
+                                ]),
                                 "user_input": .object([
                                     "type": .string("string"),
                                     "description": .string("User-side fact, preference, or work context to save.")
@@ -604,7 +608,7 @@ final class PluginRegistry {
                                     "description": .string("Optional source label for audit metadata.")
                                 ])
                             ]),
-                            "required": .array([.string("user_input"), .string("agent_response")])
+                            "required": .array([])
                         ],
                         adapter: .init(type: "native")
                     )

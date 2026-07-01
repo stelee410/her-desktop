@@ -1200,37 +1200,63 @@ final class CapabilityExecutor {
     }
 
     private func executeAgentMemAdd(arguments: [String: Any]) async -> CapabilityResult {
+        let summary = clean(arguments["summary"] as? String, fallback: "")
         let userInput = clean(
             arguments["user_input"] as? String,
             fallback: clean(arguments["request"] as? String, fallback: "")
         )
         let agentResponse = clean(arguments["agent_response"] as? String, fallback: "")
-        guard !userInput.isEmpty, !agentResponse.isEmpty else {
+        guard !summary.isEmpty || (!userInput.isEmpty && !agentResponse.isEmpty) else {
             return CapabilityResult(
                 title: "AgentMem Add Failed",
-                content: "Missing required user_input or agent_response.",
+                content: "Provide either summary, or both user_input and agent_response.",
+                requiresUserApproval: false
+            )
+        }
+        guard summary.isEmpty || (userInput.isEmpty && agentResponse.isEmpty) else {
+            return CapabilityResult(
+                title: "AgentMem Add Failed",
+                content: "summary is mutually exclusive with user_input and agent_response.",
                 requiresUserApproval: false
             )
         }
         let source = clean(arguments["source"] as? String, fallback: "agentmem.add")
         do {
-            let response = try await agentMemClient.add(
-                userInput: userInput,
-                agentResponse: agentResponse,
-                sessionID: sessionIDForCapabilities,
-                metadata: [
-                    "source": source,
-                    "capability_id": "agentmem.add"
-                ]
-            )
+            let response: AgentMemAddResponse
+            let mode: String
+            if summary.isEmpty {
+                mode = "turn"
+                response = try await agentMemClient.add(
+                    userInput: userInput,
+                    agentResponse: agentResponse,
+                    sessionID: sessionIDForCapabilities,
+                    metadata: [
+                        "source": source,
+                        "capability_id": "agentmem.add"
+                    ]
+                )
+            } else {
+                mode = "summary"
+                response = try await agentMemClient.addSummary(
+                    summary,
+                    sessionID: sessionIDForCapabilities,
+                    metadata: [
+                        "source": source,
+                        "capability_id": "agentmem.add",
+                        "writeback_mode": "summary"
+                    ]
+                )
+            }
             return CapabilityResult(
                 title: "AgentMem Add Result",
                 content: """
                 status: \(response.status)
                 task_id: \(response.taskID)
                 source: \(source)
+                mode: \(mode)
                 user_input_characters: \(userInput.count)
                 agent_response_characters: \(agentResponse.count)
+                summary_characters: \(summary.count)
                 """,
                 requiresUserApproval: false
             )

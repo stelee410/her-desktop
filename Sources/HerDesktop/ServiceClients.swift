@@ -51,14 +51,8 @@ struct AgentMemAddResponse: Codable {
 
 @MainActor
 final class AgentMemClient {
-    private enum PayloadMode {
-        case keyBound
-        case scoped
-    }
-
     private let config: HerAppConfig
     private let session: URLSession
-    private var payloadMode: PayloadMode = .keyBound
 
     init(config: HerAppConfig, session: URLSession = .shared) {
         self.config = config
@@ -68,21 +62,11 @@ final class AgentMemClient {
     func query(_ text: String, sessionID: String, topK: Int = 8) async throws -> AgentMemQueryResponse {
         guard config.hasMemKey else { throw ServiceError.missingAPIKey("AgentMem") }
         let url = config.agentMemBaseURL.appending(path: "/v1/memory/query")
-        do {
-            return try await postJSON(
-                url: url,
-                body: queryBody(text: text, sessionID: sessionID, topK: topK, mode: payloadMode),
-                headers: memoryHeaders()
-            )
-        } catch {
-            let fallbackMode = try fallbackPayloadMode(after: error, current: payloadMode)
-            payloadMode = fallbackMode
-            return try await postJSON(
-                url: url,
-                body: queryBody(text: text, sessionID: sessionID, topK: topK, mode: fallbackMode),
-                headers: memoryHeaders()
-            )
-        }
+        return try await postJSON(
+            url: url,
+            body: queryBody(text: text, sessionID: sessionID, topK: topK),
+            headers: memoryHeaders()
+        )
     }
 
     func add(userInput: String, agentResponse: String, sessionID: String, metadata: [String: Any] = [:]) async throws -> AgentMemAddResponse {
@@ -90,33 +74,28 @@ final class AgentMemClient {
         let url = config.agentMemBaseURL.appending(path: "/v1/memory/add")
         var headers = memoryHeaders()
         headers["Idempotency-Key"] = "\(sessionID)-\(userInput.hashValue)-\(agentResponse.hashValue)"
-        do {
-            return try await postJSON(
-                url: url,
-                body: addBody(
-                    userInput: userInput,
-                    agentResponse: agentResponse,
-                    sessionID: sessionID,
-                    metadata: metadata,
-                    mode: payloadMode
-                ),
-                headers: headers
-            )
-        } catch {
-            let fallbackMode = try fallbackPayloadMode(after: error, current: payloadMode)
-            payloadMode = fallbackMode
-            return try await postJSON(
-                url: url,
-                body: addBody(
-                    userInput: userInput,
-                    agentResponse: agentResponse,
-                    sessionID: sessionID,
-                    metadata: metadata,
-                    mode: fallbackMode
-                ),
-                headers: headers
-            )
-        }
+        return try await postJSON(
+            url: url,
+            body: addBody(
+                userInput: userInput,
+                agentResponse: agentResponse,
+                sessionID: sessionID,
+                metadata: metadata
+            ),
+            headers: headers
+        )
+    }
+
+    func addSummary(_ summary: String, sessionID: String, metadata: [String: Any] = [:]) async throws -> AgentMemAddResponse {
+        guard config.hasMemKey else { throw ServiceError.missingAPIKey("AgentMem") }
+        let url = config.agentMemBaseURL.appending(path: "/v1/memory/add")
+        var headers = memoryHeaders()
+        headers["Idempotency-Key"] = "\(sessionID)-summary-\(summary.hashValue)"
+        return try await postJSON(
+            url: url,
+            body: summaryBody(summary: summary, sessionID: sessionID, metadata: metadata),
+            headers: headers
+        )
     }
 
     func relationship() async throws -> [String: Any] {
@@ -186,76 +165,46 @@ final class AgentMemClient {
 
     private func memoryHeaders() -> [String: String] {
         [
-            "X-Memory-API-Key": config.agentMemAPIKey,
-            // Kept for local/dev AgentMem checkouts that still use the earlier header name.
-            "X-Agent-API-Key": config.agentMemAPIKey
+            "X-Memory-API-Key": config.agentMemAPIKey
         ]
     }
 
-    private func queryBody(text: String, sessionID: String, topK: Int, mode: PayloadMode) -> [String: Any] {
-        var body: [String: Any] = [
+    private func queryBody(text: String, sessionID: String, topK: Int) -> [String: Any] {
+        [
             "session_id": sessionID,
             "query": text,
             "top_k": topK,
             "retrieval_policy": "balanced",
             "min_similarity": 0.08
         ]
-        if mode == .scoped {
-            // Compatibility for older local/dev AgentMem checkouts. V7 Memory-Key
-            // data-plane calls are key-bound and do not include identity fields.
-            body["agent_code"] = config.agentCode
-            body["user_id"] = config.userID
-        }
-        return body
     }
 
     private func addBody(
         userInput: String,
         agentResponse: String,
         sessionID: String,
-        metadata: [String: Any],
-        mode: PayloadMode
+        metadata: [String: Any]
     ) -> [String: Any] {
         var body: [String: Any] = [
             "session_id": sessionID,
             "user_input": userInput,
             "agent_response": agentResponse
         ]
-        if mode == .scoped {
-            // Compatibility for older local/dev AgentMem checkouts. V7 Memory-Key
-            // data-plane calls are key-bound and do not include identity fields.
-            body["agent_code"] = config.agentCode
-            body["user_id"] = config.userID
-            body["metadata"] = metadata.merging([
-                "her_user_id": config.userID,
-                "her_agent_code": config.agentCode
-            ]) { current, _ in current }
+        if !metadata.isEmpty {
+            body["metadata"] = metadata
         }
         return body
     }
 
-    private func fallbackPayloadMode(after error: Error, current: PayloadMode) throws -> PayloadMode {
-        guard case ServiceError.httpStatus(let status, let body) = error, status == 422 else {
-            throw error
+    private func summaryBody(summary: String, sessionID: String, metadata: [String: Any]) -> [String: Any] {
+        var body: [String: Any] = [
+            "session_id": sessionID,
+            "summary": summary
+        ]
+        if !metadata.isEmpty {
+            body["metadata"] = metadata
         }
-        switch current {
-        case .keyBound where Self.requiresUserScopedPayload(body):
-            return .scoped
-        case .scoped where Self.requiresKeyBoundPayload(body):
-            return .keyBound
-        default:
-            throw error
-        }
-    }
-
-    private static func requiresKeyBoundPayload(_ body: String) -> Bool {
-        body.contains("extra_forbidden")
-            && (body.contains("agent_code") || body.contains("user_id"))
-    }
-
-    private static func requiresUserScopedPayload(_ body: String) -> Bool {
-        body.contains("Field required")
-            && body.contains("user_id")
+        return body
     }
 
     private static func shouldRetryRelationshipIdentity(_ error: Error) -> Bool {

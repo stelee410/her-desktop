@@ -12,7 +12,7 @@ final class PluginCapabilityDisplaySummaryTests: XCTestCase {
         XCTAssertEqual(summary.sourceLabel, "Built-in")
         XCTAssertEqual(summary.approvalLabel, "Approval")
         XCTAssertEqual(summary.adapterLabel, "native")
-        XCTAssertEqual(summary.inputLabel, "Inputs: user_input*, agent_response*, source")
+        XCTAssertEqual(summary.inputLabel, "Inputs: agent_response, source, summary, user_input")
         XCTAssertEqual(summary.detailLine, "agentmem.add · native")
     }
 

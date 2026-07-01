@@ -366,7 +366,11 @@ sequenceDiagram
     end
     LLM-->>VM: final assistant response
     VM->>APP: save transcript/session/artifacts
-    VM->>MEM: add(user_input, assistant_response, metadata)
+    alt short exchange
+        VM->>MEM: add(user_input, assistant_response, metadata)
+    else enough confirmed session context
+        VM->>MEM: add(summary, session_id, metadata)
+    end
     MEM-->>VM: queued async memory task
     VM-->>UI: concise answer + visible activity state
 ```

@@ -2803,17 +2803,27 @@ final class AppViewModel: ObservableObject {
                 metadata["attachment_kinds"] = Array(Set(attachments.map { $0.kind.rawValue })).sorted().joined(separator: ",")
                 metadata["attachment_names"] = attachments.map(\.displayName).joined(separator: ", ")
             }
-            let response = try await agentMem.add(
-                userInput: userInput,
-                agentResponse: agentResponse,
-                sessionID: sessionID,
-                metadata: metadata
-            )
+            let mode: String
+            let response: AgentMemAddResponse
+            if let summary = sessionMemorySummary() {
+                mode = "summary"
+                metadata["writeback_mode"] = mode
+                response = try await agentMem.addSummary(summary, sessionID: sessionID, metadata: metadata)
+            } else {
+                mode = "turn"
+                response = try await agentMem.add(
+                    userInput: userInput,
+                    agentResponse: agentResponse,
+                    sessionID: sessionID,
+                    metadata: metadata
+                )
+            }
             audit(
                 type: "memory.writeback_succeeded",
-                summary: "Turn was submitted to AgentMem.",
+                summary: mode == "summary" ? "Session summary was submitted to AgentMem." : "Turn was submitted to AgentMem.",
                 metadata: [
                     "sessionID": sessionID,
+                    "mode": mode,
                     "status": response.status,
                     "taskID": response.taskID
                 ]
@@ -2825,6 +2835,38 @@ final class AppViewModel: ObservableObject {
                 metadata: ["sessionID": sessionID]
             )
         }
+    }
+
+    private func sessionMemorySummary(maxMessages: Int = 8) -> String? {
+        let visibleMessages = messages.filter { message in
+            message.role == .user || message.role == .assistant
+        }
+        let visible = Array(visibleMessages.drop { $0.role != .user })
+        let userCount = visible.filter { $0.role == .user }.count
+        let assistantCount = visible.filter { $0.role == .assistant }.count
+        guard userCount >= 3, assistantCount >= 3 else { return nil }
+        let recent = visible.suffix(maxMessages)
+        let userLines = recent.filter { $0.role == .user }.map { message in
+            let content = message.content
+                .replacingOccurrences(of: "\n", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return "- \(String(content.prefix(700)))"
+        }
+        let assistantLines = recent.filter { $0.role == .assistant }.map { message in
+            let content = message.content
+                .replacingOccurrences(of: "\n", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return "- \(String(content.prefix(500)))"
+        }
+        return """
+        Her Desktop session summary.
+
+        User-stated durable candidates:
+        \(userLines.joined(separator: "\n"))
+
+        Assistant context:
+        \(assistantLines.joined(separator: "\n"))
+        """
     }
 
     private func speakAssistantReplyIfEnabled(_ text: String) async {

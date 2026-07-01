@@ -105,7 +105,8 @@ final class ServiceHealthVerifierTests: XCTestCase {
             requests.append("\(request.httpMethod ?? "GET") \(request.url?.path ?? "")")
             if request.url?.path == "/v1/me" {
                 XCTAssertEqual(request.timeoutInterval, 12)
-                XCTAssertEqual(request.value(forHTTPHeaderField: "X-Agent-API-Key"), "mem_test")
+                XCTAssertEqual(request.value(forHTTPHeaderField: "X-Memory-API-Key"), "mem_test")
+                XCTAssertNil(request.value(forHTTPHeaderField: "X-Agent-API-Key"))
                 let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
                 return (response, Data(#"{"known":true,"display_name":"her","memory_id":"mem_123"}"#.utf8))
             }

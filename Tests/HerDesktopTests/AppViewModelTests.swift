@@ -214,6 +214,66 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(systemPrompt.contains("- Plan: Thinking - Building the next response or tool plan."))
     }
 
+    func testPostTurnMemoryWritebackUsesSummaryAfterSessionThreshold() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-memory-summary-\(UUID().uuidString)", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.agentMemBaseURL = URL(string: "https://agentmem.test")!
+        config.agentMemAPIKey = "mem_test"
+        let fakeLLM = FakeLLM(responses: [
+            .assistantText("先记下你的偏好。"),
+            .assistantText("我会保持短而直接。"),
+            .assistantText("第三轮以后我会写会话摘要。")
+        ])
+        var addBodies: [[String: Any]] = []
+        let session = mockSession { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            switch request.url?.path {
+            case "/v1/memory/query":
+                return (response, Data(#"{"injected_context":"","retrieved_memories":[],"timing_ms":1.0}"#.utf8))
+            case "/v1/memory/add":
+                let body = try XCTUnwrap(Self.bodyData(from: request))
+                let object = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+                addBodies.append(object)
+                return (response, Data(#"{"status":"queued","task_id":"task-write"}"#.utf8))
+            default:
+                throw URLError(.badURL)
+            }
+        }
+        let model = AppViewModel(config: config, cwd: root.path, agentLLM: fakeLLM, urlSession: session)
+
+        await model.send("我喜欢直接的架构批评")
+        await model.send("请保持回复简洁")
+        await model.send("继续推进桌面端")
+        try await waitUntil {
+            addBodies.count == 3
+        }
+
+        let turnBodies = addBodies.filter { $0["summary"] == nil }
+        let summaryBodies = addBodies.filter { $0["summary"] != nil }
+        XCTAssertEqual(turnBodies.count, 2)
+        XCTAssertEqual(summaryBodies.count, 1)
+        XCTAssertEqual(Set(turnBodies.compactMap { $0["user_input"] as? String }), [
+            "我喜欢直接的架构批评",
+            "请保持回复简洁"
+        ])
+        let summaryBody = try XCTUnwrap(summaryBodies.first)
+        XCTAssertNil(summaryBody["user_input"])
+        XCTAssertNil(summaryBody["agent_response"])
+        let summary = try XCTUnwrap(summaryBody["summary"] as? String)
+        XCTAssertTrue(summary.contains("Her Desktop session summary."))
+        XCTAssertTrue(summary.contains("User-stated durable candidates:"))
+        XCTAssertTrue(summary.contains("- 继续推进桌面端"))
+        XCTAssertTrue(summary.contains("Assistant context:"))
+        XCTAssertFalse(summary.contains("今天想从哪里开始"))
+        let metadata = try XCTUnwrap(summaryBody["metadata"] as? [String: Any])
+        XCTAssertEqual(metadata["writeback_mode"] as? String, "summary")
+        XCTAssertTrue(model.auditEvents.contains { event in
+            event.type == "memory.writeback_succeeded"
+                && event.metadata["mode"] == "summary"
+        })
+    }
+
     func testSendIncludesQuickCaptureInboxInActiveWorkPrompt() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-quick-capture-prompt-\(UUID().uuidString)", isDirectory: true)
@@ -2212,6 +2272,18 @@ final class AppViewModelTests: XCTestCase {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [MockURLProtocol.self]
         return URLSession(configuration: configuration)
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval = 2,
+        condition: @escaping () -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() { return }
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
+        XCTFail("Timed out waiting for condition")
     }
 
     private static func bodyData(from request: URLRequest) -> Data? {

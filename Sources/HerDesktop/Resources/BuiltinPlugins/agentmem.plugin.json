@@ -44,15 +44,16 @@
             "description" : "Optional source label for audit metadata.",
             "type" : "string"
           },
+          "summary" : {
+            "description" : "AgentMem V7 session summary to save instead of user_input plus agent_response.",
+            "type" : "string"
+          },
           "user_input" : {
             "description" : "User-side fact, preference, or work context to save.",
             "type" : "string"
           }
         },
-        "required" : [
-          "user_input",
-          "agent_response"
-        ],
+        "required" : [],
         "type" : "object"
       },
       "invocation" : "agentmem.add",

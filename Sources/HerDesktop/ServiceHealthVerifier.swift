@@ -156,8 +156,7 @@ final class ServiceHealthVerifier {
             let data = try await getData(
                 url: config.agentMemBaseURL.appending(path: "/v1/me"),
                 headers: [
-                    "X-Memory-API-Key": config.agentMemAPIKey,
-                    "X-Agent-API-Key": config.agentMemAPIKey
+                    "X-Memory-API-Key": config.agentMemAPIKey
                 ]
             )
             let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
@@ -245,8 +244,7 @@ final class ServiceHealthVerifier {
 
     private func memoryHeaders() -> [String: String] {
         [
-            "X-Memory-API-Key": config.agentMemAPIKey,
-            "X-Agent-API-Key": config.agentMemAPIKey
+            "X-Memory-API-Key": config.agentMemAPIKey
         ]
     }
 
