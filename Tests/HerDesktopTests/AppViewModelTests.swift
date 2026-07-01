@@ -557,6 +557,7 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(CapabilityInputSchema.fields(for: capability).map(\.name), ["title", "start"])
         XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Installed") })
         XCTAssertTrue(model.pluginEvents.contains { $0.action == .installed && $0.pluginID == "local.calendar-create-event-mcp" })
+        XCTAssertEqual(model.selectedSection, .tools)
     }
 
     func testInspectorDraftInstallsCommandPluginWithApprovalAndArguments() async throws {
@@ -1426,6 +1427,7 @@ final class AppViewModelTests: XCTestCase {
 
         XCTAssertTrue(model.generatedPluginDrafts.isEmpty)
         XCTAssertTrue(model.plugins.contains { $0.id == "local.generated" })
+        XCTAssertEqual(model.selectedSection, .tools)
         XCTAssertTrue(FileManager.default.fileExists(
             atPath: URL(fileURLWithPath: config.pluginDirectory)
                 .appendingPathComponent("local.generated/plugin.json")

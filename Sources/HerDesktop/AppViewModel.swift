@@ -593,6 +593,7 @@ final class AppViewModel: ObservableObject {
             saveSessionSnapshot()
             await reloadPlugins()
             rebuildRunningTasks()
+            selectedSection = .tools
             return CapabilityResult(
                 title: title,
                 content: pluginInstalledContent(
@@ -1073,6 +1074,7 @@ final class AppViewModel: ObservableObject {
             )
             saveSessionSnapshot()
             await reloadPlugins()
+            selectedSection = .tools
         } catch {
             lastError = error.localizedDescription
             messages.append(ChatMessage(role: .tool, content: "Plugin Install Failed\n\(error.localizedDescription)"))
