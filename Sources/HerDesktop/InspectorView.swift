@@ -68,26 +68,14 @@ struct InspectorView: View {
                     pluginCommandArguments: $pluginCommandArguments,
                     pluginPackageJSON: $pluginPackageJSON
                 )
-                PluginLibraryCard(
-                    pluginName: $pluginName,
-                    pluginDescription: $pluginDescription,
-                    pluginKind: $pluginKind,
-                    pluginRequiresApproval: $pluginRequiresApproval,
-                    pluginURL: $pluginURL,
-                    pluginMethod: $pluginMethod,
-                    pluginMCPMethod: $pluginMCPMethod,
-                    pluginMCPToolName: $pluginMCPToolName,
-                    pluginMCPInputSchemaJSON: $pluginMCPInputSchemaJSON,
-                    pluginCommandPath: $pluginCommandPath,
-                    pluginCommandArguments: $pluginCommandArguments,
-                    pluginPackageJSON: $pluginPackageJSON,
-                    pluginUpdateTargetID: $pluginUpdateTargetID,
-                    pluginExistingPackageContext: $pluginExistingPackageContext
-                )
+                PluginLibraryCard()
             }
             .padding(18)
         }
         .background(Color.white.opacity(0.24))
+        .onChange(of: model.pendingVibePluginComposerPreset?.id) { _, _ in
+            applyPendingComposerPreset()
+        }
         .sheet(isPresented: $model.isVibePluginComposerPresented) {
             VibePluginComposerSheet(
                 isPresented: $model.isVibePluginComposerPresented,
@@ -108,6 +96,27 @@ struct InspectorView: View {
             )
             .environmentObject(model)
         }
+    }
+
+    private func applyPendingComposerPreset() {
+        guard let preset = model.pendingVibePluginComposerPreset else { return }
+        pluginName = preset.pluginName
+        pluginDescription = preset.pluginDescription
+        pluginKind = preset.pluginKind
+        pluginRequiresApproval = preset.pluginRequiresApproval
+        pluginURL = preset.pluginURL
+        pluginMethod = preset.pluginMethod
+        pluginMCPMethod = preset.pluginMCPMethod
+        pluginMCPToolName = preset.pluginMCPToolName
+        pluginMCPInputSchemaJSON = preset.pluginMCPInputSchemaJSON
+        pluginCommandPath = preset.pluginCommandPath
+        pluginCommandArguments = preset.pluginCommandArguments
+        pluginPackageJSON = preset.pluginPackageJSON
+        pluginUpdateTargetID = preset.pluginUpdateTargetID
+        pluginExistingPackageContext = preset.pluginExistingPackageContext
+        model.clearMCPDiscoveredTools()
+        model.pendingVibePluginComposerPreset = nil
+        model.isVibePluginComposerPresented = true
     }
 }
 
@@ -2554,20 +2563,6 @@ private struct VibePluginComposerSheet: View {
 
 private struct PluginLibraryCard: View {
     @EnvironmentObject private var model: AppViewModel
-    @Binding var pluginName: String
-    @Binding var pluginDescription: String
-    @Binding var pluginKind: String
-    @Binding var pluginRequiresApproval: Bool
-    @Binding var pluginURL: String
-    @Binding var pluginMethod: String
-    @Binding var pluginMCPMethod: String
-    @Binding var pluginMCPToolName: String
-    @Binding var pluginMCPInputSchemaJSON: String
-    @Binding var pluginCommandPath: String
-    @Binding var pluginCommandArguments: String
-    @Binding var pluginPackageJSON: String
-    @Binding var pluginUpdateTargetID: String
-    @Binding var pluginExistingPackageContext: String
     @State private var runTarget: CapabilityRunTarget?
     @State private var removalCandidate: PluginManifest?
 
@@ -2712,33 +2707,7 @@ private struct PluginLibraryCard: View {
     }
 
     private func prepareAIUpdate(for plugin: PluginManifest) {
-        let capability = plugin.capabilities.first
-        let adapter = capability?.adapter
-        pluginName = plugin.name
-        pluginDescription = """
-        Update the installed local plugin \(plugin.name). Preserve its useful behavior, keep the same plugin id, and return a complete replacement package.
-        """
-        pluginKind = capability?.kind ?? "skill"
-        pluginRequiresApproval = capability?.requiresApproval ?? true
-        pluginURL = adapter?.url ?? ""
-        pluginMethod = adapter?.method ?? "POST"
-        pluginMCPMethod = adapter?.methodName ?? ""
-        pluginMCPToolName = adapter?.toolName ?? ""
-        pluginMCPInputSchemaJSON = inputSchemaJSON(for: capability)
-        pluginCommandPath = adapter?.command ?? ""
-        pluginCommandArguments = adapter?.arguments?.joined(separator: "\n") ?? ""
-        pluginPackageJSON = ""
-        pluginUpdateTargetID = plugin.id
-        pluginExistingPackageContext = model.vibeUpdateContext(for: plugin)
-        model.isVibePluginComposerPresented = true
-    }
-
-    private func inputSchemaJSON(for capability: PluginManifest.Capability?) -> String {
-        guard let inputSchema = capability?.inputSchema,
-              let data = try? JSONEncoder.pretty.encode(inputSchema) else {
-            return ""
-        }
-        return String(data: data, encoding: .utf8) ?? ""
+        model.prepareVibePluginUpdate(for: plugin)
     }
 }
 

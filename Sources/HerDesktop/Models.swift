@@ -735,6 +735,24 @@ struct GeneratedPluginDraft: Identifiable, Codable, Equatable {
     var manifest: PluginManifest { package.manifest }
 }
 
+struct VibePluginComposerPreset: Identifiable, Equatable {
+    var id: UUID = UUID()
+    var pluginName: String = ""
+    var pluginDescription: String = ""
+    var pluginKind: String = "skill"
+    var pluginRequiresApproval: Bool = true
+    var pluginURL: String = ""
+    var pluginMethod: String = "POST"
+    var pluginMCPMethod: String = ""
+    var pluginMCPToolName: String = ""
+    var pluginMCPInputSchemaJSON: String = ""
+    var pluginCommandPath: String = ""
+    var pluginCommandArguments: String = ""
+    var pluginPackageJSON: String = ""
+    var pluginUpdateTargetID: String = ""
+    var pluginExistingPackageContext: String = ""
+}
+
 enum JSONValue: Codable, Equatable, Sendable {
     case string(String)
     case number(Double)

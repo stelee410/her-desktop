@@ -1388,6 +1388,16 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(context.contains("Update rule: return a complete replacement PluginPackage"))
         XCTAssertFalse(context.contains("test-secret-key"))
         XCTAssertTrue(context.contains("[redacted]"))
+
+        model.prepareVibePluginUpdate(for: plugin)
+        let preset = try XCTUnwrap(model.pendingVibePluginComposerPreset)
+        XCTAssertEqual(preset.pluginName, "Research Scout")
+        XCTAssertEqual(preset.pluginKind, "skill")
+        XCTAssertEqual(preset.pluginRequiresApproval, true)
+        XCTAssertEqual(preset.pluginUpdateTargetID, "local.research-scout")
+        XCTAssertTrue(preset.pluginDescription.contains("complete replacement package"))
+        XCTAssertTrue(preset.pluginExistingPackageContext.contains("Use careful source uncertainty."))
+        XCTAssertFalse(preset.pluginExistingPackageContext.contains("test-secret-key"))
     }
 
     func testAIVibePluginGenerationRepairsInvalidPackageOnce() async throws {

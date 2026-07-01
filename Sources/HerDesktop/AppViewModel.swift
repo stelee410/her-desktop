@@ -32,6 +32,7 @@ final class AppViewModel: ObservableObject {
     @Published var highlightedPluginID: String?
     @Published var pendingCapabilityRunTarget: CapabilityRunTarget?
     @Published var isVibePluginComposerPresented: Bool
+    @Published var pendingVibePluginComposerPreset: VibePluginComposerPreset?
 
     private var agentMem: AgentMemClient
     private var agentLLM: any AgentLLMChatting
@@ -129,6 +130,7 @@ final class AppViewModel: ObservableObject {
         self.highlightedPluginID = nil
         self.pendingCapabilityRunTarget = nil
         self.isVibePluginComposerPresented = false
+        self.pendingVibePluginComposerPreset = nil
         rebuildRunningTasks()
     }
 
@@ -1212,6 +1214,30 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    func prepareVibePluginUpdate(for plugin: PluginManifest) {
+        guard plugin.id.hasPrefix("local.") else { return }
+        let capability = plugin.capabilities.first
+        let adapter = capability?.adapter
+        pendingVibePluginComposerPreset = VibePluginComposerPreset(
+            pluginName: plugin.name,
+            pluginDescription: """
+            Update the installed local plugin \(plugin.name). Preserve its useful behavior, keep the same plugin id, and return a complete replacement package.
+            """,
+            pluginKind: capability?.kind ?? "skill",
+            pluginRequiresApproval: capability?.requiresApproval ?? true,
+            pluginURL: adapter?.url ?? "",
+            pluginMethod: adapter?.method ?? "POST",
+            pluginMCPMethod: adapter?.methodName ?? "",
+            pluginMCPToolName: adapter?.toolName ?? "",
+            pluginMCPInputSchemaJSON: inputSchemaJSON(for: capability),
+            pluginCommandPath: adapter?.command ?? "",
+            pluginCommandArguments: adapter?.arguments?.joined(separator: "\n") ?? "",
+            pluginPackageJSON: "",
+            pluginUpdateTargetID: plugin.id,
+            pluginExistingPackageContext: vibeUpdateContext(for: plugin)
+        )
+    }
+
     private func pluginUpdateContext(for package: PluginPackage) -> String {
         let manifest = package.manifest
         let review = PluginPackageReview(package: package, catalogManifests: catalogManifestsAfterInstalling(manifest))
@@ -1288,6 +1314,14 @@ final class AppViewModel: ObservableObject {
             return prefix.isEmpty ? "(empty)" : prefix
         }
         return "\(prefix)\n... [truncated]"
+    }
+
+    private func inputSchemaJSON(for capability: PluginManifest.Capability?) -> String {
+        guard let inputSchema = capability?.inputSchema,
+              let data = try? JSONEncoder.pretty.encode(inputSchema) else {
+            return ""
+        }
+        return String(data: data, encoding: .utf8) ?? ""
     }
 
     private func exportPluginCapability(arguments: [String: Any]) -> CapabilityResult {

@@ -428,6 +428,15 @@ private struct ToolsWorkspaceView: View {
                                         .foregroundStyle(AppTheme.muted)
                                     if !plugin.id.hasPrefix("builtin.") {
                                         Button {
+                                            model.prepareVibePluginUpdate(for: plugin)
+                                        } label: {
+                                            Image(systemName: "arrow.triangle.2.circlepath")
+                                        }
+                                        .buttonStyle(.borderless)
+                                        .foregroundStyle(AppTheme.muted)
+                                        .help("Update plugin with AI")
+
+                                        Button {
                                             model.exportPlugin(plugin)
                                         } label: {
                                             Image(systemName: "square.and.arrow.up")
