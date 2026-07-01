@@ -13,6 +13,8 @@ final class ProjectPromptLoaderTests: XCTestCase {
 
         XCTAssertEqual(docs.soul, "测试人格")
         XCTAssertEqual(docs.project, "测试项目说明")
+        XCTAssertEqual(docs.soulSource, "workspace/SOUL.md")
+        XCTAssertEqual(docs.projectSource, "workspace/INFINITI.md")
     }
 
     func testFallsBackToBundledPromptDefaults() throws {
@@ -27,5 +29,29 @@ final class ProjectPromptLoaderTests: XCTestCase {
         XCTAssertTrue(docs.project.contains("Her Desktop 当前架构边界"))
         XCTAssertTrue(docs.project.contains("plugin manifest"))
         XCTAssertTrue(docs.project.contains("vibe coding"))
+        XCTAssertEqual(docs.soulSource, "bundled/SOUL.md")
+        XCTAssertEqual(docs.projectSource, "bundled/INFINITI.md")
+    }
+
+    func testPromptDocumentSourceTracksFallbackPriority() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-desktop-prompt-source-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent(".claude", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        try "agents persona".write(to: root.appendingPathComponent("AGENTS.md"), atomically: true, encoding: .utf8)
+        try "claude project".write(
+            to: root.appendingPathComponent(".claude/CLAUDE.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let docs = ProjectPromptLoader.load(cwd: root)
+
+        XCTAssertEqual(docs.soul, "agents persona")
+        XCTAssertEqual(docs.project, "claude project")
+        XCTAssertEqual(docs.soulSource, "workspace/AGENTS.md")
+        XCTAssertEqual(docs.projectSource, "workspace/.claude/CLAUDE.md")
     }
 }

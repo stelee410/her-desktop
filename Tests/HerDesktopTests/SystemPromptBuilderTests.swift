@@ -45,6 +45,10 @@ final class SystemPromptBuilderTests: XCTestCase {
         )
 
         XCTAssertTrue(prompt.contains("Identity"))
+        XCTAssertTrue(prompt.contains("Prompt Document Provenance"))
+        XCTAssertTrue(prompt.contains("SOUL source:"))
+        XCTAssertTrue(prompt.contains("INFINITI/project source:"))
+        XCTAssertTrue(prompt.contains("workspace SOUL/AGENTS/AGENT"))
         XCTAssertTrue(prompt.contains("Main Agent / Subconscious Boundary"))
         XCTAssertTrue(prompt.contains("Main Agent context is hard context"))
         XCTAssertTrue(prompt.contains("Companion and relationship context is soft context"))
@@ -127,5 +131,23 @@ final class SystemPromptBuilderTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Observe -> Plan -> Act -> Reflect"))
         XCTAssertTrue(prompt.contains("Use it to avoid duplicate work"))
         XCTAssertTrue(prompt.contains("Plan: Needs approval"))
+    }
+
+    func testPromptIncludesExplicitPromptDocumentSources() {
+        let prompt = SystemPromptBuilder(
+            pluginManifests: [],
+            projectDocs: ProjectPromptDocs(
+                soul: "source-aware persona",
+                project: "source-aware project",
+                soulSource: "workspace/AGENTS.md",
+                projectSource: "workspace/.claude/CLAUDE.md"
+            )
+        ).build(memoryContext: "", activeTaskSummary: "")
+
+        XCTAssertTrue(prompt.contains("Prompt Document Provenance"))
+        XCTAssertTrue(prompt.contains("SOUL source: workspace/AGENTS.md"))
+        XCTAssertTrue(prompt.contains("INFINITI/project source: workspace/.claude/CLAUDE.md"))
+        XCTAssertTrue(prompt.contains("source-aware persona"))
+        XCTAssertTrue(prompt.contains("source-aware project"))
     }
 }
