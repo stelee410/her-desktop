@@ -2119,7 +2119,7 @@ final class AppViewModelTests: XCTestCase {
                 return (response, Data(#"{"known":true,"display_name":"her","memory_id":"mem_test"}"#.utf8))
             case "/v1/memory/query":
                 return (response, Data(#"{"injected_context":"","retrieved_memories":[],"timing_ms":1.0}"#.utf8))
-            case "/v1/users/tester/relationship":
+            case "/v1/memory/relationship":
                 return (response, Data(#"{"known":true,"display_name":"Her","user_display_name":"Tester","relationship":"Stage: collaborator","memory_id":"mem_test"}"#.utf8))
             default:
                 throw URLError(.badURL)
@@ -2138,7 +2138,7 @@ final class AppViewModelTests: XCTestCase {
             "POST /v1/chat/completions",
             "GET /v1/me",
             "POST /v1/memory/query",
-            "GET /v1/users/tester/relationship"
+            "GET /v1/memory/relationship"
         ])
 
         await model.bootstrapRuntime()

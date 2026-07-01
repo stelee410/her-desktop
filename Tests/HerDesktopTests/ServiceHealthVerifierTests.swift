@@ -93,7 +93,7 @@ final class ServiceHealthVerifierTests: XCTestCase {
         XCTAssertEqual(requests, ["GET /health", "POST /v1/chat/completions"])
     }
 
-    func testAgentMemHealthChecksScopedQueryDataPlane() async throws {
+    func testAgentMemHealthChecksMemoryKeyBoundQueryDataPlane() async throws {
         var config = HerAppConfig.empty
         config.agentMemBaseURL = URL(string: "https://agentmem.test")!
         config.agentMemAPIKey = "mem_test"
@@ -114,8 +114,9 @@ final class ServiceHealthVerifierTests: XCTestCase {
             XCTAssertEqual(request.url?.path, "/v1/memory/query")
             XCTAssertEqual(request.timeoutInterval, 12)
             let body = try XCTUnwrap(Self.bodyObject(from: request))
-            XCTAssertEqual(body["agent_code"] as? String, "her-desktop")
-            XCTAssertEqual(body["user_id"] as? String, "stelee")
+            XCTAssertNil(body["agent_code"])
+            XCTAssertNil(body["user_id"])
+            XCTAssertEqual(body["session_id"] as? String, "her-desktop-health")
             let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
             return (response, Data(#"{"injected_context":"","retrieved_memories":[],"timing_ms":3.1}"#.utf8))
         })
@@ -124,46 +125,8 @@ final class ServiceHealthVerifierTests: XCTestCase {
         let agentMem = try XCTUnwrap(checked.first { $0.id == "agentmem" })
 
         XCTAssertEqual(agentMem.state, .online)
-        XCTAssertEqual(agentMem.summary, "her · true · Scoped query OK")
+        XCTAssertEqual(agentMem.summary, "her · true · Memory query OK")
         XCTAssertEqual(requests, ["GET /v1/me", "POST /v1/memory/query"])
-    }
-
-    func testAgentMemHealthRetriesLegacyQueryWhenScopedFieldsAreRejected() async throws {
-        var config = HerAppConfig.empty
-        config.agentMemBaseURL = URL(string: "https://agentmem.test")!
-        config.agentMemAPIKey = "mem_test"
-        config.agentCode = "her-desktop"
-        config.userID = "stelee"
-
-        var queryAttempt = 0
-        let verifier = ServiceHealthVerifier(config: config, session: mockSession { request in
-            if request.url?.path == "/v1/me" {
-                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
-                return (response, Data(#"{"known":true,"display_name":"her"}"#.utf8))
-            }
-
-            queryAttempt += 1
-            let body = try XCTUnwrap(Self.bodyObject(from: request))
-            if queryAttempt == 1 {
-                XCTAssertEqual(body["agent_code"] as? String, "her-desktop")
-                XCTAssertEqual(body["user_id"] as? String, "stelee")
-                let response = HTTPURLResponse(url: request.url!, statusCode: 422, httpVersion: nil, headerFields: nil)!
-                return (response, Data(#"{"detail":[{"type":"extra_forbidden","loc":["body","agent_code"]},{"type":"extra_forbidden","loc":["body","user_id"]}]}"#.utf8))
-            }
-
-            XCTAssertNil(body["agent_code"])
-            XCTAssertNil(body["user_id"])
-            XCTAssertEqual(body["session_id"] as? String, "her-desktop-health")
-            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
-            return (response, Data(#"{"injected_context":"","retrieved_memories":[],"timing_ms":4.2}"#.utf8))
-        })
-
-        let checked = await verifier.checkAll(pluginCount: 4)
-        let agentMem = try XCTUnwrap(checked.first { $0.id == "agentmem" })
-
-        XCTAssertEqual(agentMem.state, .online)
-        XCTAssertEqual(agentMem.summary, "her · true · Legacy query OK")
-        XCTAssertEqual(queryAttempt, 2)
     }
 
     func testAgentMemHealthRetriesTransientIdentityNetworkFailure() async throws {
@@ -194,7 +157,7 @@ final class ServiceHealthVerifierTests: XCTestCase {
 
         XCTAssertEqual(identityAttempt, 2)
         XCTAssertEqual(agentMem.state, .online)
-        XCTAssertEqual(agentMem.summary, "her · true · Scoped query OK")
+        XCTAssertEqual(agentMem.summary, "her · true · Memory query OK")
     }
 
     private func mockSession(

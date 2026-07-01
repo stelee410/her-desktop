@@ -50,15 +50,12 @@ final class AgentMemClientTests: XCTestCase {
 
             let body = try XCTUnwrap(Self.bodyData(from: request))
             let object = try JSONSerialization.jsonObject(with: body) as? [String: Any]
-            XCTAssertEqual(object?["agent_code"] as? String, "her")
-            XCTAssertEqual(object?["user_id"] as? String, "tester")
+            XCTAssertNil(object?["agent_code"])
+            XCTAssertNil(object?["user_id"])
             XCTAssertEqual(object?["session_id"] as? String, "session-1")
             XCTAssertEqual(object?["user_input"] as? String, "hello")
             XCTAssertEqual(object?["agent_response"] as? String, "hi")
-            let metadata = object?["metadata"] as? [String: Any]
-            XCTAssertEqual(metadata?["surface"] as? String, "mac")
-            XCTAssertEqual(metadata?["her_user_id"] as? String, "tester")
-            XCTAssertEqual(metadata?["her_agent_code"] as? String, "her")
+            XCTAssertNil(object?["metadata"])
 
             let response = HTTPURLResponse(
                 url: request.url!,
@@ -81,7 +78,7 @@ final class AgentMemClientTests: XCTestCase {
         XCTAssertEqual(response.taskID, "task-1")
     }
 
-    func testQueryReadsAgentScopedMemoryContext() async throws {
+    func testQueryReadsKeyBoundMemoryContext() async throws {
         var config = HerAppConfig.empty
         config.agentMemBaseURL = URL(string: "https://agentmem.test")!
         config.agentMemAPIKey = "mem_test"
@@ -96,8 +93,8 @@ final class AgentMemClientTests: XCTestCase {
 
             let body = try XCTUnwrap(Self.bodyData(from: request))
             let object = try JSONSerialization.jsonObject(with: body) as? [String: Any]
-            XCTAssertEqual(object?["agent_code"] as? String, "her-desktop")
-            XCTAssertEqual(object?["user_id"] as? String, "stelee")
+            XCTAssertNil(object?["agent_code"])
+            XCTAssertNil(object?["user_id"])
             XCTAssertEqual(object?["session_id"] as? String, "session-2")
             XCTAssertEqual(object?["query"] as? String, "architecture")
             XCTAssertEqual(object?["top_k"] as? Int, 3)
@@ -119,7 +116,7 @@ final class AgentMemClientTests: XCTestCase {
         XCTAssertEqual(response.timingMs, 4.2)
     }
 
-    func testQueryRetriesLegacyPayloadWhenOnlineAgentMemRejectsScopedFields() async throws {
+    func testQueryFallsBackToScopedPayloadWhenDevAgentMemRequiresUserID() async throws {
         var config = HerAppConfig.empty
         config.agentMemBaseURL = URL(string: "https://agentmem.test")!
         config.agentMemAPIKey = "mem_test"
@@ -132,13 +129,13 @@ final class AgentMemClientTests: XCTestCase {
             let body = try XCTUnwrap(Self.bodyData(from: request))
             let object = try JSONSerialization.jsonObject(with: body) as? [String: Any]
             if attempt == 1 {
-                XCTAssertEqual(object?["agent_code"] as? String, "her-desktop")
-                XCTAssertEqual(object?["user_id"] as? String, "stelee")
+                XCTAssertNil(object?["agent_code"])
+                XCTAssertNil(object?["user_id"])
                 let response = HTTPURLResponse(url: request.url!, statusCode: 422, httpVersion: nil, headerFields: nil)!
-                return (response, Data(#"{"detail":[{"type":"extra_forbidden","loc":["body","agent_code"]},{"type":"extra_forbidden","loc":["body","user_id"]}]}"#.utf8))
+                return (response, Data(#"{"detail":[{"type":"missing","loc":["body","user_id"],"msg":"Field required"}]}"#.utf8))
             }
-            XCTAssertNil(object?["agent_code"])
-            XCTAssertNil(object?["user_id"])
+            XCTAssertEqual(object?["agent_code"] as? String, "her-desktop")
+            XCTAssertEqual(object?["user_id"] as? String, "stelee")
             XCTAssertEqual(object?["session_id"] as? String, "session-legacy")
             XCTAssertEqual(object?["query"] as? String, "architecture")
             let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
@@ -152,7 +149,7 @@ final class AgentMemClientTests: XCTestCase {
         XCTAssertEqual(response.injectedContext, "legacy context")
     }
 
-    func testRelationshipUsesAgentScopedRelationshipEndpoint() async throws {
+    func testRelationshipUsesMemoryKeyBoundRelationshipEndpoint() async throws {
         var config = HerAppConfig.empty
         config.agentMemBaseURL = URL(string: "https://agentmem.test")!
         config.agentMemAPIKey = "mem_test"
@@ -161,9 +158,8 @@ final class AgentMemClientTests: XCTestCase {
 
         let session = mockSession { request in
             XCTAssertEqual(request.httpMethod, "GET")
-            XCTAssertEqual(request.url?.path, "/v1/users/stelee/relationship")
+            XCTAssertEqual(request.url?.path, "/v1/memory/relationship")
             XCTAssertEqual(request.timeoutInterval, 12)
-            XCTAssertEqual(request.url?.query, "agent_code=her-desktop")
             XCTAssertEqual(request.value(forHTTPHeaderField: "X-Agent-API-Key"), "mem_test")
 
             let response = HTTPURLResponse(
@@ -182,7 +178,7 @@ final class AgentMemClientTests: XCTestCase {
         XCTAssertEqual(response["stage"] as? String, "companion")
     }
 
-    func testAddRetriesLegacyPayloadWhenOnlineAgentMemRejectsScopedFields() async throws {
+    func testAddFallsBackToScopedPayloadWhenDevAgentMemRequiresUserID() async throws {
         var config = HerAppConfig.empty
         config.agentMemBaseURL = URL(string: "https://agentmem.test")!
         config.agentMemAPIKey = "mem_test"
@@ -195,15 +191,16 @@ final class AgentMemClientTests: XCTestCase {
             let body = try XCTUnwrap(Self.bodyData(from: request))
             let object = try JSONSerialization.jsonObject(with: body) as? [String: Any]
             if attempt == 1 {
-                XCTAssertEqual(object?["agent_code"] as? String, "her-desktop")
-                XCTAssertEqual(object?["user_id"] as? String, "stelee")
+                XCTAssertNil(object?["agent_code"])
+                XCTAssertNil(object?["user_id"])
                 let response = HTTPURLResponse(url: request.url!, statusCode: 422, httpVersion: nil, headerFields: nil)!
-                return (response, Data(#"{"detail":[{"type":"extra_forbidden","loc":["body","agent_code"]},{"type":"extra_forbidden","loc":["body","user_id"]}]}"#.utf8))
+                return (response, Data(#"{"detail":[{"type":"missing","loc":["body","user_id"],"msg":"Field required"}]}"#.utf8))
             }
-            XCTAssertNil(object?["agent_code"])
-            XCTAssertNil(object?["user_id"])
-            XCTAssertNil(object?["session_id"])
-            XCTAssertNil(object?["metadata"])
+            XCTAssertEqual(object?["agent_code"] as? String, "her-desktop")
+            XCTAssertEqual(object?["user_id"] as? String, "stelee")
+            XCTAssertEqual(object?["session_id"] as? String, "session-legacy")
+            let metadata = object?["metadata"] as? [String: Any]
+            XCTAssertEqual(metadata?["surface"] as? String, "mac")
             XCTAssertEqual(object?["user_input"] as? String, "hello")
             XCTAssertEqual(object?["agent_response"] as? String, "hi")
             let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
@@ -232,7 +229,7 @@ final class AgentMemClientTests: XCTestCase {
         var paths: [String] = []
         let session = mockSession { request in
             paths.append(request.url?.path ?? "")
-            if request.url?.path == "/v1/users/stelee/relationship" {
+            if request.url?.path == "/v1/memory/relationship" {
                 let response = HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!
                 return (response, Data(#"{"detail":"not found"}"#.utf8))
             }
@@ -244,7 +241,7 @@ final class AgentMemClientTests: XCTestCase {
 
         let response = try await client.relationship()
 
-        XCTAssertEqual(paths, ["/v1/users/stelee/relationship", "/v1/me"])
+        XCTAssertEqual(paths, ["/v1/memory/relationship", "/v1/me"])
         XCTAssertEqual(response["display_name"] as? String, "her")
         XCTAssertEqual(response["memory_id"] as? String, "mem_123")
     }

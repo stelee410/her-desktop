@@ -152,7 +152,7 @@ struct VibePluginPackagePromptBuilder {
         - Generated files must be reusable without this chat history: include adapter type, approval expectation, input fields, and any local MCP toolName or webservice URL placeholder.
         - For skill plugins, include adapter {"type":"skill","skillFile":"SKILL.md"} and a concrete SKILL.md.
         - For webservice plugins, include adapter {"type":"webservice","url":"...","method":"GET or POST"} and still include SKILL.md explaining usage.
-        - For AgentLLM/AgentMem webservice plugins, use safe config placeholders instead of secrets: {{agent_llm_base_url}}, {{agent_llm_api_key}}, {{agent_llm_model}}, {{agent_mem_base_url}}, {{agent_mem_api_key}}, {{agent_code}}, {{user_id}}.
+        - For AgentLLM/AgentMem webservice plugins, use safe config placeholders instead of secrets: {{agent_llm_base_url}}, {{agent_llm_api_key}}, {{agent_llm_model}}, {{agent_mem_base_url}}, {{agent_mem_api_key}}. AgentMem V7 data-plane calls are Memory-Key-bound: set X-Memory-API-Key from {{agent_mem_api_key}} and do not put agent_code or user_id in query/add bodies.
         - For JSON body templates, prefer {{json:field}} or {{json:field|default}} so user text is escaped correctly.
         - For MCP plugins, include adapter {"type":"mcp","url":"http://localhost:PORT/jsonrpc","methodName":"tools/call","toolName":"server_tool_name"} and still include SKILL.md explaining usage.
         - MCP URLs must be local http bridge endpoints only: localhost, 127.0.0.1, or ::1.

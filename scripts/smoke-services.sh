@@ -75,6 +75,18 @@ QUERY_BODY="$(AGENT_CODE="$AGENT_CODE" USER_ID="$USER_ID" SMOKE_SESSION_ID="$SMO
 import json
 import os
 print(json.dumps({
+    "session_id": os.environ["SMOKE_SESSION_ID"],
+    "query": "Her Desktop smoke test",
+    "top_k": 1,
+    "retrieval_policy": "balanced",
+    "min_similarity": 0.08,
+}))
+PY
+)"
+SCOPED_QUERY_BODY="$(AGENT_CODE="$AGENT_CODE" USER_ID="$USER_ID" SMOKE_SESSION_ID="$SMOKE_SESSION_ID" python3 - <<'PY'
+import json
+import os
+print(json.dumps({
     "agent_code": os.environ["AGENT_CODE"],
     "user_id": os.environ["USER_ID"],
     "session_id": os.environ["SMOKE_SESSION_ID"],
@@ -85,19 +97,17 @@ print(json.dumps({
 }))
 PY
 )"
-LEGACY_QUERY_BODY="$(SMOKE_SESSION_ID="$SMOKE_SESSION_ID" python3 - <<'PY'
+ADD_BODY="$(AGENT_CODE="$AGENT_CODE" USER_ID="$USER_ID" SMOKE_SESSION_ID="$SMOKE_SESSION_ID" python3 - <<'PY'
 import json
 import os
 print(json.dumps({
     "session_id": os.environ["SMOKE_SESSION_ID"],
-    "query": "Her Desktop smoke test",
-    "top_k": 1,
-    "retrieval_policy": "balanced",
-    "min_similarity": 0.08,
+    "user_input": "Her Desktop live smoke test memory write.",
+    "agent_response": "Her Desktop verified AgentMem writeback from smoke-services.sh.",
 }))
 PY
 )"
-ADD_BODY="$(AGENT_CODE="$AGENT_CODE" USER_ID="$USER_ID" SMOKE_SESSION_ID="$SMOKE_SESSION_ID" python3 - <<'PY'
+SCOPED_ADD_BODY="$(AGENT_CODE="$AGENT_CODE" USER_ID="$USER_ID" SMOKE_SESSION_ID="$SMOKE_SESSION_ID" python3 - <<'PY'
 import json
 import os
 print(json.dumps({
@@ -111,14 +121,6 @@ print(json.dumps({
         "her_user_id": os.environ["USER_ID"],
         "her_agent_code": os.environ["AGENT_CODE"],
     },
-}))
-PY
-)"
-LEGACY_ADD_BODY="$(python3 - <<'PY'
-import json
-print(json.dumps({
-    "user_input": "Her Desktop live smoke test memory write.",
-    "agent_response": "Her Desktop verified AgentMem writeback from smoke-services.sh.",
 }))
 PY
 )"
@@ -144,7 +146,7 @@ curl_retry() {
   fi
 }
 
-is_legacy_schema_error() {
+requires_scoped_schema() {
   python3 - "$1" <<'PY'
 import json
 import sys
@@ -154,7 +156,7 @@ try:
 except Exception:
     raise SystemExit(1)
 text = json.dumps(body, ensure_ascii=False)
-if "extra_forbidden" in text and ("agent_code" in text or "user_id" in text):
+if "Field required" in text and "user_id" in text:
     raise SystemExit(0)
 raise SystemExit(1)
 PY
@@ -185,13 +187,13 @@ query_http_code="$(curl_retry --http1.1 --connect-timeout 10 --max-time 45 --ret
   -H "Content-Type: application/json" \
   -d "$QUERY_BODY" || true)"
 if [[ "$query_http_code" != 2* ]]; then
-  if [[ "$query_http_code" == "422" ]] && is_legacy_schema_error "$query_body_file"; then
-    echo "AgentMem query rejected scoped fields; retrying legacy key-bound payload."
+  if [[ "$query_http_code" == "422" ]] && requires_scoped_schema "$query_body_file"; then
+    echo "AgentMem query requires legacy scoped fields; retrying dev payload."
     query_http_code="$(curl_retry --http1.1 --connect-timeout 10 --max-time 45 --retry 5 --retry-all-errors --retry-delay 2 -sS -o "$query_body_file" -w "%{http_code}" "$MEM_BASE/v1/memory/query" \
       -H "X-Memory-API-Key: $HER_AGENT_MEM_API_KEY" \
       -H "X-Agent-API-Key: $HER_AGENT_MEM_API_KEY" \
       -H "Content-Type: application/json" \
-      -d "$LEGACY_QUERY_BODY" || true)"
+      -d "$SCOPED_QUERY_BODY" || true)"
   fi
   if [[ "$query_http_code" != 2* ]]; then
     echo "AgentMem query failed: HTTP $query_http_code" >&2
@@ -213,14 +215,14 @@ if [[ "${HER_SMOKE_WRITE_MEMORY:-0}" == "1" ]]; then
     -H "Idempotency-Key: ${SMOKE_SESSION_ID}-agentmem-add" \
     -d "$ADD_BODY" || true)"
   if [[ "$add_http_code" != 2* ]]; then
-    if [[ "$add_http_code" == "422" ]] && is_legacy_schema_error "$add_body_file"; then
-      echo "AgentMem add rejected scoped fields; retrying legacy key-bound payload."
+    if [[ "$add_http_code" == "422" ]] && requires_scoped_schema "$add_body_file"; then
+      echo "AgentMem add requires legacy scoped fields; retrying dev payload."
       add_http_code="$(curl_retry --http1.1 --connect-timeout 10 --max-time 45 --retry 5 --retry-all-errors --retry-delay 2 -sS -o "$add_body_file" -w "%{http_code}" "$MEM_BASE/v1/memory/add" \
         -H "X-Memory-API-Key: $HER_AGENT_MEM_API_KEY" \
         -H "X-Agent-API-Key: $HER_AGENT_MEM_API_KEY" \
         -H "Content-Type: application/json" \
         -H "Idempotency-Key: ${SMOKE_SESSION_ID}-agentmem-add" \
-        -d "$LEGACY_ADD_BODY" || true)"
+        -d "$SCOPED_ADD_BODY" || true)"
     fi
     if [[ "$add_http_code" != 2* ]]; then
       echo "AgentMem add failed: HTTP $add_http_code" >&2

@@ -191,30 +191,15 @@ final class ServiceHealthVerifier {
 
     private func checkAgentMemQueryDataPlane() async throws -> String {
         let url = config.agentMemBaseURL.appending(path: "/v1/memory/query")
-        let scopedBody: [String: Any] = [
-            "agent_code": config.agentCode,
-            "user_id": config.userID,
+        let body: [String: Any] = [
             "session_id": "her-desktop-health",
             "query": "Her Desktop health check",
             "top_k": 1,
             "retrieval_policy": "balanced",
             "min_similarity": 0.08
         ]
-        do {
-            _ = try await postData(url: url, body: scopedBody, headers: memoryHeaders())
-            return "Scoped query OK"
-        } catch {
-            guard Self.isLegacyAgentMemSchemaError(error) else { throw error }
-            let legacyBody: [String: Any] = [
-                "session_id": "her-desktop-health",
-                "query": "Her Desktop health check",
-                "top_k": 1,
-                "retrieval_policy": "balanced",
-                "min_similarity": 0.08
-            ]
-            _ = try await postData(url: url, body: legacyBody, headers: memoryHeaders())
-            return "Legacy query OK"
-        }
+        _ = try await postData(url: url, body: body, headers: memoryHeaders())
+        return "Memory query OK"
     }
 
     private func getText(url: URL, headers: [String: String]) async throws -> String {
@@ -263,14 +248,6 @@ final class ServiceHealthVerifier {
             "X-Memory-API-Key": config.agentMemAPIKey,
             "X-Agent-API-Key": config.agentMemAPIKey
         ]
-    }
-
-    private static func isLegacyAgentMemSchemaError(_ error: Error) -> Bool {
-        guard case ServiceError.httpStatus(let status, let body) = error, status == 422 else {
-            return false
-        }
-        return body.contains("extra_forbidden")
-            && (body.contains("agent_code") || body.contains("user_id"))
     }
 
     private static func boolSummary(_ value: Any?) -> String? {

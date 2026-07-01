@@ -68,7 +68,8 @@ flowchart TB
     subgraph memapi["AgentMem Project"]
         query["Memory Query<br/>/v1/memory/query"]
         add["Memory Add<br/>/v1/memory/add async pipeline"]
-        relation["Relationship View<br/>/v1/users/{user}/relationship"]
+        relation["Relationship View<br/>/v1/memory/relationship"]
+        emotion["Emotion View<br/>/v1/memory/emotion"]
         stores["Memory Stores<br/>facts, graph, affection, sliding window"]
         dream["Reflection / Dream / Decay<br/>background cognition"]
     end
@@ -343,9 +344,9 @@ sequenceDiagram
     U->>UI: 输入文本 / 语音 / 附件 / 外部消息
     UI->>VM: send(text, attachments)
     VM->>APP: append user message + normalize interaction event
-    VM->>MEM: query(session_id, user_id, agent_code, text)
+    VM->>MEM: query(session_id, text) with X-Memory-API-Key
     MEM-->>VM: injected_context + retrieved memories
-    VM->>MEM: relationship(user_id, agent_code)
+    VM->>MEM: relationship() with X-Memory-API-Key
     MEM-->>VM: stage / bond / affection / profile signals
     VM->>PB: build(SOUL, INFINITI, runtime, memory, plugins, companion state)
     VM->>LLM: chat.completions(messages, tools)

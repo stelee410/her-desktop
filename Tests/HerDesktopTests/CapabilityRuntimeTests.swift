@@ -2177,8 +2177,8 @@ final class CapabilityRuntimeTests: XCTestCase {
             XCTAssertEqual(request.value(forHTTPHeaderField: "X-Agent-API-Key"), "mem_test_key")
             let body = try XCTUnwrap(Self.bodyData(from: request))
             let object = try JSONSerialization.jsonObject(with: body) as? [String: Any]
-            XCTAssertEqual(object?["agent_code"] as? String, "her-test")
-            XCTAssertEqual(object?["user_id"] as? String, "user-test")
+            XCTAssertNil(object?["agent_code"])
+            XCTAssertNil(object?["user_id"])
             XCTAssertEqual(object?["query"] as? String, "architecture preferences")
             XCTAssertEqual(object?["top_k"] as? Int, 3)
             let response = HTTPURLResponse(
@@ -2230,13 +2230,11 @@ final class CapabilityRuntimeTests: XCTestCase {
             XCTAssertNotNil(request.value(forHTTPHeaderField: "Idempotency-Key"))
             let body = try XCTUnwrap(Self.bodyData(from: request))
             let object = try JSONSerialization.jsonObject(with: body) as? [String: Any]
-            XCTAssertEqual(object?["agent_code"] as? String, "her-test")
-            XCTAssertEqual(object?["user_id"] as? String, "user-test")
+            XCTAssertNil(object?["agent_code"])
+            XCTAssertNil(object?["user_id"])
             XCTAssertEqual(object?["user_input"] as? String, userInput)
             XCTAssertEqual(object?["agent_response"] as? String, agentResponse)
-            let metadata = object?["metadata"] as? [String: Any]
-            XCTAssertEqual(metadata?["source"] as? String, "test")
-            XCTAssertEqual(metadata?["capability_id"] as? String, "agentmem.add")
+            XCTAssertNil(object?["metadata"])
             let response = HTTPURLResponse(
                 url: request.url!,
                 statusCode: 200,
