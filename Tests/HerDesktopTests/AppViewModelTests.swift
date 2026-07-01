@@ -476,6 +476,8 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(model.mcpDiscoveredTools.map(\.name), ["filesystem.read_file"])
         XCTAssertEqual(model.mcpDiscoveredTools.first?.inputSchemaSummary, "path*:string")
         XCTAssertTrue(model.messages.contains { $0.content.contains("MCP Tool Discovery Result") })
+        XCTAssertTrue(model.messages.contains { $0.content.contains("plugin.draft arguments:") })
+        XCTAssertTrue(model.messages.contains { $0.content.contains(#""tool_name":"filesystem.read_file""#) })
         XCTAssertTrue(model.auditEvents.contains { $0.type == "mcp.tools_discovered" })
     }
 

@@ -202,6 +202,6 @@ Executable adapters currently include:
 - bundled `skill`: reads bundled resource files declared by built-in plugin manifests, so new built-in extensions can be added without hard-coding Swift executors.
 - `webservice`: calls HTTPS endpoints, or local HTTP endpoints, with GET/POST contracts. Built-in AgentLLM Media uses this path to call the configured image generation endpoint after approval.
 - `mcp`: posts JSON-RPC 2.0 requests to a local HTTP bridge on `localhost`, `127.0.0.1`, or `::1`; `tools/call` adapters should declare `toolName` so capability arguments are wrapped as MCP tool arguments.
-- `mcp.discover`: built-in local discovery that posts `tools/list` to a bridge and returns tool names, descriptions, and input schema summaries for vibe-coded plugin creation.
+- `mcp.discover`: built-in local discovery that posts `tools/list` to a bridge and returns tool names, descriptions, input schema summaries, and ready-to-use `plugin.draft` arguments for vibe-coded MCP plugin creation.
 - `command`: runs a fixed executable with fixed argument templates, no shell, a bounded timeout, and required approval.
 - `native`: supports built-in macOS actions such as notifications, approved workspace search and text artifact edits, approved UTF-8 text-file reads, approved attachment inspection/PDF extraction/image metadata, approved text-to-speech playback, inbox capture with optional local attachment import, AgentMem read/write, and approved reflection snapshots.

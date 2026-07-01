@@ -95,6 +95,7 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(commandArguments["type"] as? String, "string")
         XCTAssertEqual((draftProperties["update_plugin_id"] as? [String: Any])?["type"] as? String, "string")
         XCTAssertEqual((draftProperties["existing_package_context"] as? [String: Any])?["type"] as? String, "string")
+        XCTAssertEqual((draftProperties["mcp_input_schema_json"] as? [String: Any])?["type"] as? String, "string")
         XCTAssertEqual(draftParameters["required"] as? [String], ["name", "description"])
 
         let write = try XCTUnwrap(toolFunction(named: "workspace_writeTextFile", in: catalog))
@@ -323,7 +324,17 @@ final class CapabilityRuntimeTests: XCTestCase {
                 "requires_approval": true,
                 "url": "http://localhost:8765/jsonrpc",
                 "method_name": "tools/call",
-                "tool_name": "research.summarize"
+                "tool_name": "research.summarize",
+                "mcp_input_schema_json": """
+                {
+                  "type": "object",
+                  "properties": {
+                    "prompt": {"type": "string", "description": "Research prompt."},
+                    "limit": {"type": "integer", "description": "Maximum citations."}
+                  },
+                  "required": ["prompt"]
+                }
+                """
             ]
         ))
 
@@ -336,6 +347,8 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(capability.adapter?.url, "http://localhost:8765/jsonrpc")
         XCTAssertEqual(capability.adapter?.methodName, "tools/call")
         XCTAssertEqual(capability.adapter?.toolName, "research.summarize")
+        XCTAssertEqual(CapabilityInputSchema.fields(for: capability).map(\.name), ["prompt", "limit"])
+        XCTAssertEqual(CapabilityInputSchema.fields(for: capability).first?.required, true)
     }
 
     func testBuiltInPluginInstallRequiresApproval() {
@@ -1772,6 +1785,11 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertTrue(result.content.contains("tool_count: 1"))
         XCTAssertTrue(result.content.contains("research.summarize"))
         XCTAssertTrue(result.content.contains("prompt*:string"))
+        XCTAssertTrue(result.content.contains("plugin.draft arguments:"))
+        XCTAssertTrue(result.content.contains(#""capability_kind":"mcp""#))
+        XCTAssertTrue(result.content.contains(#""method_name":"tools\/call""#) || result.content.contains(#""method_name":"tools/call""#))
+        XCTAssertTrue(result.content.contains(#""tool_name":"research.summarize""#))
+        XCTAssertTrue(result.content.contains("mcp_input_schema_json"))
         XCTAssertFalse(result.requiresUserApproval)
     }
 

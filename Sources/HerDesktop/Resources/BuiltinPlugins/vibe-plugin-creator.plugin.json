@@ -48,6 +48,10 @@
             "description" : "Optional JSON-RPC method name for MCP bridge capabilities.",
             "type" : "string"
           },
+          "mcp_input_schema_json" : {
+            "description" : "Optional raw MCP input schema JSON from mcp.discover; supported fields become native plugin form inputs.",
+            "type" : "string"
+          },
           "name" : {
             "description" : "Human-readable plugin name.",
             "type" : "string"

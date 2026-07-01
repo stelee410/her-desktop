@@ -20,7 +20,12 @@ struct MCPBridgeDiscoveryResponse: Equatable {
             : tools.map { tool in
                 let description = tool.description.isEmpty ? "No description" : tool.description
                 let inputs = tool.inputSchemaSummary.isEmpty ? "inputs: unknown" : "inputs: \(tool.inputSchemaSummary)"
-                return "- \(tool.name): \(description)\n  \(inputs)"
+                return """
+                - \(tool.name): \(description)
+                  \(inputs)
+                  plugin.draft arguments:
+                  \(pluginDraftArguments(for: tool))
+                """
             }.joined(separator: "\n")
         return """
         POST \(url.absoluteString)
@@ -31,6 +36,44 @@ struct MCPBridgeDiscoveryResponse: Equatable {
         Tools:
         \(toolLines)
         """
+    }
+
+    private func pluginDraftArguments(for tool: MCPDiscoveredTool) -> String {
+        let arguments: [String: Any] = [
+            "name": Self.pluginName(for: tool.name),
+            "description": tool.description.isEmpty ? "Calls the \(tool.name) MCP tool." : tool.description,
+            "capability_kind": "mcp",
+            "requires_approval": true,
+            "url": url.absoluteString,
+            "method_name": "tools/call",
+            "tool_name": tool.name,
+            "mcp_input_schema_json": tool.rawInputSchema
+        ]
+        return Self.renderJSON(arguments, pretty: false)
+    }
+
+    private static func pluginName(for toolName: String) -> String {
+        let words = toolName
+            .replacingOccurrences(of: "[^A-Za-z0-9]+", with: " ", options: .regularExpression)
+            .split(separator: " ")
+            .prefix(4)
+            .map { word in
+                word.prefix(1).uppercased() + word.dropFirst().lowercased()
+            }
+        let base = words.isEmpty ? "MCP Tool" : words.joined(separator: " ")
+        return "\(base) MCP"
+    }
+
+    private static func renderJSON(_ value: Any, pretty: Bool) -> String {
+        guard JSONSerialization.isValidJSONObject(value),
+              let data = try? JSONSerialization.data(
+                withJSONObject: value,
+                options: pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
+              ),
+              let text = String(data: data, encoding: .utf8) else {
+            return String(describing: value)
+        }
+        return String(text.prefix(6_000))
     }
 }
 

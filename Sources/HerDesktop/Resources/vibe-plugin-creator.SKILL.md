@@ -1,6 +1,7 @@
 # Vibe Plugin Creator
 
 Use this built-in skill when the user asks Her to add an extension, connect a local MCP tool, wrap a web service, create a command-backed helper, or turn a conversational idea into an installable plugin.
+If the user provides a local MCP bridge URL without an exact tool name or schema, use `mcp.discover` first, then reuse the returned `plugin.draft arguments` for the selected tool.
 If the user asks what generated extensions are waiting, or asks to install/discard a staged extension that is not visible in the current context, use `plugin.listDrafts` first.
 If the user asks what local extensions are installed, or asks to export/remove one without a clear plugin id, use `plugin.listInstalled` first.
 If the user asks what an installed local extension does or wants to update it, use `plugin.inspect` to summarize the package before changing or exporting it.

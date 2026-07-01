@@ -75,6 +75,8 @@ final class BuiltInPluginContractTests: XCTestCase {
         XCTAssertTrue(skill.contains("PluginPackage"))
         XCTAssertTrue(skill.contains("MCP"))
         XCTAssertTrue(skill.contains("Never include API keys"))
+        XCTAssertTrue(skill.contains("mcp.discover"))
+        XCTAssertTrue(skill.contains("plugin.draft arguments"))
         XCTAssertTrue(skill.contains("plugin.listDrafts"))
         XCTAssertTrue(skill.contains("plugin.listInstalled"))
         XCTAssertTrue(skill.contains("plugin.inspect"))

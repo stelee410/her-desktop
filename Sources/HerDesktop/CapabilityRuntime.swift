@@ -547,7 +547,10 @@ final class CapabilityExecutor {
                     invocation: capabilityID,
                     requiresApproval: requiresApproval,
                     description: description,
-                    inputSchema: draftInputSchema(kind: effectiveKind),
+                    inputSchema: draftInputSchema(
+                        kind: effectiveKind,
+                        mcpInputSchemaJSON: clean(arguments["mcp_input_schema_json"] as? String, fallback: "")
+                    ),
                     adapter: adapter
                 )
             ]
@@ -1426,7 +1429,11 @@ final class CapabilityExecutor {
             }
     }
 
-    private func draftInputSchema(kind: String) -> [String: JSONValue] {
+    private func draftInputSchema(kind: String, mcpInputSchemaJSON: String = "") -> [String: JSONValue] {
+        if kind.lowercased() == "mcp",
+           let schema = supportedMCPInputSchema(from: mcpInputSchemaJSON) {
+            return schema
+        }
         let description: String
         switch kind.lowercased() {
         case "webservice":
@@ -1450,6 +1457,81 @@ final class CapabilityExecutor {
             ]),
             "required": .array([.string("request")])
         ]
+    }
+
+    private func supportedMCPInputSchema(from rawJSON: String) -> [String: JSONValue]? {
+        let trimmed = rawJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let data = trimmed.data(using: .utf8),
+              let schema = try? JSONDecoder().decode([String: JSONValue].self, from: data),
+              case let .object(properties)? = schema["properties"],
+              !properties.isEmpty else {
+            return nil
+        }
+
+        let required = requiredFieldNames(from: schema["required"])
+        let orderedNames = required + properties.keys.sorted().filter { !required.contains($0) }
+        var sanitizedProperties: [String: JSONValue] = [:]
+        var sanitizedRequired: [JSONValue] = []
+
+        for name in orderedNames {
+            guard isSafeInputFieldName(name),
+                  case let .object(fieldSchema)? = properties[name],
+                  let field = sanitizedInputFieldSchema(fieldSchema) else {
+                continue
+            }
+            sanitizedProperties[name] = .object(field)
+            if required.contains(name) {
+                sanitizedRequired.append(.string(name))
+            }
+        }
+
+        guard !sanitizedProperties.isEmpty else { return nil }
+        var result: [String: JSONValue] = [
+            "type": .string("object"),
+            "properties": .object(sanitizedProperties)
+        ]
+        if !sanitizedRequired.isEmpty {
+            result["required"] = .array(sanitizedRequired)
+        }
+        return result
+    }
+
+    private func sanitizedInputFieldSchema(_ schema: [String: JSONValue]) -> [String: JSONValue]? {
+        guard case let .string(type)? = schema["type"],
+              ["string", "number", "integer", "boolean"].contains(type) else {
+            return nil
+        }
+        var result: [String: JSONValue] = ["type": .string(type)]
+        if case let .string(description)? = schema["description"], !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            result["description"] = .string(description)
+        }
+        if type == "string",
+           case let .array(values)? = schema["enum"] {
+            let enumValues = values.compactMap { value -> JSONValue? in
+                guard case let .string(text) = value,
+                      !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    return nil
+                }
+                return .string(text)
+            }
+            if !enumValues.isEmpty {
+                result["enum"] = .array(enumValues)
+            }
+        }
+        return result
+    }
+
+    private func requiredFieldNames(from value: JSONValue?) -> [String] {
+        guard case let .array(items)? = value else { return [] }
+        return items.compactMap { item in
+            guard case let .string(text) = item else { return nil }
+            return text
+        }
+    }
+
+    private func isSafeInputFieldName(_ name: String) -> Bool {
+        name.range(of: #"^[A-Za-z_][A-Za-z0-9_-]{0,63}$"#, options: .regularExpression) != nil
     }
 
     private func adapterForDraft(kind: String, arguments: [String: Any]) -> PluginManifest.CapabilityAdapter? {

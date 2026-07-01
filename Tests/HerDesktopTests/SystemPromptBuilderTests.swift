@@ -93,6 +93,7 @@ final class SystemPromptBuilderTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Live or voice modes should be shorter"))
         XCTAssertTrue(prompt.contains("Use `workspace.writeTextFile`"))
         XCTAssertTrue(prompt.contains("Use `workspace.replaceText`"))
+        XCTAssertTrue(prompt.contains("reuse the returned `plugin.draft arguments`"))
         XCTAssertTrue(prompt.contains("Use `plugin.listDrafts`"))
         XCTAssertTrue(prompt.contains("Use `plugin.listInstalled`"))
         XCTAssertTrue(prompt.contains("Use `plugin.inspect`"))
