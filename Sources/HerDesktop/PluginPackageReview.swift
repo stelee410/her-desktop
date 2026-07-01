@@ -356,6 +356,15 @@ struct PluginPackageReview: Equatable {
                 requiresApproval: approval
             )
         }
+        if id == "plugin.readFile" {
+            return PermissionSummary(
+                id: id,
+                title: "Plugin File Read",
+                detail: "Reads an approved UTF-8 text file from an installed local plugin package.",
+                systemImage: "doc.text.viewfinder",
+                requiresApproval: approval
+            )
+        }
         if id == "plugin.stagePackage" {
             return PermissionSummary(
                 id: id,

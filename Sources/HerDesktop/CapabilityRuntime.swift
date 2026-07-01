@@ -143,6 +143,12 @@ final class CapabilityExecutor {
                 content: "Installed local plugin inspection is handled by the Her Desktop app state because package review uses the active plugin registry.",
                 requiresUserApproval: false
             )
+        case "plugin.readFile":
+            return CapabilityResult(
+                title: "Plugin File Read Failed",
+                content: "Installed local plugin file reads are handled by the Her Desktop app state because package files live in the active plugin registry.",
+                requiresUserApproval: false
+            )
         case "plugin.stagePackage":
             return CapabilityResult(
                 title: "Plugin Package Import Failed",

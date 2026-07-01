@@ -1933,6 +1933,9 @@ final class AppViewModel: ObservableObject {
         if invocation.capabilityID == "plugin.inspect" {
             return inspectInstalledLocalPluginCapability(arguments: invocation.arguments)
         }
+        if invocation.capabilityID == "plugin.readFile" {
+            return readInstalledLocalPluginFileCapability(arguments: invocation.arguments)
+        }
         if invocation.capabilityID == "plugin.stagePackage" {
             return stagePluginPackageCapability(arguments: invocation.arguments)
         }
@@ -2106,6 +2109,63 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    private func readInstalledLocalPluginFileCapability(arguments: [String: Any]) -> CapabilityResult {
+        let pluginID = stringArgument(arguments, keys: ["plugin_id", "pluginID"], fallback: "")
+        let path = stringArgument(arguments, keys: ["path", "file_path", "file"], fallback: "")
+        guard !pluginID.isEmpty else {
+            return CapabilityResult(
+                title: "Plugin File Read Failed",
+                content: "plugin_id is required.",
+                requiresUserApproval: false
+            )
+        }
+        guard !path.isEmpty else {
+            return CapabilityResult(
+                title: "Plugin File Read Failed",
+                content: "path is required.",
+                requiresUserApproval: false
+            )
+        }
+        guard pluginID.hasPrefix("local.") else {
+            return CapabilityResult(
+                title: "Plugin File Read Failed",
+                content: "Only installed local plugins can be read through plugin.readFile.",
+                requiresUserApproval: false
+            )
+        }
+
+        let maxCharacters = min(max(integerArgument(
+            arguments,
+            keys: ["max_characters", "max_chars", "maxCharacters"],
+            fallback: 20_000
+        ), 1), 80_000)
+
+        do {
+            let text = try pluginRegistry.readPluginFile(pluginID: pluginID, path: path)
+            let truncated = text.count > maxCharacters
+            let prefix = String(text.prefix(maxCharacters))
+            return CapabilityResult(
+                title: "Plugin File Read",
+                content: """
+                plugin_id: \(pluginID)
+                path: \(path)
+                characters_returned: \(prefix.count)
+                total_characters: \(text.count)
+                truncated: \(truncated)
+
+                \(prefix)
+                """,
+                requiresUserApproval: false
+            )
+        } catch {
+            return CapabilityResult(
+                title: "Plugin File Read Failed",
+                content: error.localizedDescription,
+                requiresUserApproval: false
+            )
+        }
+    }
+
     private func retrieveMemory(for text: String) async throws -> String {
         guard config.hasMemKey else { return "" }
         let response = try await agentMem.query(text, sessionID: sessionID)
@@ -2266,6 +2326,23 @@ final class AppViewModel: ObservableObject {
                 if !text.isEmpty {
                     return text
                 }
+            }
+        }
+        return fallback
+    }
+
+    private func integerArgument(_ arguments: [String: Any], keys: [String], fallback: Int) -> Int {
+        for key in keys {
+            guard let value = arguments[key] else { continue }
+            if let intValue = value as? Int {
+                return intValue
+            }
+            if let number = value as? NSNumber {
+                return number.intValue
+            }
+            let text = String(describing: value).trimmingCharacters(in: .whitespacesAndNewlines)
+            if let intValue = Int(text) {
+                return intValue
             }
         }
         return fallback

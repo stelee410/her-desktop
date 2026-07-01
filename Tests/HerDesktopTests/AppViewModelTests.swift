@@ -1145,6 +1145,72 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertFalse(lastMessage.contains("## Runtime Notes"))
     }
 
+    func testPluginReadFileCapabilityRequiresApprovalAndReadsLocalPluginFile() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-read-plugin-file-capability-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+
+        let model = AppViewModel(config: config, cwd: cwd.path)
+        model.stageGeneratedPluginPackage(
+            samplePackage(
+                id: "local.readable-helper",
+                name: "Readable Helper",
+                skillContent: "# Readable Skill\nUse this before updating the plugin."
+            ),
+            source: "test"
+        )
+        let draft = try XCTUnwrap(model.generatedPluginDrafts.first)
+        await model.installGeneratedPluginDraft(draft)
+
+        await model.runCapability(
+            capabilityID: "plugin.readFile",
+            arguments: [
+                "plugin_id": "local.readable-helper",
+                "path": "SKILL.md",
+                "max_characters": 80
+            ]
+        )
+
+        let approval = try XCTUnwrap(model.pendingApprovals.first)
+        XCTAssertEqual(approval.invocation.capabilityID, "plugin.readFile")
+        XCTAssertEqual(approval.title, "Read local plugin file")
+        XCTAssertTrue(model.messages.last?.content.contains("Approval Required") == true)
+
+        await model.approve(approval)
+
+        let lastMessage = try XCTUnwrap(model.messages.last?.content)
+        XCTAssertTrue(lastMessage.contains("Plugin File Read"))
+        XCTAssertTrue(lastMessage.contains("plugin_id: local.readable-helper"))
+        XCTAssertTrue(lastMessage.contains("path: SKILL.md"))
+        XCTAssertTrue(lastMessage.contains("# Readable Skill"))
+        XCTAssertTrue(lastMessage.contains("truncated: false"))
+        XCTAssertTrue(model.pendingApprovals.isEmpty)
+    }
+
+    func testPluginReadFileCapabilityRejectsBuiltInPluginReads() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-read-builtin-plugin-file-capability-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        let model = AppViewModel(config: .empty, cwd: cwd.path)
+
+        await model.runCapability(
+            capabilityID: "plugin.readFile",
+            arguments: [
+                "plugin_id": "builtin.vibe-plugin-creator",
+                "path": "vibe-plugin-creator.SKILL.md"
+            ]
+        )
+
+        let approval = try XCTUnwrap(model.pendingApprovals.first)
+        await model.approve(approval)
+
+        let lastMessage = try XCTUnwrap(model.messages.last?.content)
+        XCTAssertTrue(lastMessage.contains("Plugin File Read Failed"))
+        XCTAssertTrue(lastMessage.contains("Only installed local plugins can be read through plugin.readFile."))
+    }
+
     func testViewModelLoadsRecentAuditEventsOnStartup() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-load-audit-\(UUID().uuidString)", isDirectory: true)

@@ -134,6 +134,15 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual((inspectProperties["plugin_id"] as? [String: Any])?["type"] as? String, "string")
         XCTAssertEqual(inspectParameters["required"] as? [String], ["plugin_id"])
 
+        let readFile = try XCTUnwrap(toolFunction(named: "plugin_readFile", in: catalog))
+        let readFileParameters = try XCTUnwrap(readFile["parameters"] as? [String: Any])
+        let readFileProperties = try XCTUnwrap(readFileParameters["properties"] as? [String: Any])
+
+        XCTAssertEqual((readFileProperties["plugin_id"] as? [String: Any])?["type"] as? String, "string")
+        XCTAssertEqual((readFileProperties["path"] as? [String: Any])?["type"] as? String, "string")
+        XCTAssertEqual((readFileProperties["max_characters"] as? [String: Any])?["type"] as? String, "integer")
+        XCTAssertEqual(readFileParameters["required"] as? [String], ["plugin_id", "path"])
+
         let stagePackage = try XCTUnwrap(toolFunction(named: "plugin_stagePackage", in: catalog))
         let stagePackageParameters = try XCTUnwrap(stagePackage["parameters"] as? [String: Any])
         let stagePackageProperties = try XCTUnwrap(stagePackageParameters["properties"] as? [String: Any])
@@ -599,6 +608,20 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(capability?.requiresApproval, false)
         XCTAssertEqual(CapabilityInputSchema.fields(for: capability!).map(\.name), [
             "plugin_id"
+        ])
+    }
+
+    func testBuiltInPluginReadFileRequiresApproval() {
+        let registry = PluginRegistry(config: .empty)
+        let capability = registry.capability(id: "plugin.readFile")
+
+        XCTAssertEqual(capability?.kind, "native")
+        XCTAssertEqual(capability?.adapter?.type, "native")
+        XCTAssertEqual(capability?.requiresApproval, true)
+        XCTAssertEqual(CapabilityInputSchema.fields(for: capability!).map(\.name), [
+            "plugin_id",
+            "path",
+            "max_characters"
         ])
     }
 

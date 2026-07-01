@@ -255,6 +255,40 @@ final class PluginPackageReviewTests: XCTestCase {
         XCTAssertEqual(review.riskLevel, .low)
     }
 
+    func testPluginReadFilePermissionIsExplicit() {
+        let package = PluginPackage(
+            manifest: PluginManifest(
+                id: "local.plugin-file-reader",
+                name: "Plugin File Reader",
+                version: "0.1.0",
+                description: "Plugin read file package.",
+                author: "Test",
+                systemPromptAddendum: nil,
+                capabilities: [
+                    .init(
+                        id: "plugin.readFile",
+                        title: "Read Plugin File",
+                        kind: "native",
+                        invocation: "plugin.readFile",
+                        requiresApproval: true,
+                        adapter: .init(type: "native")
+                    )
+                ]
+            ),
+            files: [
+                .init(path: "README.md", content: "# Read File\n\nReads an installed local plugin file.")
+            ]
+        )
+
+        let review = PluginPackageReview(package: package)
+
+        XCTAssertEqual(review.permissionSummaries.first?.title, "Plugin File Read")
+        XCTAssertEqual(review.permissionSummaries.first?.detail, "Reads an approved UTF-8 text file from an installed local plugin package.")
+        XCTAssertEqual(review.permissionSummaries.first?.systemImage, "doc.text.viewfinder")
+        XCTAssertEqual(review.permissionSummaries.first?.requiresApproval, true)
+        XCTAssertEqual(review.riskLevel, .medium)
+    }
+
     func testPluginStagePackagePermissionIsExplicitAndLowRisk() {
         let package = PluginPackage(
             manifest: PluginManifest(

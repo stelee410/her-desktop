@@ -402,6 +402,15 @@ final class PluginRegistry {
                         adapter: .init(type: "native")
                     ),
                     .init(
+                        id: "plugin.readFile",
+                        title: "Read local plugin file",
+                        kind: "native",
+                        invocation: "plugin.readFile",
+                        requiresApproval: true,
+                        description: "Read a UTF-8 text file from an installed local plugin package after explicit user approval.",
+                        adapter: .init(type: "native")
+                    ),
+                    .init(
                         id: "plugin.stagePackage",
                         title: "Stage plugin package",
                         kind: "native",
@@ -749,6 +758,12 @@ final class PluginRegistry {
             return objectSchema([
                 "plugin_id": field("string", "Installed local plugin id to inspect, such as local.example.")
             ], required: ["plugin_id"])
+        case "plugin.readFile":
+            return objectSchema([
+                "plugin_id": field("string", "Installed local plugin id to read from, such as local.example."),
+                "path": field("string", "Relative UTF-8 text file path inside the plugin package, such as SKILL.md or README.md."),
+                "max_characters": field("integer", "Maximum characters to return.")
+            ], required: ["plugin_id", "path"])
         case "plugin.stagePackage":
             return objectSchema([
                 "package_json": field("string", "Complete PluginPackage JSON object to validate and stage for review.")

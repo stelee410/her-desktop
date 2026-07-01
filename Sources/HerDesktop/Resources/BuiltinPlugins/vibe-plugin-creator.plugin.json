@@ -99,6 +99,38 @@
       "adapter" : {
         "type" : "native"
       },
+      "description" : "Read a UTF-8 text file from an installed local plugin package after explicit user approval.",
+      "id" : "plugin.readFile",
+      "inputSchema" : {
+        "properties" : {
+          "max_characters" : {
+            "description" : "Maximum characters to return.",
+            "type" : "integer"
+          },
+          "path" : {
+            "description" : "Relative UTF-8 text file path inside the plugin package, such as SKILL.md or README.md.",
+            "type" : "string"
+          },
+          "plugin_id" : {
+            "description" : "Installed local plugin id to read from, such as local.example.",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "plugin_id",
+          "path"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "plugin.readFile",
+      "kind" : "native",
+      "requiresApproval" : true,
+      "title" : "Read local plugin file"
+    },
+    {
+      "adapter" : {
+        "type" : "native"
+      },
       "description" : "List installed local plugins with follow-up export and removal arguments.",
       "id" : "plugin.listInstalled",
       "inputSchema" : {
