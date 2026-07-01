@@ -607,20 +607,66 @@ final class AppViewModel: ObservableObject {
     }
 
     func discardGeneratedPluginDraft(_ draft: GeneratedPluginDraft) {
+        let result = discardGeneratedPluginDraftResult(
+            draft,
+            eventSource: draft.source,
+            summary: "generated plugin draft"
+        )
+        messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
+        saveSessionSnapshot()
+    }
+
+    private func discardGeneratedPluginDraftCapability(arguments: [String: Any]) -> CapabilityResult {
+        guard arguments["confirmed"] as? Bool == true else {
+            return CapabilityResult(
+                title: "Plugin Draft Discard Needs Confirmation",
+                content: "Discarding a staged plugin draft needs explicit confirmation. Set confirmed=true only after the user approves.",
+                requiresUserApproval: true
+            )
+        }
+        guard let draft = stagedDraft(from: arguments) else {
+            let pluginID = stringArgument(arguments, keys: ["plugin_id", "pluginID"], fallback: "")
+            let draftID = stringArgument(arguments, keys: ["draft_id", "draftID"], fallback: "")
+            let hint = generatedPluginDrafts.isEmpty
+                ? "No generated plugin drafts are waiting for review."
+                : "Available drafts: \(generatedPluginDrafts.map { "\($0.manifest.name) (\($0.manifest.id))" }.joined(separator: ", "))."
+            return CapabilityResult(
+                title: "Plugin Draft Discard Failed",
+                content: "Could not find staged draft plugin_id=\(pluginID.isEmpty ? "unspecified" : pluginID) draft_id=\(draftID.isEmpty ? "unspecified" : draftID). \(hint)",
+                requiresUserApproval: false
+            )
+        }
+        return discardGeneratedPluginDraftResult(
+            draft,
+            eventSource: "plugin.discardDraft capability",
+            summary: "staged generated plugin draft"
+        )
+    }
+
+    private func discardGeneratedPluginDraftResult(
+        _ draft: GeneratedPluginDraft,
+        eventSource: String,
+        summary: String
+    ) -> CapabilityResult {
         generatedPluginDrafts.removeAll { $0.id == draft.id }
         try? pluginDraftStore.delete(draft)
-        messages.append(ChatMessage(
-            role: .tool,
-            content: "Plugin Draft Discarded\n\(draft.manifest.name) (\(draft.manifest.id)) was not installed."
-        ))
         auditPluginEvent(
             type: "plugin.draft_discarded",
             package: draft.package,
-            summary: "Discarded generated plugin draft.",
-            metadata: ["source": draft.source]
+            summary: "Discarded \(summary).",
+            metadata: [
+                "source": eventSource,
+                "draftID": draft.id.uuidString,
+                "draftSource": draft.source
+            ]
         )
         rebuildRunningTasks()
         saveSessionSnapshot()
+        return CapabilityResult(
+            title: "Plugin Draft Discarded",
+            content: "\(draft.manifest.name) (\(draft.manifest.id)) was discarded and not installed.",
+            requiresUserApproval: false
+        )
     }
 
     func stageGeneratedPluginPackage(_ package: PluginPackage, source: String = "plugin.draft") {
@@ -1740,6 +1786,9 @@ final class AppViewModel: ObservableObject {
         }
         if invocation.capabilityID == "plugin.installDraft" {
             return await installGeneratedPluginDraftCapability(arguments: invocation.arguments)
+        }
+        if invocation.capabilityID == "plugin.discardDraft" {
+            return discardGeneratedPluginDraftCapability(arguments: invocation.arguments)
         }
         return await capabilityExecutor.execute(invocation)
     }

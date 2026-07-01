@@ -125,6 +125,12 @@ final class CapabilityExecutor {
                 content: "Staged draft installation is handled by the Her Desktop app state because drafts live in the generated review queue.",
                 requiresUserApproval: false
             )
+        case "plugin.discardDraft":
+            return CapabilityResult(
+                title: "Plugin Draft Discard Failed",
+                content: "Staged draft discard is handled by the Her Desktop app state because drafts live in the generated review queue.",
+                requiresUserApproval: false
+            )
         case "plugin.remove":
             return removePlugin(arguments: invocation.arguments)
         case "native.notify":

@@ -357,6 +357,15 @@ final class PluginRegistry {
                         adapter: .init(type: "native")
                     ),
                     .init(
+                        id: "plugin.discardDraft",
+                        title: "Discard staged plugin draft",
+                        kind: "native",
+                        invocation: "plugin.discardDraft",
+                        requiresApproval: true,
+                        description: "Discard a generated plugin draft already staged in Her Desktop after explicit user approval.",
+                        adapter: .init(type: "native")
+                    ),
+                    .init(
                         id: "plugin.remove",
                         title: "Remove local plugin",
                         kind: "native",
@@ -639,6 +648,12 @@ final class PluginRegistry {
                 "plugin_id": field("string", "Generated draft plugin id to install, such as local.example. Optional when exactly one draft is waiting."),
                 "draft_id": field("string", "Generated draft UUID to install. Optional alternative to plugin_id."),
                 "confirmed": field("boolean", "True only after the user explicitly confirms installing the staged draft.")
+            ], required: ["confirmed"])
+        case "plugin.discardDraft":
+            return objectSchema([
+                "plugin_id": field("string", "Generated draft plugin id to discard, such as local.example. Optional when exactly one draft is waiting."),
+                "draft_id": field("string", "Generated draft UUID to discard. Optional alternative to plugin_id."),
+                "confirmed": field("boolean", "True only after the user explicitly confirms discarding the staged draft.")
             ], required: ["confirmed"])
         case "plugin.remove":
             return objectSchema([

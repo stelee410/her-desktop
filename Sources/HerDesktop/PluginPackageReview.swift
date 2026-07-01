@@ -308,6 +308,15 @@ struct PluginPackageReview: Equatable {
                 requiresApproval: approval
             )
         }
+        if id == "plugin.discardDraft" {
+            return PermissionSummary(
+                id: id,
+                title: "Staged Plugin Draft Discard",
+                detail: "Discards a generated plugin draft already staged in the local review queue.",
+                systemImage: "xmark.bin",
+                requiresApproval: approval
+            )
+        }
         if id == "mcp.discover" {
             return PermissionSummary(
                 id: id,

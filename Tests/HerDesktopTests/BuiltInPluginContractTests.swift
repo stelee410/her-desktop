@@ -76,6 +76,7 @@ final class BuiltInPluginContractTests: XCTestCase {
         XCTAssertTrue(skill.contains("MCP"))
         XCTAssertTrue(skill.contains("Never include API keys"))
         XCTAssertTrue(skill.contains("plugin.installDraft"))
+        XCTAssertTrue(skill.contains("plugin.discardDraft"))
     }
 
     private func requiresApprovalByDefault(_ capability: PluginManifest.Capability) -> Bool {

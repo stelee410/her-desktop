@@ -137,6 +137,37 @@
       "adapter" : {
         "type" : "native"
       },
+      "description" : "Discard a generated plugin draft already staged in Her Desktop after explicit user approval.",
+      "id" : "plugin.discardDraft",
+      "inputSchema" : {
+        "properties" : {
+          "confirmed" : {
+            "description" : "True only after the user explicitly confirms discarding the staged draft.",
+            "type" : "boolean"
+          },
+          "draft_id" : {
+            "description" : "Generated draft UUID to discard. Optional alternative to plugin_id.",
+            "type" : "string"
+          },
+          "plugin_id" : {
+            "description" : "Generated draft plugin id to discard, such as local.example. Optional when exactly one draft is waiting.",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "confirmed"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "plugin.discardDraft",
+      "kind" : "native",
+      "requiresApproval" : true,
+      "title" : "Discard staged plugin draft"
+    },
+    {
+      "adapter" : {
+        "type" : "native"
+      },
       "description" : "Remove an installed local plugin after explicit user approval.",
       "id" : "plugin.remove",
       "inputSchema" : {

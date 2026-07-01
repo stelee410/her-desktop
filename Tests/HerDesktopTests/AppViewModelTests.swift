@@ -1258,6 +1258,56 @@ final class AppViewModelTests: XCTestCase {
         })
     }
 
+    func testApprovedPluginDiscardDraftCapabilityRemovesStagedDraftByPluginID() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-plugin-discard-draft-capability-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        let package = samplePackage(id: "local.discard-staged", name: "Discard Staged")
+        let model = AppViewModel(config: config, cwd: cwd.path)
+        model.stageGeneratedPluginPackage(package, source: "plugin.draft")
+        let draftID = try XCTUnwrap(model.generatedPluginDrafts.first?.id)
+
+        let approval = PendingApproval(
+            title: "Discard staged plugin draft",
+            detail: "Discard local.discard-staged",
+            invocation: CapabilityInvocation(
+                toolCallID: "call-plugin-discard-draft",
+                functionName: "plugin_discardDraft",
+                capabilityID: "plugin.discardDraft",
+                arguments: [
+                    "confirmed": true,
+                    "plugin_id": "local.discard-staged"
+                ]
+            ),
+            activityID: nil
+        )
+
+        await model.approve(approval)
+
+        XCTAssertTrue(model.generatedPluginDrafts.isEmpty)
+        XCTAssertFalse(model.plugins.contains { $0.id == "local.discard-staged" })
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: cwd.appendingPathComponent(".her/plugin-drafts/\(draftID.uuidString).json").path
+        ))
+        XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Draft Discarded") })
+        let audit = try AuditEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(audit.contains { event in
+            event.type == "plugin.draft_discarded"
+            && event.metadata["pluginID"] == "local.discard-staged"
+            && event.metadata["source"] == "plugin.discardDraft capability"
+            && event.metadata["draftSource"] == "plugin.draft"
+        })
+        let pluginEvents = try PluginEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(pluginEvents.contains { event in
+            event.action == .discarded
+            && event.pluginID == "local.discard-staged"
+            && event.source == "plugin.discardDraft capability"
+            && event.metadata["draftSource"] == "plugin.draft"
+        })
+    }
+
     func testGeneratedPluginDraftCanUpdateExistingLocalPlugin() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-generated-plugin-update-\(UUID().uuidString)", isDirectory: true)

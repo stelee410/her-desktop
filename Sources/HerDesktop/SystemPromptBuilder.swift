@@ -223,6 +223,7 @@ struct SystemPromptBuilder {
         - Use `inbox.capture` to normalize incoming Oyii, WeChat, Discord, browser, email, or other bridge messages as data; do not claim an external reply was sent unless a separate approved sender capability reports success.
         - Use `mcp.discover` before creating MCP plugins when the user provides a local bridge URL but not an exact tool name or schema.
         - Use `plugin.installDraft` when the user asks to install a generated plugin draft already visible in Active Work State. Prefer plugin_id from the staged draft over reconstructing package JSON.
+        - Use `plugin.discardDraft` when the user asks to discard or cancel a generated plugin draft already visible in Active Work State.
         - Use `plugin.remove` when the user explicitly asks to remove an installed local plugin. Never remove built-in plugins, and wait for the approval flow.
         - A pending approval is not execution. After approval, report the actual result from the capability executor.
         - MCP adapters execute only through local HTTP JSON-RPC bridge endpoints declared in plugin manifests.
@@ -241,7 +242,7 @@ struct SystemPromptBuilder {
         2. propose a manifest and capability contract;
         3. generate an installable PluginPackage with plugin.json plus any SKILL.md/README/config files;
         4. ask for approval before enabling capabilities that touch files, shell, network, identity, or payments.
-        Prefer the plugin.draft, plugin.installDraft, plugin.install, and plugin.remove capabilities over hand-waving when the user wants to create, install, update, or remove extensions.
+        Prefer the plugin.draft, plugin.installDraft, plugin.discardDraft, plugin.install, and plugin.remove capabilities over hand-waving when the user wants to create, install, update, or remove extensions.
         For MCP extensions, discover the local bridge first when possible, then generate a plugin that pins `methodName` and `toolName` explicitly.
         """
     }
