@@ -6,6 +6,16 @@ enum ProductReadinessLevel: String, Codable, Equatable {
     case optional
 }
 
+enum ProductReadinessAction: String, Codable, Equatable {
+    case openSettings
+    case checkServices
+    case openPluginDirectory
+    case openToolsWorkspace
+    case openProjectsWorkspace
+    case generateReflection
+    case startInboxBridge
+}
+
 struct ProductReadinessItem: Identifiable, Equatable {
     var id: String
     var title: String
@@ -13,6 +23,8 @@ struct ProductReadinessItem: Identifiable, Equatable {
     var level: ProductReadinessLevel
     var systemImage: String
     var required: Bool
+    var actionTitle: String?
+    var action: ProductReadinessAction?
 }
 
 struct ProductReadinessSummary: Equatable {
@@ -83,7 +95,9 @@ enum ProductReadinessBuilder {
                 detail: "Add an AgentLLM API key in Settings.",
                 level: .attention,
                 systemImage: "sparkles",
-                required: true
+                required: true,
+                actionTitle: "Settings",
+                action: .openSettings
             )
         }
         let health = serviceHealth.first { $0.id == "agentllm" }
@@ -93,9 +107,9 @@ enum ProductReadinessBuilder {
         case .checking:
             return item(id: "agentllm", title: "AgentLLM", detail: "Health check is running.", level: .attention, systemImage: "arrow.triangle.2.circlepath", required: true)
         case .offline:
-            return item(id: "agentllm", title: "AgentLLM", detail: health?.summary ?? "Offline", level: .attention, systemImage: "sparkles", required: true)
+            return item(id: "agentllm", title: "AgentLLM", detail: health?.summary ?? "Offline", level: .attention, systemImage: "sparkles", required: true, actionTitle: "Check", action: .checkServices)
         case .unknown, nil:
-            return item(id: "agentllm", title: "AgentLLM", detail: "Configured; run Check Services.", level: .attention, systemImage: "sparkles", required: true)
+            return item(id: "agentllm", title: "AgentLLM", detail: "Configured; run Check Services.", level: .attention, systemImage: "sparkles", required: true, actionTitle: "Check", action: .checkServices)
         }
     }
 
@@ -107,7 +121,9 @@ enum ProductReadinessBuilder {
                 detail: "Add an AgentMem memory key in Settings.",
                 level: .attention,
                 systemImage: "brain.head.profile",
-                required: true
+                required: true,
+                actionTitle: "Settings",
+                action: .openSettings
             )
         }
         let health = serviceHealth.first { $0.id == "agentmem" }
@@ -117,9 +133,9 @@ enum ProductReadinessBuilder {
         case .checking:
             return item(id: "agentmem", title: "AgentMem", detail: "Health check is running.", level: .attention, systemImage: "arrow.triangle.2.circlepath", required: true)
         case .offline:
-            return item(id: "agentmem", title: "AgentMem", detail: health?.summary ?? "Offline", level: .attention, systemImage: "brain.head.profile", required: true)
+            return item(id: "agentmem", title: "AgentMem", detail: health?.summary ?? "Offline", level: .attention, systemImage: "brain.head.profile", required: true, actionTitle: "Check", action: .checkServices)
         case .unknown, nil:
-            return item(id: "agentmem", title: "AgentMem", detail: "Configured; run Check Services.", level: .attention, systemImage: "brain.head.profile", required: true)
+            return item(id: "agentmem", title: "AgentMem", detail: "Configured; run Check Services.", level: .attention, systemImage: "brain.head.profile", required: true, actionTitle: "Check", action: .checkServices)
         }
     }
 
@@ -132,7 +148,9 @@ enum ProductReadinessBuilder {
                 detail: "No installed capabilities were found.",
                 level: .attention,
                 systemImage: "puzzlepiece.extension",
-                required: true
+                required: true,
+                actionTitle: "Plugins",
+                action: .openPluginDirectory
             )
         }
         return item(
@@ -155,7 +173,9 @@ enum ProductReadinessBuilder {
             detail: ready ? "\(agentCode) for \(userID)" : "Set agent code and user id for stable memory scope.",
             level: ready ? .ready : .attention,
             systemImage: "person.crop.circle.badge.checkmark",
-            required: true
+            required: true,
+            actionTitle: ready ? nil : "Settings",
+            action: ready ? nil : .openSettings
         )
     }
 
@@ -173,20 +193,40 @@ enum ProductReadinessBuilder {
             detail: "\(pendingApprovals.count) approval(s), \(generatedDrafts.count) plugin draft(s) waiting.",
             level: .attention,
             systemImage: "hand.raised",
-            required: false
+            required: false,
+            actionTitle: "Review",
+            action: .openToolsWorkspace
         )
     }
 
     private static func workPlanItem(workPlan: WorkPlan?) -> ProductReadinessItem {
         guard let workPlan else {
-            return item(id: "workplan", title: "Work Plan", detail: "Optional; ask Her to create a plan for multi-step work.", level: .optional, systemImage: "list.bullet.clipboard", required: false)
+            return item(
+                id: "workplan",
+                title: "Work Plan",
+                detail: "Optional; ask Her to create a plan for multi-step work.",
+                level: .optional,
+                systemImage: "list.bullet.clipboard",
+                required: false,
+                actionTitle: "Projects",
+                action: .openProjectsWorkspace
+            )
         }
         return item(id: "workplan", title: "Work Plan", detail: workPlan.stateSummary, level: .ready, systemImage: "list.bullet.clipboard", required: false)
     }
 
     private static func reflectionItem(dreamContext: DreamPromptContext?) -> ProductReadinessItem {
         guard let dreamContext else {
-            return item(id: "reflection", title: "Reflection Snapshot", detail: "Optional; generate one to preserve long-horizon context.", level: .optional, systemImage: "moon.stars", required: false)
+            return item(
+                id: "reflection",
+                title: "Reflection Snapshot",
+                detail: "Optional; generate one to preserve long-horizon context.",
+                level: .optional,
+                systemImage: "moon.stars",
+                required: false,
+                actionTitle: "Snapshot",
+                action: .generateReflection
+            )
         }
         let objective = dreamContext.longHorizonObjective?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return item(
@@ -204,11 +244,11 @@ enum ProductReadinessBuilder {
         case .running:
             return item(id: "inbox", title: "Inbox Bridge", detail: state.endpoint, level: .ready, systemImage: "tray.and.arrow.down", required: false)
         case .failed:
-            return item(id: "inbox", title: "Inbox Bridge", detail: state.summary, level: .attention, systemImage: "exclamationmark.triangle", required: false)
+            return item(id: "inbox", title: "Inbox Bridge", detail: state.summary, level: .attention, systemImage: "exclamationmark.triangle", required: false, actionTitle: "Retry", action: .startInboxBridge)
         case .starting:
             return item(id: "inbox", title: "Inbox Bridge", detail: "Starting local bridge.", level: .attention, systemImage: "arrow.triangle.2.circlepath", required: false)
         case .stopped:
-            return item(id: "inbox", title: "Inbox Bridge", detail: "Optional external capture is stopped.", level: .optional, systemImage: "tray.and.arrow.down", required: false)
+            return item(id: "inbox", title: "Inbox Bridge", detail: "Optional external capture is stopped.", level: .optional, systemImage: "tray.and.arrow.down", required: false, actionTitle: "Start", action: .startInboxBridge)
         }
     }
 
@@ -217,7 +257,7 @@ enum ProductReadinessBuilder {
             let voice = config.speechVoiceIdentifier.isEmpty ? "System voice" : config.speechVoiceIdentifier
             return item(id: "voice", title: "Spoken Replies", detail: voice, level: .ready, systemImage: "speaker.wave.2", required: false)
         }
-        return item(id: "voice", title: "Spoken Replies", detail: "Optional; local TTS is off.", level: .optional, systemImage: "speaker.slash", required: false)
+        return item(id: "voice", title: "Spoken Replies", detail: "Optional; local TTS is off.", level: .optional, systemImage: "speaker.slash", required: false, actionTitle: "Settings", action: .openSettings)
     }
 
     private static func item(
@@ -226,7 +266,9 @@ enum ProductReadinessBuilder {
         detail: String,
         level: ProductReadinessLevel,
         systemImage: String,
-        required: Bool
+        required: Bool,
+        actionTitle: String? = nil,
+        action: ProductReadinessAction? = nil
     ) -> ProductReadinessItem {
         ProductReadinessItem(
             id: id,
@@ -234,7 +276,9 @@ enum ProductReadinessBuilder {
             detail: detail,
             level: level,
             systemImage: systemImage,
-            required: required
+            required: required,
+            actionTitle: actionTitle,
+            action: action
         )
     }
 }

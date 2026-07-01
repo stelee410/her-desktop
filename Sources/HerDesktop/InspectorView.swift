@@ -75,6 +75,7 @@ struct InspectorView: View {
 
 private struct ProductReadinessCard: View {
     @EnvironmentObject private var model: AppViewModel
+    @Environment(\.openSettings) private var openSettings
 
     private var summary: ProductReadinessSummary {
         ProductReadinessBuilder.build(
@@ -129,12 +130,22 @@ private struct ProductReadinessCard: View {
                                         .clipShape(RoundedRectangle(cornerRadius: 5))
                                     Spacer(minLength: 0)
                                 }
-                                Text(item.detail)
-                                    .font(.caption2)
-                                    .foregroundStyle(AppTheme.muted)
-                                    .lineLimit(2)
-                                    .truncationMode(.middle)
-                                    .textSelection(.enabled)
+                                HStack(alignment: .top, spacing: 8) {
+                                    Text(item.detail)
+                                        .font(.caption2)
+                                        .foregroundStyle(AppTheme.muted)
+                                        .lineLimit(2)
+                                        .truncationMode(.middle)
+                                        .textSelection(.enabled)
+                                    Spacer(minLength: 0)
+                                    if let action = item.action, let title = item.actionTitle {
+                                        Button(title) {
+                                            perform(action)
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .controlSize(.mini)
+                                    }
+                                }
                             }
                         }
                         .padding(8)
@@ -143,6 +154,25 @@ private struct ProductReadinessCard: View {
                     }
                 }
             }
+        }
+    }
+
+    private func perform(_ action: ProductReadinessAction) {
+        switch action {
+        case .openSettings:
+            openSettings()
+        case .checkServices:
+            Task { await model.refreshServiceHealth() }
+        case .openPluginDirectory:
+            model.openPluginDirectory()
+        case .openToolsWorkspace:
+            model.selectedSection = .tools
+        case .openProjectsWorkspace:
+            model.selectedSection = .projects
+        case .generateReflection:
+            model.generateReflectionSnapshot()
+        case .startInboxBridge:
+            model.startLocalInboxBridge()
         }
     }
 

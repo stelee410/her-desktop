@@ -18,7 +18,9 @@ final class ProductReadinessBuilderTests: XCTestCase {
         XCTAssertEqual(summary.score, "2/4")
         XCTAssertFalse(summary.isReadyForCoreWork)
         XCTAssertEqual(summary.items.first { $0.id == "agentllm" }?.level, .attention)
+        XCTAssertEqual(summary.items.first { $0.id == "agentllm" }?.action, .openSettings)
         XCTAssertEqual(summary.items.first { $0.id == "agentmem" }?.level, .attention)
+        XCTAssertEqual(summary.items.first { $0.id == "agentmem" }?.actionTitle, "Settings")
         XCTAssertEqual(summary.items.first { $0.id == "plugins" }?.level, .ready)
         XCTAssertEqual(summary.items.first { $0.id == "identity" }?.level, .ready)
     }
@@ -49,6 +51,8 @@ final class ProductReadinessBuilderTests: XCTestCase {
         XCTAssertEqual(summary.items.first { $0.id == "inbox" }?.level, .ready)
         XCTAssertEqual(summary.items.first { $0.id == "workplan" }?.level, .ready)
         XCTAssertEqual(summary.items.first { $0.id == "reflection" }?.level, .ready)
+        XCTAssertNil(summary.items.first { $0.id == "agentllm" }?.action)
+        XCTAssertNil(summary.items.first { $0.id == "reflection" }?.action)
     }
 
     func testPendingReviewQueueKeepsCoreReadyButNeedsAttention() {
@@ -74,6 +78,35 @@ final class ProductReadinessBuilderTests: XCTestCase {
         XCTAssertTrue(summary.isReadyForCoreWork)
         XCTAssertEqual(summary.items.first { $0.id == "reviews" }?.level, .attention)
         XCTAssertEqual(summary.items.first { $0.id == "reviews" }?.detail, "1 approval(s), 0 plugin draft(s) waiting.")
+        XCTAssertEqual(summary.items.first { $0.id == "reviews" }?.action, .openToolsWorkspace)
+    }
+
+    func testConfiguredButUncheckedServicesExposeCheckActionAndOptionalItemsExposeLocalActions() {
+        var config = HerAppConfig.empty
+        config.agentLLMAPIKey = "llm-test"
+        config.agentMemAPIKey = "mem-test"
+
+        let summary = ProductReadinessBuilder.build(
+            config: config,
+            serviceHealth: [
+                health(id: "agentllm", state: .unknown),
+                health(id: "agentmem", state: .offline)
+            ],
+            plugins: [],
+            localInboxBridgeState: LocalInboxBridgeState(),
+            pendingApprovals: [],
+            generatedDrafts: [],
+            workPlan: nil,
+            dreamContext: nil
+        )
+
+        XCTAssertEqual(summary.items.first { $0.id == "agentllm" }?.action, .checkServices)
+        XCTAssertEqual(summary.items.first { $0.id == "agentmem" }?.actionTitle, "Check")
+        XCTAssertEqual(summary.items.first { $0.id == "plugins" }?.action, .openPluginDirectory)
+        XCTAssertEqual(summary.items.first { $0.id == "workplan" }?.action, .openProjectsWorkspace)
+        XCTAssertEqual(summary.items.first { $0.id == "reflection" }?.action, .generateReflection)
+        XCTAssertEqual(summary.items.first { $0.id == "inbox" }?.action, .startInboxBridge)
+        XCTAssertEqual(summary.items.first { $0.id == "voice" }?.action, .openSettings)
     }
 
     private func health(id: String, state: ServiceHealthState, summary: String? = nil) -> ServiceHealth {
