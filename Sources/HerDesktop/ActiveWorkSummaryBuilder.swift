@@ -82,7 +82,7 @@ struct ActiveWorkSummaryBuilder {
                 .map(\.detail)
                 .joined(separator: " ")
             let callable = functions.isEmpty ? "no callable functions" : "functions: \(functions)"
-            return "- \(draft.manifest.name) (\(draft.manifest.id)): \(review.riskLevel.rawValue) risk, \(review.capabilityCount) capability/capabilities, \(review.permissionCount) permission(s), \(callable). \(Self.compact(installPreview, limit: draftSummaryLimit))"
+            return "- \(draft.manifest.name) (\(draft.manifest.id)): draft_id \(draft.id.uuidString), \(review.riskLevel.rawValue) risk, \(review.capabilityCount) capability/capabilities, \(review.permissionCount) permission(s), \(callable). Install after user confirmation with plugin_installDraft {plugin_id: \(draft.manifest.id), draft_id: \(draft.id.uuidString), confirmed: true}; discard with plugin_discardDraft using the same ids. \(Self.compact(installPreview, limit: draftSummaryLimit))"
         }
 
         if !recentDrafts.isEmpty {

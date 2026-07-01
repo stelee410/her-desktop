@@ -811,6 +811,13 @@ final class AppViewModelTests: XCTestCase {
                 .path
         ))
         XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Draft Created") })
+        let draftMessage = try XCTUnwrap(model.messages.last?.content)
+        XCTAssertTrue(draftMessage.contains("draft_id: \(draft.id.uuidString)"))
+        XCTAssertTrue(draftMessage.contains("plugin_id: local.meeting-brief"))
+        XCTAssertTrue(draftMessage.contains("plugin.installDraft arguments"))
+        XCTAssertTrue(draftMessage.contains("\"plugin_id\":\"local.meeting-brief\""))
+        XCTAssertTrue(draftMessage.contains("\"draft_id\":\"\(draft.id.uuidString)\""))
+        XCTAssertTrue(draftMessage.contains("plugin.discardDraft arguments"))
         let audit = try AuditEventStore(cwd: cwd.path).loadAll()
         XCTAssertTrue(audit.contains { event in
             event.type == "plugin.draft_staged"
@@ -859,7 +866,13 @@ final class AppViewModelTests: XCTestCase {
         let userPrompt = try XCTUnwrap(fakeLLM.requests.first?.first { $0.role == "user" }?.content)
         XCTAssertTrue(userPrompt.contains("Vibe brief:"))
         XCTAssertTrue(userPrompt.contains("describe this plugin in a dialog"))
-        XCTAssertEqual(model.generatedPluginDrafts.first?.manifest.id, "local.brief-plugin")
+        let draft = try XCTUnwrap(model.generatedPluginDrafts.first)
+        XCTAssertEqual(draft.manifest.id, "local.brief-plugin")
+        let draftMessage = try XCTUnwrap(model.messages.last?.content)
+        XCTAssertTrue(draftMessage.contains("AI Plugin Draft Created"))
+        XCTAssertTrue(draftMessage.contains("draft_id: \(draft.id.uuidString)"))
+        XCTAssertTrue(draftMessage.contains("\"plugin_id\":\"local.brief-plugin\""))
+        XCTAssertTrue(draftMessage.contains("plugin.installDraft arguments"))
     }
 
     func testAIVibePluginGenerationRepairsInvalidPackageOnce() async throws {
@@ -952,6 +965,10 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(model.generatedPluginDrafts.map(\.manifest.id), ["local.imported"])
         XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Package Imported") })
         let draft = try XCTUnwrap(model.generatedPluginDrafts.first)
+        let draftMessage = try XCTUnwrap(model.messages.last?.content)
+        XCTAssertTrue(draftMessage.contains("draft_id: \(draft.id.uuidString)"))
+        XCTAssertTrue(draftMessage.contains("\"plugin_id\":\"local.imported\""))
+        XCTAssertTrue(draftMessage.contains("plugin.discardDraft arguments"))
         let readme = try XCTUnwrap(draft.package.files.first { $0.path == "README.md" }?.content)
         let skill = try XCTUnwrap(draft.package.files.first { $0.path == "SKILL.md" }?.content)
         XCTAssertTrue(readme.contains("## Capability Contract"))

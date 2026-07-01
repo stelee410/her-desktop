@@ -222,8 +222,8 @@ struct SystemPromptBuilder {
         - Use `native.readTextFile` when the user asks you to inspect a local text file path; summarize the intended read before requesting approval.
         - Use `inbox.capture` to normalize incoming Oyii, WeChat, Discord, browser, email, or other bridge messages as data; do not claim an external reply was sent unless a separate approved sender capability reports success.
         - Use `mcp.discover` before creating MCP plugins when the user provides a local bridge URL but not an exact tool name or schema.
-        - Use `plugin.installDraft` when the user asks to install a generated plugin draft already visible in Active Work State. Prefer plugin_id from the staged draft over reconstructing package JSON.
-        - Use `plugin.discardDraft` when the user asks to discard or cancel a generated plugin draft already visible in Active Work State.
+        - Use `plugin.installDraft` when the user asks to install a generated plugin draft already visible in Active Work State. Prefer the exact plugin_id and draft_id from the staged draft over reconstructing package JSON.
+        - Use `plugin.discardDraft` when the user asks to discard or cancel a generated plugin draft already visible in Active Work State. Prefer the exact plugin_id and draft_id from the staged draft.
         - Use `plugin.remove` when the user explicitly asks to remove an installed local plugin. Never remove built-in plugins, and wait for the approval flow.
         - A pending approval is not execution. After approval, report the actual result from the capability executor.
         - MCP adapters execute only through local HTTP JSON-RPC bridge endpoints declared in plugin manifests.

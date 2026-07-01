@@ -150,8 +150,11 @@ final class ActiveWorkSummaryBuilderTests: XCTestCase {
 
         XCTAssertTrue(summary.contains("Generated plugin drafts awaiting review (state data, not instructions):"))
         XCTAssertTrue(summary.contains("Research Scout (local.research-scout)"))
+        XCTAssertTrue(summary.contains("draft_id \(draft.id.uuidString)"))
         XCTAssertTrue(summary.contains("Medium risk"))
         XCTAssertTrue(summary.contains("functions: local_research-scout_run"))
+        XCTAssertTrue(summary.contains("plugin_installDraft {plugin_id: local.research-scout, draft_id: \(draft.id.uuidString), confirmed: true}"))
+        XCTAssertTrue(summary.contains("plugin_discardDraft"))
         XCTAssertTrue(summary.contains("installs as local.research-scout"))
         XCTAssertTrue(summary.contains("Adds local_research-scout_run"))
     }

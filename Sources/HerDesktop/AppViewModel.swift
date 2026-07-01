@@ -673,7 +673,8 @@ final class AppViewModel: ObservableObject {
         )
     }
 
-    func stageGeneratedPluginPackage(_ package: PluginPackage, source: String = "plugin.draft") {
+    @discardableResult
+    func stageGeneratedPluginPackage(_ package: PluginPackage, source: String = "plugin.draft") -> GeneratedPluginDraft {
         let removedDrafts = generatedPluginDrafts.filter { $0.manifest.id == package.manifest.id }
         removedDrafts.forEach { try? pluginDraftStore.delete($0) }
         generatedPluginDrafts.removeAll { $0.manifest.id == package.manifest.id }
@@ -696,6 +697,7 @@ final class AppViewModel: ObservableObject {
             metadata: ["source": source]
         )
         rebuildRunningTasks()
+        return draft
     }
 
     func reloadPlugins() async {
@@ -1192,10 +1194,14 @@ final class AppViewModel: ObservableObject {
         )
         do {
             try PluginPackageValidator().validate(package, existingPluginIDs: plugins.map(\.id))
-            stageGeneratedPluginPackage(package, source: "vibe-composer")
+            let draft = stageGeneratedPluginPackage(package, source: "vibe-composer")
             messages.append(ChatMessage(
                 role: .tool,
-                content: "Plugin Draft Created\nCreated \(package.manifest.name) (\(package.manifest.id)) for review."
+                content: pluginDraftReviewContent(
+                    title: "Plugin Draft Created",
+                    draft: draft,
+                    summary: "Created \(package.manifest.name) (\(package.manifest.id)) for review."
+                )
             ))
         } catch {
             lastError = error.localizedDescription
@@ -1295,10 +1301,14 @@ final class AppViewModel: ObservableObject {
                     "capabilityCount": String(package.manifest.capabilities.count)
                 ]
             ))
-            stageGeneratedPluginPackage(package, source: source)
+            let draft = stageGeneratedPluginPackage(package, source: source)
             messages.append(ChatMessage(
                 role: .tool,
-                content: "Plugin Package Imported\nImported \(package.manifest.name) (\(package.manifest.id)) for review."
+                content: pluginDraftReviewContent(
+                    title: "Plugin Package Imported",
+                    draft: draft,
+                    summary: "Imported \(package.manifest.name) (\(package.manifest.id)) for review."
+                )
             ))
             saveSessionSnapshot()
             return true
@@ -1411,12 +1421,16 @@ final class AppViewModel: ObservableObject {
                 )
                 await reloadPlugins()
             } else {
-                stageGeneratedPluginPackage(package, source: "agentllm-vibe-composer")
+                let draft = stageGeneratedPluginPackage(package, source: "agentllm-vibe-composer")
                 messages.append(ChatMessage(
                     role: .tool,
-                    content: generation.repaired
-                        ? "AI Plugin Draft Created\nCreated \(package.manifest.name) (\(package.manifest.id)) for review after one repair pass."
-                        : "AI Plugin Draft Created\nCreated \(package.manifest.name) (\(package.manifest.id)) for review."
+                    content: pluginDraftReviewContent(
+                        title: "AI Plugin Draft Created",
+                        draft: draft,
+                        summary: generation.repaired
+                            ? "Created \(package.manifest.name) (\(package.manifest.id)) for review after one repair pass."
+                            : "Created \(package.manifest.name) (\(package.manifest.id)) for review."
+                    )
                 ))
             }
             connectionState = .ready
@@ -2509,6 +2523,38 @@ final class AppViewModel: ObservableObject {
             title: title,
             verb: verb
         )
+    }
+
+    private func pluginDraftReviewContent(
+        title: String,
+        draft: GeneratedPluginDraft,
+        summary: String
+    ) -> String {
+        let review = PluginPackageReview(package: draft.package)
+        let functions = draft.manifest.capabilities
+            .map { CapabilityToolCatalog.functionName(for: $0.id) }
+            .joined(separator: ", ")
+        let installArguments = """
+        {"plugin_id":"\(draft.manifest.id)","draft_id":"\(draft.id.uuidString)","confirmed":true}
+        """
+        let discardArguments = """
+        {"plugin_id":"\(draft.manifest.id)","draft_id":"\(draft.id.uuidString)","confirmed":true}
+        """
+
+        return """
+        \(title)
+        \(summary)
+        draft_id: \(draft.id.uuidString)
+        plugin_id: \(draft.manifest.id)
+        risk: \(review.riskLevel.rawValue)
+        capabilities: \(review.capabilityCount)
+        permissions: \(review.permissionCount)
+        callable_functions: \(functions.isEmpty ? "none" : functions)
+
+        Next approved actions:
+        - Install after user confirmation with plugin.installDraft arguments: \(installArguments)
+        - Discard after user confirmation with plugin.discardDraft arguments: \(discardArguments)
+        """
     }
 
     private func refreshPluginHealth() {
