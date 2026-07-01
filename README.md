@@ -40,7 +40,7 @@ export HER_USER_ID="stelee"
 tool output and artifact manifests redact recognized tokens before display.
 
 For the packaged Mac app, saved configuration defaults to `~/Library/Application Support/Her Desktop/config.json`.
-You can also edit the same values from the native macOS Settings window after launch; the main Inspector and Settings share the same save path and immediately re-check AgentLLM, AgentMem, and plugin runtime health after saving.
+You can also edit the same values from the native macOS Settings window after launch; the main Inspector and Settings share the same save path and immediately re-check AgentLLM health plus chat data-plane readiness, AgentMem identity/query readiness, and plugin runtime health after saving.
 
 ## Run
 

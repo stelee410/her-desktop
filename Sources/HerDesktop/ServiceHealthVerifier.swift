@@ -83,14 +83,19 @@ final class ServiceHealthVerifier {
 
         do {
             let body = try await getText(url: config.agentLLMBaseURL.appending(path: "/health"), headers: [:])
-            let summary = body.trimmingCharacters(in: .whitespacesAndNewlines)
+            let healthSummary = body.trimmingCharacters(in: .whitespacesAndNewlines)
+            let chatSummary = try await checkAgentLLMChatDataPlane()
+            let summary = [
+                healthSummary.isEmpty ? "Health OK" : String(healthSummary.prefix(80)),
+                chatSummary
+            ].joined(separator: " · ")
             return .init(
                 id: "agentllm",
                 name: "AgentLLM",
                 kind: "model",
                 baseURL: config.agentLLMBaseURL,
                 state: .online,
-                summary: summary.isEmpty ? "Health OK" : String(summary.prefix(80)),
+                summary: summary,
                 checkedAt: Date()
             )
         } catch {
@@ -104,6 +109,34 @@ final class ServiceHealthVerifier {
                 checkedAt: Date()
             )
         }
+    }
+
+    private func checkAgentLLMChatDataPlane() async throws -> String {
+        let url = config.agentLLMBaseURL.appending(path: "/v1/chat/completions")
+        let body: [String: Any] = [
+            "model": config.agentLLMModel,
+            "messages": [
+                [
+                    "role": "system",
+                    "content": "Her Desktop service health check."
+                ],
+                [
+                    "role": "user",
+                    "content": "Reply with OK."
+                ]
+            ],
+            "temperature": 0,
+            "max_tokens": 4,
+            "stream": false
+        ]
+        _ = try await postData(
+            url: url,
+            body: body,
+            headers: [
+                "Authorization": "Bearer \(config.agentLLMAPIKey)"
+            ]
+        )
+        return "Chat OK"
     }
 
     private func checkAgentMem() async -> ServiceHealth {

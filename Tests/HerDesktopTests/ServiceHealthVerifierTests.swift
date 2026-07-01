@@ -58,6 +58,41 @@ final class ServiceHealthVerifierTests: XCTestCase {
         XCTAssertEqual(checked.first { $0.id == "plugins" }?.summary, "2 installed")
     }
 
+    func testAgentLLMHealthChecksChatDataPlane() async throws {
+        var config = HerAppConfig.empty
+        config.agentLLMBaseURL = URL(string: "https://agentllm.test")!
+        config.agentLLMAPIKey = "llm_test"
+        config.agentLLMModel = "test-model"
+
+        var requests: [String] = []
+        let verifier = ServiceHealthVerifier(config: config, session: mockSession { request in
+            requests.append("\(request.httpMethod ?? "GET") \(request.url?.path ?? "")")
+            if request.url?.path == "/health" {
+                XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                return (response, Data("ready".utf8))
+            }
+
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.url?.path, "/v1/chat/completions")
+            XCTAssertEqual(request.timeoutInterval, 12)
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer llm_test")
+            let body = try XCTUnwrap(Self.bodyObject(from: request))
+            XCTAssertEqual(body["model"] as? String, "test-model")
+            XCTAssertEqual(body["stream"] as? Bool, false)
+            XCTAssertEqual(body["max_tokens"] as? Int, 4)
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data(#"{"choices":[{"message":{"role":"assistant","content":"OK"}}]}"#.utf8))
+        })
+
+        let checked = await verifier.checkAll(pluginCount: 2)
+        let agentLLM = try XCTUnwrap(checked.first { $0.id == "agentllm" })
+
+        XCTAssertEqual(agentLLM.state, .online)
+        XCTAssertEqual(agentLLM.summary, "ready · Chat OK")
+        XCTAssertEqual(requests, ["GET /health", "POST /v1/chat/completions"])
+    }
+
     func testAgentMemHealthChecksScopedQueryDataPlane() async throws {
         var config = HerAppConfig.empty
         config.agentMemBaseURL = URL(string: "https://agentmem.test")!
