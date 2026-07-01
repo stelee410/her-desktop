@@ -11,6 +11,7 @@ enum ProductReadinessAction: String, Codable, Equatable {
     case checkServices
     case openPluginDirectory
     case openToolsWorkspace
+    case composePlugin
     case openProjectsWorkspace
     case generateReflection
     case startInboxBridge
@@ -155,8 +156,8 @@ enum ProductReadinessBuilder {
                 level: .attention,
                 systemImage: "puzzlepiece.extension",
                 required: true,
-                actionTitle: "Plugins",
-                action: .openPluginDirectory
+                actionTitle: "Compose",
+                action: .composePlugin
             )
         }
         return item(

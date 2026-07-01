@@ -70,6 +70,24 @@ struct InspectorView: View {
             .padding(18)
         }
         .background(Color.white.opacity(0.24))
+        .sheet(isPresented: $model.isVibePluginComposerPresented) {
+            VibePluginComposerSheet(
+                isPresented: $model.isVibePluginComposerPresented,
+                pluginName: $pluginName,
+                pluginDescription: $pluginDescription,
+                pluginKind: $pluginKind,
+                pluginRequiresApproval: $pluginRequiresApproval,
+                pluginURL: $pluginURL,
+                pluginMethod: $pluginMethod,
+                pluginMCPMethod: $pluginMCPMethod,
+                pluginMCPToolName: $pluginMCPToolName,
+                pluginMCPInputSchemaJSON: $pluginMCPInputSchemaJSON,
+                pluginCommandPath: $pluginCommandPath,
+                pluginCommandArguments: $pluginCommandArguments,
+                pluginPackageJSON: $pluginPackageJSON
+            )
+            .environmentObject(model)
+        }
     }
 }
 
@@ -78,16 +96,7 @@ private struct ProductReadinessCard: View {
     @Environment(\.openSettings) private var openSettings
 
     private var summary: ProductReadinessSummary {
-        ProductReadinessBuilder.build(
-            config: model.config,
-            serviceHealth: model.serviceHealth,
-            plugins: model.plugins,
-            localInboxBridgeState: model.localInboxBridgeState,
-            pendingApprovals: model.pendingApprovals,
-            generatedDrafts: model.generatedPluginDrafts,
-            workPlan: model.workPlan,
-            dreamContext: model.dreamContext
-        )
+        model.productReadinessSummary
     }
 
     var body: some View {
@@ -158,22 +167,7 @@ private struct ProductReadinessCard: View {
     }
 
     private func perform(_ action: ProductReadinessAction) {
-        switch action {
-        case .openSettings:
-            openSettings()
-        case .checkServices:
-            Task { await model.refreshServiceHealth() }
-        case .openPluginDirectory:
-            model.openPluginDirectory()
-        case .openToolsWorkspace:
-            model.selectedSection = .tools
-        case .openProjectsWorkspace:
-            model.selectedSection = .projects
-        case .generateReflection:
-            model.generateReflectionSnapshot()
-        case .startInboxBridge:
-            model.startLocalInboxBridge()
-        }
+        model.performProductReadinessAction(action) { openSettings() }
     }
 
     private func label(for item: ProductReadinessItem) -> String {
@@ -207,7 +201,6 @@ private struct PartnerCommandCenterCard: View {
     @Binding var pluginCommandPath: String
     @Binding var pluginCommandArguments: String
     @Binding var pluginPackageJSON: String
-    @State private var isComposerPresented = false
 
     private let columns = [
         GridItem(.flexible(), spacing: 8),
@@ -296,7 +289,7 @@ private struct PartnerCommandCenterCard: View {
                     .buttonStyle(.bordered)
 
                     Button {
-                        isComposerPresented = true
+                        model.isVibePluginComposerPresented = true
                     } label: {
                         Label("Vibe", systemImage: "wand.and.sparkles")
                             .frame(maxWidth: .infinity)
@@ -323,24 +316,6 @@ private struct PartnerCommandCenterCard: View {
                 }
                 .controlSize(.small)
             }
-        }
-        .sheet(isPresented: $isComposerPresented) {
-            VibePluginComposerSheet(
-                isPresented: $isComposerPresented,
-                pluginName: $pluginName,
-                pluginDescription: $pluginDescription,
-                pluginKind: $pluginKind,
-                pluginRequiresApproval: $pluginRequiresApproval,
-                pluginURL: $pluginURL,
-                pluginMethod: $pluginMethod,
-                pluginMCPMethod: $pluginMCPMethod,
-                pluginMCPToolName: $pluginMCPToolName,
-                pluginMCPInputSchemaJSON: $pluginMCPInputSchemaJSON,
-                pluginCommandPath: $pluginCommandPath,
-                pluginCommandArguments: $pluginCommandArguments,
-                pluginPackageJSON: $pluginPackageJSON
-            )
-            .environmentObject(model)
         }
     }
 
@@ -2027,7 +2002,6 @@ private struct PluginCreatorCard: View {
     @Binding var pluginCommandPath: String
     @Binding var pluginCommandArguments: String
     @Binding var pluginPackageJSON: String
-    @State private var isComposerPresented = false
 
     var body: some View {
         Panel(title: "Vibe Plugin", trailing: "\(model.plugins.count) installed") {
@@ -2052,31 +2026,13 @@ private struct PluginCreatorCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
 
                 Button {
-                    isComposerPresented = true
+                    model.isVibePluginComposerPresented = true
                 } label: {
                     Label("Open Composer", systemImage: "square.and.pencil")
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(AppTheme.coral)
             }
-        }
-        .sheet(isPresented: $isComposerPresented) {
-            VibePluginComposerSheet(
-                isPresented: $isComposerPresented,
-                pluginName: $pluginName,
-                pluginDescription: $pluginDescription,
-                pluginKind: $pluginKind,
-                pluginRequiresApproval: $pluginRequiresApproval,
-                pluginURL: $pluginURL,
-                pluginMethod: $pluginMethod,
-                pluginMCPMethod: $pluginMCPMethod,
-                pluginMCPToolName: $pluginMCPToolName,
-                pluginMCPInputSchemaJSON: $pluginMCPInputSchemaJSON,
-                pluginCommandPath: $pluginCommandPath,
-                pluginCommandArguments: $pluginCommandArguments,
-                pluginPackageJSON: $pluginPackageJSON
-            )
-            .environmentObject(model)
         }
     }
 }

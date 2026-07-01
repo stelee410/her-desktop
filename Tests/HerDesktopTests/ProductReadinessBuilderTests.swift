@@ -102,7 +102,8 @@ final class ProductReadinessBuilderTests: XCTestCase {
 
         XCTAssertEqual(summary.items.first { $0.id == "agentllm" }?.action, .checkServices)
         XCTAssertEqual(summary.items.first { $0.id == "agentmem" }?.actionTitle, "Check")
-        XCTAssertEqual(summary.items.first { $0.id == "plugins" }?.action, .openPluginDirectory)
+        XCTAssertEqual(summary.items.first { $0.id == "plugins" }?.action, .composePlugin)
+        XCTAssertEqual(summary.items.first { $0.id == "plugins" }?.actionTitle, "Compose")
         XCTAssertEqual(summary.items.first { $0.id == "workplan" }?.action, .openProjectsWorkspace)
         XCTAssertEqual(summary.items.first { $0.id == "reflection" }?.action, .generateReflection)
         XCTAssertEqual(summary.items.first { $0.id == "inbox" }?.action, .startInboxBridge)
@@ -132,7 +133,7 @@ final class ProductReadinessBuilderTests: XCTestCase {
         XCTAssertEqual(summary.suggestedActions(limit: 5).map(\.action), [
             .checkServices,
             .checkServices,
-            .openPluginDirectory,
+            .composePlugin,
             .openToolsWorkspace,
             .openProjectsWorkspace
         ])

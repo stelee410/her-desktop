@@ -83,6 +83,20 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(WorkspaceSection.allCases.map(\.title), ["Today", "Memory", "Projects", "Tools", "Agents"])
     }
 
+    func testProductReadinessComposeActionOpensToolsAndComposer() {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-readiness-compose-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(config: .empty, cwd: root.path)
+
+        XCTAssertEqual(model.selectedSection, .today)
+        XCTAssertFalse(model.isVibePluginComposerPresented)
+
+        model.performProductReadinessAction(.composePlugin)
+
+        XCTAssertEqual(model.selectedSection, .tools)
+        XCTAssertTrue(model.isVibePluginComposerPresented)
+    }
+
     func testDictationUpdatesDraftAndStopsWithoutSending() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-dictation-\(UUID().uuidString)", isDirectory: true)

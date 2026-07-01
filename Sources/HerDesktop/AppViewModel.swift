@@ -30,6 +30,7 @@ final class AppViewModel: ObservableObject {
     @Published var localInboxBridgeState: LocalInboxBridgeState
     @Published var selectedSection: WorkspaceSection
     @Published var highlightedPluginID: String?
+    @Published var isVibePluginComposerPresented: Bool
 
     private var agentMem: AgentMemClient
     private var agentLLM: any AgentLLMChatting
@@ -125,6 +126,7 @@ final class AppViewModel: ObservableObject {
         self.localInboxBridgeState = LocalInboxBridgeState()
         self.selectedSection = .today
         self.highlightedPluginID = nil
+        self.isVibePluginComposerPresented = false
         rebuildRunningTasks()
     }
 
@@ -231,6 +233,41 @@ final class AppViewModel: ObservableObject {
 
     func openPluginDirectory() {
         openDirectory(HerWorkspacePaths.pluginDirectory(config: config, cwd: runtimeCwd), eventType: "workspace.open_plugin_directory")
+    }
+
+    var productReadinessSummary: ProductReadinessSummary {
+        ProductReadinessBuilder.build(
+            config: config,
+            serviceHealth: serviceHealth,
+            plugins: plugins,
+            localInboxBridgeState: localInboxBridgeState,
+            pendingApprovals: pendingApprovals,
+            generatedDrafts: generatedPluginDrafts,
+            workPlan: workPlan,
+            dreamContext: dreamContext
+        )
+    }
+
+    func performProductReadinessAction(_ action: ProductReadinessAction, openSettings: (() -> Void)? = nil) {
+        switch action {
+        case .openSettings:
+            openSettings?()
+        case .checkServices:
+            Task { await refreshServiceHealth() }
+        case .openPluginDirectory:
+            openPluginDirectory()
+        case .openToolsWorkspace:
+            selectedSection = .tools
+        case .composePlugin:
+            selectedSection = .tools
+            isVibePluginComposerPresented = true
+        case .openProjectsWorkspace:
+            selectedSection = .projects
+        case .generateReflection:
+            generateReflectionSnapshot()
+        case .startInboxBridge:
+            startLocalInboxBridge()
+        }
     }
 
     func sendDraft() async {

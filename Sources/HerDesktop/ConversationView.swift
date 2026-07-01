@@ -53,16 +53,7 @@ private struct LaunchReadinessStrip: View {
     @Environment(\.openSettings) private var openSettings
 
     private var summary: ProductReadinessSummary {
-        ProductReadinessBuilder.build(
-            config: model.config,
-            serviceHealth: model.serviceHealth,
-            plugins: model.plugins,
-            localInboxBridgeState: model.localInboxBridgeState,
-            pendingApprovals: model.pendingApprovals,
-            generatedDrafts: model.generatedPluginDrafts,
-            workPlan: model.workPlan,
-            dreamContext: model.dreamContext
-        )
+        model.productReadinessSummary
     }
 
     var body: some View {
@@ -111,22 +102,7 @@ private struct LaunchReadinessStrip: View {
     }
 
     private func perform(_ action: ProductReadinessAction) {
-        switch action {
-        case .openSettings:
-            openSettings()
-        case .checkServices:
-            Task { await model.refreshServiceHealth() }
-        case .openPluginDirectory:
-            model.openPluginDirectory()
-        case .openToolsWorkspace:
-            model.selectedSection = .tools
-        case .openProjectsWorkspace:
-            model.selectedSection = .projects
-        case .generateReflection:
-            model.generateReflectionSnapshot()
-        case .startInboxBridge:
-            model.startLocalInboxBridge()
-        }
+        model.performProductReadinessAction(action) { openSettings() }
     }
 }
 
