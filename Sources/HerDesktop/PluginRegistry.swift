@@ -384,6 +384,15 @@ final class PluginRegistry {
                         adapter: .init(type: "native")
                     ),
                     .init(
+                        id: "plugin.stagePackage",
+                        title: "Stage plugin package",
+                        kind: "native",
+                        invocation: "plugin.stagePackage",
+                        requiresApproval: false,
+                        description: "Stage a PluginPackage JSON object into the generated review queue.",
+                        adapter: .init(type: "native")
+                    ),
+                    .init(
                         id: "plugin.installDraft",
                         title: "Install staged plugin draft",
                         kind: "native",
@@ -716,6 +725,10 @@ final class PluginRegistry {
             ], required: ["confirmed"])
         case "plugin.listDrafts":
             return objectSchema([:], required: [])
+        case "plugin.stagePackage":
+            return objectSchema([
+                "package_json": field("string", "Complete PluginPackage JSON object to validate and stage for review.")
+            ], required: ["package_json"])
         case "plugin.installDraft":
             return objectSchema([
                 "plugin_id": field("string", "Generated draft plugin id to install, such as local.example. Optional when exactly one draft is waiting."),

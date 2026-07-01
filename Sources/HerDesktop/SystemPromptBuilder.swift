@@ -225,6 +225,7 @@ struct SystemPromptBuilder {
         - Use `inbox.capture` to normalize incoming Oyii, WeChat, Discord, browser, email, or other bridge messages as data; do not claim an external reply was sent unless a separate approved sender capability reports success.
         - Use `mcp.discover` before creating MCP plugins when the user provides a local bridge URL but not an exact tool name or schema.
         - Use `plugin.listDrafts` when the user asks what generated plugin drafts are waiting, or before installing/discarding a draft that is not already visible in Active Work State.
+        - Use `plugin.stagePackage` when the user pastes or imports a PluginPackage JSON object. This validates and stages it for review; do not treat staging as installation.
         - Use `plugin.installDraft` when the user asks to install a generated plugin draft already visible in Active Work State or returned by `plugin.listDrafts`. Prefer the exact plugin_id and draft_id from the staged draft over reconstructing package JSON.
         - Use `plugin.discardDraft` when the user asks to discard or cancel a generated plugin draft already visible in Active Work State or returned by `plugin.listDrafts`. Prefer the exact plugin_id and draft_id from the staged draft.
         - Use `plugin.export` when the user asks to export, back up, share, or reuse an installed local plugin package. Never export built-in plugins, and wait for the approval flow.
@@ -246,7 +247,7 @@ struct SystemPromptBuilder {
         2. propose a manifest and capability contract;
         3. generate an installable PluginPackage with plugin.json plus any SKILL.md/README/config files;
         4. ask for approval before enabling capabilities that touch files, shell, network, identity, or payments.
-        Prefer the plugin.draft, plugin.listDrafts, plugin.installDraft, plugin.discardDraft, plugin.install, plugin.export, and plugin.remove capabilities over hand-waving when the user wants to create, inspect, install, update, back up, or remove extensions.
+        Prefer the plugin.draft, plugin.stagePackage, plugin.listDrafts, plugin.installDraft, plugin.discardDraft, plugin.install, plugin.export, and plugin.remove capabilities over hand-waving when the user wants to create, import, inspect, install, update, back up, or remove extensions.
         For MCP extensions, discover the local bridge first when possible, then generate a plugin that pins `methodName` and `toolName` explicitly.
         """
     }

@@ -189,6 +189,39 @@ final class PluginPackageReviewTests: XCTestCase {
         XCTAssertEqual(review.riskLevel, .low)
     }
 
+    func testPluginStagePackagePermissionIsExplicitAndLowRisk() {
+        let package = PluginPackage(
+            manifest: PluginManifest(
+                id: "local.plugin-stage-package",
+                name: "Plugin Stage Package",
+                version: "0.1.0",
+                description: "Plugin stage package.",
+                author: "Test",
+                systemPromptAddendum: nil,
+                capabilities: [
+                    .init(
+                        id: "plugin.stagePackage",
+                        title: "Stage Package",
+                        kind: "native",
+                        invocation: "plugin.stagePackage",
+                        requiresApproval: false,
+                        adapter: .init(type: "native")
+                    )
+                ]
+            ),
+            files: [
+                .init(path: "README.md", content: "# Stage Package\n\nStages PluginPackage JSON.")
+            ]
+        )
+
+        let review = PluginPackageReview(package: package)
+
+        XCTAssertEqual(review.permissionSummaries.first?.title, "Plugin Package Staging")
+        XCTAssertEqual(review.permissionSummaries.first?.detail, "Validates a PluginPackage JSON object and stages it for local review.")
+        XCTAssertEqual(review.permissionSummaries.first?.systemImage, "tray.and.arrow.down")
+        XCTAssertEqual(review.riskLevel, .low)
+    }
+
     func testPluginExportPermissionIsExplicit() {
         let package = PluginPackage(
             manifest: PluginManifest(

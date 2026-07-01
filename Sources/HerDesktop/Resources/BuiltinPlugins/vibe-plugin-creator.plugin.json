@@ -76,6 +76,29 @@
       "adapter" : {
         "type" : "native"
       },
+      "description" : "Stage a PluginPackage JSON object into the generated review queue.",
+      "id" : "plugin.stagePackage",
+      "inputSchema" : {
+        "properties" : {
+          "package_json" : {
+            "description" : "Complete PluginPackage JSON object to validate and stage for review.",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "package_json"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "plugin.stagePackage",
+      "kind" : "native",
+      "requiresApproval" : false,
+      "title" : "Stage plugin package"
+    },
+    {
+      "adapter" : {
+        "type" : "native"
+      },
       "description" : "Export an installed local plugin package into the workspace after explicit user approval.",
       "id" : "plugin.export",
       "inputSchema" : {

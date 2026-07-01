@@ -1333,6 +1333,29 @@ final class AppViewModel: ObservableObject {
 
     @discardableResult
     func stagePluginPackageJSON(_ text: String, source: String = "pasted-package") -> Bool {
+        let result = stagePluginPackageJSONResult(text, source: source)
+        messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
+        saveSessionSnapshot()
+        return result.title == "Plugin Package Imported"
+    }
+
+    private func stagePluginPackageCapability(arguments: [String: Any]) -> CapabilityResult {
+        let packageJSON = stringArgument(
+            arguments,
+            keys: ["package_json", "plugin_package_json", "json", "request"],
+            fallback: ""
+        )
+        guard !packageJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return CapabilityResult(
+                title: "Plugin Package Import Failed",
+                content: "package_json is required.",
+                requiresUserApproval: false
+            )
+        }
+        return stagePluginPackageJSONResult(packageJSON, source: "plugin.stagePackage capability")
+    }
+
+    private func stagePluginPackageJSONResult(_ text: String, source: String) -> CapabilityResult {
         do {
             let decoded = try PluginPackageJSONExtractor().decodePackage(from: text)
             let package = PluginPackageReviewDocumenter().documented(decoded)
@@ -1349,26 +1372,27 @@ final class AppViewModel: ObservableObject {
                 ]
             ))
             let draft = stageGeneratedPluginPackage(package, source: source)
-            messages.append(ChatMessage(
-                role: .tool,
+            return CapabilityResult(
+                title: "Plugin Package Imported",
                 content: pluginDraftReviewContent(
                     title: "Plugin Package Imported",
                     draft: draft,
                     summary: "Imported \(package.manifest.name) (\(package.manifest.id)) for review."
-                )
-            ))
-            saveSessionSnapshot()
-            return true
+                ),
+                requiresUserApproval: false
+            )
         } catch {
             lastError = error.localizedDescription
-            messages.append(ChatMessage(role: .tool, content: "Plugin Package Import Failed\n\(error.localizedDescription)"))
             audit(
                 type: "plugin.package_import_failed",
                 summary: error.localizedDescription,
                 metadata: ["source": source]
             )
-            saveSessionSnapshot()
-            return false
+            return CapabilityResult(
+                title: "Plugin Package Import Failed",
+                content: error.localizedDescription,
+                requiresUserApproval: false
+            )
         }
     }
 
@@ -1902,6 +1926,9 @@ final class AppViewModel: ObservableObject {
         }
         if invocation.capabilityID == "plugin.listDrafts" {
             return listGeneratedPluginDraftsCapability()
+        }
+        if invocation.capabilityID == "plugin.stagePackage" {
+            return stagePluginPackageCapability(arguments: invocation.arguments)
         }
         if invocation.capabilityID == "plugin.installDraft" {
             return await installGeneratedPluginDraftCapability(arguments: invocation.arguments)

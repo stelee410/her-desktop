@@ -73,7 +73,8 @@ struct PluginPackageReview: Equatable {
         "agentmem.query",
         "mcp.discover",
         "inbox.capture",
-        "plugin.listDrafts"
+        "plugin.listDrafts",
+        "plugin.stagePackage"
     ]
 
     private static func capabilitySummary(_ capability: PluginManifest.Capability) -> CapabilitySummary {
@@ -332,6 +333,15 @@ struct PluginPackageReview: Equatable {
                 title: "Plugin Draft Review Queue",
                 detail: "Lists generated plugin drafts waiting for local review.",
                 systemImage: "list.bullet.clipboard",
+                requiresApproval: approval
+            )
+        }
+        if id == "plugin.stagePackage" {
+            return PermissionSummary(
+                id: id,
+                title: "Plugin Package Staging",
+                detail: "Validates a PluginPackage JSON object and stages it for local review.",
+                systemImage: "tray.and.arrow.down",
                 requiresApproval: approval
             )
         }

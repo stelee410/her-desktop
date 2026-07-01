@@ -120,6 +120,13 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertTrue(listDraftsProperties.isEmpty)
         XCTAssertEqual(listDraftsParameters["required"] as? [String], [])
 
+        let stagePackage = try XCTUnwrap(toolFunction(named: "plugin_stagePackage", in: catalog))
+        let stagePackageParameters = try XCTUnwrap(stagePackage["parameters"] as? [String: Any])
+        let stagePackageProperties = try XCTUnwrap(stagePackageParameters["properties"] as? [String: Any])
+
+        XCTAssertEqual((stagePackageProperties["package_json"] as? [String: Any])?["type"] as? String, "string")
+        XCTAssertEqual(stagePackageParameters["required"] as? [String], ["package_json"])
+
         let installDraft = try XCTUnwrap(toolFunction(named: "plugin_installDraft", in: catalog))
         let installDraftParameters = try XCTUnwrap(installDraft["parameters"] as? [String: Any])
         let installDraftProperties = try XCTUnwrap(installDraftParameters["properties"] as? [String: Any])
@@ -557,6 +564,18 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(capability?.adapter?.type, "native")
         XCTAssertEqual(capability?.requiresApproval, false)
         XCTAssertTrue(CapabilityInputSchema.fields(for: capability!).isEmpty)
+    }
+
+    func testBuiltInPluginStagePackageDoesNotRequireApproval() {
+        let registry = PluginRegistry(config: .empty)
+        let capability = registry.capability(id: "plugin.stagePackage")
+
+        XCTAssertEqual(capability?.kind, "native")
+        XCTAssertEqual(capability?.adapter?.type, "native")
+        XCTAssertEqual(capability?.requiresApproval, false)
+        XCTAssertEqual(CapabilityInputSchema.fields(for: capability!).map(\.name), [
+            "package_json"
+        ])
     }
 
     func testBuiltInPluginExportRequiresApproval() {

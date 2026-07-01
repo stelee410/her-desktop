@@ -1055,6 +1055,39 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(audit.contains { $0.type == "plugin.package_import_failed" })
     }
 
+    func testPluginStagePackageCapabilityImportsPackageForReview() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-stage-plugin-package-capability-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        let package = samplePackage(id: "local.capability-imported", name: "Capability Imported")
+        let json = String(data: try JSONEncoder.pretty.encode(package), encoding: .utf8)!
+
+        let model = AppViewModel(config: config, cwd: cwd.path)
+        await model.runCapability(
+            capabilityID: "plugin.stagePackage",
+            arguments: ["package_json": json]
+        )
+
+        XCTAssertEqual(model.generatedPluginDrafts.map(\.manifest.id), ["local.capability-imported"])
+        let draft = try XCTUnwrap(model.generatedPluginDrafts.first)
+        let draftMessage = try XCTUnwrap(model.messages.last?.content)
+        XCTAssertTrue(draftMessage.contains("Plugin Package Imported"))
+        XCTAssertTrue(draftMessage.contains("draft_id: \(draft.id.uuidString)"))
+        XCTAssertTrue(draftMessage.contains("\"plugin_id\":\"local.capability-imported\""))
+        XCTAssertTrue(draftMessage.contains("plugin.installDraft arguments"))
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: cwd.appendingPathComponent(".her/plugin-drafts/\(draft.id.uuidString).json").path
+        ))
+        let audit = try AuditEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(audit.contains { event in
+            event.type == "plugin.draft_staged"
+            && event.metadata["pluginID"] == "local.capability-imported"
+            && event.metadata["source"] == "plugin.stagePackage capability"
+        })
+    }
+
     func testViewModelLoadsRecentAuditEventsOnStartup() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-load-audit-\(UUID().uuidString)", isDirectory: true)
