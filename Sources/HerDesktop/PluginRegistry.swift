@@ -219,10 +219,19 @@ final class PluginRegistry {
     }
 
     private func decodePluginManifests(in directory: URL) -> [PluginManifest] {
-        let decoder = JSONDecoder()
         let items = (try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
-        return items
-            .filter { $0.pathExtension == "json" }
+        return decodePluginManifests(from: items)
+    }
+
+    private func bundledFlatPluginManifests() -> [PluginManifest] {
+        let urls = Bundle.module.urls(forResourcesWithExtension: "json", subdirectory: nil) ?? []
+        return decodePluginManifests(from: urls)
+    }
+
+    private func decodePluginManifests(from urls: [URL]) -> [PluginManifest] {
+        let decoder = JSONDecoder()
+        return urls
+            .filter { $0.lastPathComponent.hasSuffix(".plugin.json") }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
             .compactMap { item in
                 do {
@@ -232,32 +241,6 @@ final class PluginRegistry {
                     return nil
                 }
             }
-    }
-
-    private func bundledFlatPluginManifests() -> [PluginManifest] {
-        let manifestNames = [
-            "agentmem.plugin",
-            "agentllm-media.plugin",
-            "companion-reflection.plugin",
-            "external-inbox.plugin",
-            "mcp-bridge.plugin",
-            "native-macos.plugin",
-            "partner-brief.plugin",
-            "vibe-plugin-creator.plugin",
-            "workspace.plugin"
-        ]
-        let decoder = JSONDecoder()
-        return manifestNames.compactMap { name in
-            guard let item = Bundle.module.url(forResource: name, withExtension: "json") else {
-                return nil
-            }
-            do {
-                return try decoder.decode(PluginManifest.self, from: Data(contentsOf: item))
-            } catch {
-                print("Failed to load bundled plugin \(item.path): \(error)")
-                return nil
-            }
-        }
     }
 
     private func bundledPluginFile(pluginID: String, path: String) -> String? {

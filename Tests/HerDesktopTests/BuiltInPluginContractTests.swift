@@ -2,6 +2,30 @@ import XCTest
 @testable import HerDesktop
 
 final class BuiltInPluginContractTests: XCTestCase {
+    func testBundledBuiltInPluginResourceFilesAreLoaded() throws {
+        let resourceDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Sources/HerDesktop/Resources/BuiltinPlugins", isDirectory: true)
+        let resourceFiles = try FileManager.default.contentsOfDirectory(
+            at: resourceDirectory,
+            includingPropertiesForKeys: nil
+        )
+        .filter { $0.lastPathComponent.hasSuffix(".plugin.json") }
+        .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        let fileManifests = try resourceFiles.map {
+            try JSONDecoder().decode(PluginManifest.self, from: Data(contentsOf: $0))
+        }
+        let loadedBuiltIns = PluginRegistry(config: .empty)
+            .loadPlugins()
+            .filter { $0.id.hasPrefix("builtin.") }
+
+        XCTAssertEqual(resourceFiles.count, 9)
+        XCTAssertEqual(loadedBuiltIns.map(\.id).sorted(), fileManifests.map(\.id).sorted())
+        XCTAssertEqual(
+            loadedBuiltIns.flatMap(\.capabilities).map(\.id).sorted(),
+            fileManifests.flatMap(\.capabilities).map(\.id).sorted()
+        )
+    }
+
     func testBundledBuiltInPluginsAreSelfDescribingAndReviewable() throws {
         let registry = PluginRegistry(config: .empty)
         let builtIns = registry.loadPlugins().filter { $0.id.hasPrefix("builtin.") }
