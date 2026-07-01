@@ -742,7 +742,9 @@ final class PluginRegistry {
                 "method_name": field("string", "Optional JSON-RPC method name for MCP bridge capabilities."),
                 "tool_name": field("string", "Optional MCP tool name when method_name is tools/call."),
                 "command": field("string", "Optional command executable path for command capabilities."),
-                "command_arguments": field("string", "Optional fixed argument templates for command capabilities, one per line.")
+                "command_arguments": field("string", "Optional fixed argument templates for command capabilities, one per line."),
+                "update_plugin_id": field("string", "Optional installed local plugin id to update, such as local.example. When set, draft a complete replacement package using this exact id."),
+                "existing_package_context": field("string", "Optional context copied from plugin.inspect or plugin.readFile to preserve useful behavior while updating.")
             ], required: ["name", "description"])
         case "plugin.install":
             return objectSchema([

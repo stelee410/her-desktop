@@ -927,6 +927,38 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(draftMessage.contains("plugin.installDraft arguments"))
     }
 
+    func testAIVibePluginGenerationSendsUpdateContextToAgentLLM() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-ai-vibe-plugin-update-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.agentLLMAPIKey = "test-key"
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        let package = samplePackage(id: "local.research-scout", name: "Research Scout", skillContent: "# Updated Skill")
+        let packageJSON = String(data: try JSONEncoder.pretty.encode(package), encoding: .utf8)!
+        let fakeLLM = FakeLLM(responses: [
+            .assistantText(packageJSON)
+        ])
+        let model = AppViewModel(config: config, cwd: cwd.path, agentLLM: fakeLLM)
+
+        await model.generateAIDraftPlugin(
+            named: "Research Scout",
+            description: "Make the existing plugin more careful about source uncertainty.",
+            kind: "skill",
+            requiresApproval: true,
+            vibeBrief: "Update this existing local extension.",
+            updatePluginID: "local.research-scout",
+            existingPackageContext: "Existing SKILL.md: summarize research sources quickly."
+        )
+
+        let userPrompt = try XCTUnwrap(fakeLLM.requests.first?.first { $0.role == "user" }?.content)
+        XCTAssertTrue(userPrompt.contains("Update target plugin id, if this is an update: local.research-scout"))
+        XCTAssertTrue(userPrompt.contains("Existing package context"))
+        XCTAssertTrue(userPrompt.contains("summarize research sources quickly"))
+        let draft = try XCTUnwrap(model.generatedPluginDrafts.first)
+        XCTAssertEqual(draft.manifest.id, "local.research-scout")
+    }
+
     func testAIVibePluginGenerationRepairsInvalidPackageOnce() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-ai-vibe-plugin-repair-\(UUID().uuidString)", isDirectory: true)

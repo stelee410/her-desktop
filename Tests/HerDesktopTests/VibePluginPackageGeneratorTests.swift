@@ -64,6 +64,36 @@ final class VibePluginPackageGeneratorTests: XCTestCase {
         XCTAssertTrue(messages.last?.content?.contains("reusable research assistant extension") == true)
     }
 
+    func testPromptIncludesUpdateTargetAndExistingPackageContext() {
+        let messages = VibePluginPackagePromptBuilder().build(
+            request: VibePluginPackageRequest(
+                name: "Research Scout",
+                description: "Update the installed research helper.",
+                kind: "skill",
+                requiresApproval: true,
+                webServiceURL: "",
+                webServiceMethod: "POST",
+                mcpEndpointURL: "",
+                mcpMethodName: "",
+                mcpToolName: "",
+                mcpInputSchemaJSON: "",
+                commandPath: "",
+                commandArguments: "",
+                updatePluginID: "local.research-scout",
+                existingPackageContext: "SKILL.md says: summarize sources and cite uncertainty.",
+                vibeBrief: "Make the existing plugin more careful."
+            ),
+            existingPluginIDs: ["local.research-scout"]
+        )
+
+        XCTAssertTrue(messages.first?.content?.contains("Update target plugin id") == true)
+        XCTAssertTrue(messages.first?.content?.contains("manifest.id to that exact local.* id") == true)
+        XCTAssertTrue(messages.first?.content?.contains("complete replacement package") == true)
+        XCTAssertTrue(messages.last?.content?.contains("Update target plugin id, if this is an update: local.research-scout") == true)
+        XCTAssertTrue(messages.last?.content?.contains("Existing package context") == true)
+        XCTAssertTrue(messages.last?.content?.contains("summarize sources and cite uncertainty") == true)
+    }
+
     func testRepairPromptIncludesValidationErrorAndInvalidResponse() {
         let messages = VibePluginPackagePromptBuilder().repair(
             request: VibePluginPackageRequest(

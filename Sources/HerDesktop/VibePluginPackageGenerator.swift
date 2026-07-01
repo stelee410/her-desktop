@@ -62,6 +62,8 @@ struct VibePluginPackageRequest: Equatable {
     var mcpInputSchemaJSON: String
     var commandPath: String
     var commandArguments: String
+    var updatePluginID: String = ""
+    var existingPackageContext: String = ""
     var vibeBrief: String = ""
 }
 
@@ -139,6 +141,8 @@ struct VibePluginPackagePromptBuilder {
         - Prefer "local." plugin ids and one ".run" capability.
         - Built-in-style extensions must still be represented as plugin manifests; do not propose hard-coding a new feature into Her Desktop.
         - Avoid existing plugin ids for new extensions. If the user explicitly asks to update an existing extension, reuse that exact local plugin id and return the complete replacement package.
+        - If the user prompt includes an Update target plugin id, set manifest.id to that exact local.* id, keep capability ids under that same id prefix, and return a complete replacement package rather than a patch.
+        - Treat Existing package context as reference data from the currently installed plugin. Preserve useful behavior and file contracts unless the requested change says otherwise.
         - Include a concise inputSchema for every capability so Her Desktop can render a native form instead of a plain text box.
         - inputSchema must be an object schema with "type":"object", "properties", and optional "required".
         - inputSchema property names must be safe identifiers such as request, prompt, size, source_url, method_name.
@@ -170,6 +174,9 @@ struct VibePluginPackagePromptBuilder {
         Name: \(request.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "New Plugin" : request.name)
         Vibe brief: \(request.vibeBrief)
         Description: \(request.description)
+        Update target plugin id, if this is an update: \(request.updatePluginID)
+        Existing package context, if this is an update:
+        \(clipped(request.existingPackageContext, limit: 12_000))
         Capability kind: \(request.kind)
         Requires approval: \(request.requiresApproval)
         Web service URL, if relevant: \(request.webServiceURL)

@@ -509,10 +509,31 @@ final class CapabilityExecutor {
         let effectiveKind = kind.lowercased()
         let requestedApproval = arguments["requires_approval"] as? Bool ?? true
         let requiresApproval = effectiveKind == "command" ? true : requestedApproval
-        let slug = slugify(name)
+        let updatePluginID = clean(arguments["update_plugin_id"] as? String, fallback: "")
+        if !updatePluginID.isEmpty, !updatePluginID.hasPrefix("local.") {
+            return CapabilityResult(
+                title: "Plugin Package Draft Failed",
+                content: "update_plugin_id must be an installed local plugin id such as local.example.",
+                requiresUserApproval: false
+            )
+        }
+        let slug = updatePluginID.isEmpty ? slugify(name) : String(updatePluginID.dropFirst("local.".count))
+        let pluginID = updatePluginID.isEmpty ? "local.\(slug)" : updatePluginID
+        let capabilityID = "\(pluginID).run"
+        let existingPackageContext = clean(arguments["existing_package_context"] as? String, fallback: "")
+        let existingContextBlock = existingPackageContext.isEmpty
+            ? ""
+            : """
+
+            ## Existing Package Context
+
+            This draft updates `\(pluginID)`. Treat the following installed package context as reference data, preserve useful behavior unless the requested change says otherwise, and return/install a complete replacement package:
+
+            \(String(existingPackageContext.prefix(4_000)))
+            """
         let adapter = adapterForDraft(kind: kind, arguments: arguments)
         let manifest = PluginManifest(
-            id: "local.\(slug)",
+            id: pluginID,
             name: name,
             version: "0.1.0",
             description: description,
@@ -520,10 +541,10 @@ final class CapabilityExecutor {
             systemPromptAddendum: "Use this plugin only for its declared capability. Ask before side effects.",
             capabilities: [
                 .init(
-                    id: "local.\(slug).run",
+                    id: capabilityID,
                     title: "Run \(name)",
                     kind: kind,
-                    invocation: "local.\(slug).run",
+                    invocation: capabilityID,
                     requiresApproval: requiresApproval,
                     description: description,
                     inputSchema: draftInputSchema(kind: effectiveKind),
@@ -543,9 +564,10 @@ final class CapabilityExecutor {
 
                     ## Capability
 
-                    - id: local.\(slug).run
+                    - id: \(capabilityID)
                     - kind: \(kind)
                     - approval required: \(requiresApproval)
+                    \(existingContextBlock)
 
                     ## Runtime Notes
 

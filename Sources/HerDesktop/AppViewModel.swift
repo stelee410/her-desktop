@@ -1410,6 +1410,8 @@ final class AppViewModel: ObservableObject {
         commandPath: String = "",
         commandArguments: String = "",
         vibeBrief: String = "",
+        updatePluginID: String = "",
+        existingPackageContext: String = "",
         installImmediately: Bool = false
     ) async {
         guard config.hasLLMKey else {
@@ -1427,6 +1429,7 @@ final class AppViewModel: ObservableObject {
                 "name": name,
                 "kind": kind,
                 "requiresApproval": String(requiresApproval),
+                "updatePluginID": updatePluginID,
                 "installImmediately": String(installImmediately)
             ]
         ))
@@ -1445,6 +1448,8 @@ final class AppViewModel: ObservableObject {
             mcpInputSchemaJSON: mcpInputSchemaJSON,
             commandPath: commandPath,
             commandArguments: commandArguments,
+            updatePluginID: updatePluginID,
+            existingPackageContext: existingPackageContext,
             vibeBrief: vibeBrief
         )
         let promptBuilder = VibePluginPackagePromptBuilder()

@@ -93,6 +93,8 @@ final class CapabilityRuntimeTests: XCTestCase {
         let commandArguments = try XCTUnwrap(draftProperties["command_arguments"] as? [String: Any])
 
         XCTAssertEqual(commandArguments["type"] as? String, "string")
+        XCTAssertEqual((draftProperties["update_plugin_id"] as? [String: Any])?["type"] as? String, "string")
+        XCTAssertEqual((draftProperties["existing_package_context"] as? [String: Any])?["type"] as? String, "string")
         XCTAssertEqual(draftParameters["required"] as? [String], ["name", "description"])
 
         let write = try XCTUnwrap(toolFunction(named: "workspace_writeTextFile", in: catalog))
@@ -222,6 +224,56 @@ final class CapabilityRuntimeTests: XCTestCase {
         let skill = try XCTUnwrap(package.files.first { $0.path == "SKILL.md" }?.content)
         XCTAssertTrue(readme.contains("## Capability Contract"))
         XCTAssertTrue(skill.contains("## Adapter Contract"))
+    }
+
+    @MainActor
+    func testDraftPluginCanTargetExistingLocalPluginForReplacementPackage() async throws {
+        let registry = PluginRegistry(config: .empty)
+        let executor = CapabilityExecutor(registry: registry)
+
+        let result = await executor.execute(CapabilityInvocation(
+            toolCallID: "call_update",
+            functionName: "plugin_draft",
+            capabilityID: "plugin.draft",
+            arguments: [
+                "name": "Readable Helper",
+                "description": "Update the installed helper with clearer instructions.",
+                "capability_kind": "skill",
+                "requires_approval": true,
+                "update_plugin_id": "local.readable-helper",
+                "existing_package_context": "SKILL.md previously said: keep answers concise."
+            ]
+        ))
+
+        let data = try XCTUnwrap(result.content.data(using: .utf8))
+        let package = try JSONDecoder().decode(PluginPackage.self, from: data)
+
+        XCTAssertEqual(package.manifest.id, "local.readable-helper")
+        XCTAssertEqual(package.manifest.capabilities.first?.id, "local.readable-helper.run")
+        XCTAssertEqual(package.manifest.capabilities.first?.invocation, "local.readable-helper.run")
+        let skill = try XCTUnwrap(package.files.first { $0.path == "SKILL.md" }?.content)
+        XCTAssertTrue(skill.contains("This draft updates `local.readable-helper`"))
+        XCTAssertTrue(skill.contains("SKILL.md previously said"))
+    }
+
+    @MainActor
+    func testDraftPluginRejectsNonLocalUpdateTarget() async throws {
+        let registry = PluginRegistry(config: .empty)
+        let executor = CapabilityExecutor(registry: registry)
+
+        let result = await executor.execute(CapabilityInvocation(
+            toolCallID: "call_update",
+            functionName: "plugin_draft",
+            capabilityID: "plugin.draft",
+            arguments: [
+                "name": "Built In Update",
+                "description": "Should not update built-ins.",
+                "update_plugin_id": "builtin.workspace"
+            ]
+        ))
+
+        XCTAssertEqual(result.title, "Plugin Package Draft Failed")
+        XCTAssertTrue(result.content.contains("update_plugin_id must be an installed local plugin id"))
     }
 
     @MainActor

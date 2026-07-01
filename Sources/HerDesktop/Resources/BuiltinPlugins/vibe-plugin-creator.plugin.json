@@ -32,6 +32,10 @@
             "description" : "What the plugin should do.",
             "type" : "string"
           },
+          "existing_package_context" : {
+            "description" : "Optional context copied from plugin.inspect or plugin.readFile to preserve useful behavior while updating.",
+            "type" : "string"
+          },
           "method" : {
             "description" : "Optional HTTP method for webservice capabilities.",
             "enum" : [
@@ -54,6 +58,10 @@
           },
           "tool_name" : {
             "description" : "Optional MCP tool name when method_name is tools/call.",
+            "type" : "string"
+          },
+          "update_plugin_id" : {
+            "description" : "Optional installed local plugin id to update, such as local.example. When set, draft a complete replacement package using this exact id.",
             "type" : "string"
           },
           "url" : {

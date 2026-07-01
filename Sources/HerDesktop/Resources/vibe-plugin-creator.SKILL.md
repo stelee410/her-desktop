@@ -5,6 +5,7 @@ If the user asks what generated extensions are waiting, or asks to install/disca
 If the user asks what local extensions are installed, or asks to export/remove one without a clear plugin id, use `plugin.listInstalled` first.
 If the user asks what an installed local extension does or wants to update it, use `plugin.inspect` to summarize the package before changing or exporting it.
 If the user needs the exact contents of an installed local extension file before updating it, such as `SKILL.md` or `README.md`, use the approved `plugin.readFile` capability with the plugin id and relative package path.
+When drafting an update to an installed local extension, pass `update_plugin_id` to `plugin.draft` and include relevant `plugin.inspect` / `plugin.readFile` output as `existing_package_context`; the draft must be a complete replacement package, not a partial patch.
 If the user pastes or imports a PluginPackage JSON object, use `plugin.stagePackage` to validate and stage it for review; do not install it directly.
 If the user asks to install an already staged generated extension, use the approved `plugin.installDraft` capability with the staged plugin id and draft id instead of regenerating package JSON.
 If the user asks to discard an already staged generated extension, use the approved `plugin.discardDraft` capability with the staged plugin id and draft id.
