@@ -463,10 +463,12 @@ final class AppViewModel: ObservableObject {
         finishCapabilityActivity(activityID, result: result)
         refreshWebServiceArtifacts()
         captureExternalInboxEventIfNeeded(invocation: invocation, result: result)
-        captureGeneratedPluginDraft(from: result, source: toolCall.function.name)
+        let capturedPluginDraft = captureGeneratedPluginDraft(from: result, source: toolCall.function.name)
         captureInstalledPluginIfNeeded(invocation: invocation, result: result, approved: false)
         captureRemovedPluginIfNeeded(invocation: invocation, result: result, approved: false)
-        messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
+        if !capturedPluginDraft {
+            messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
+        }
         auditCapabilityExecution(invocation: invocation, result: result, approved: false)
         Task {
             await persistCapabilityMemory(invocation: invocation, result: result, approved: false)
@@ -985,10 +987,12 @@ final class AppViewModel: ObservableObject {
         finishCapabilityActivity(activityID, result: result)
         refreshWebServiceArtifacts()
         captureExternalInboxEventIfNeeded(invocation: invocation, result: result)
-        captureGeneratedPluginDraft(from: result, source: invocation.functionName)
+        let capturedPluginDraft = captureGeneratedPluginDraft(from: result, source: invocation.functionName)
         captureInstalledPluginIfNeeded(invocation: invocation, result: result, approved: false)
         captureRemovedPluginIfNeeded(invocation: invocation, result: result, approved: false)
-        messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
+        if !capturedPluginDraft {
+            messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
+        }
         auditCapabilityExecution(invocation: invocation, result: result, approved: false)
         Task {
             await persistCapabilityMemory(invocation: invocation, result: result, approved: false)
@@ -2120,13 +2124,24 @@ final class AppViewModel: ObservableObject {
         return lines.joined(separator: "\n")
     }
 
-    private func captureGeneratedPluginDraft(from result: CapabilityResult, source: String) {
+    @discardableResult
+    private func captureGeneratedPluginDraft(from result: CapabilityResult, source: String) -> Bool {
         guard result.title == "Plugin Package Draft",
               let data = result.content.data(using: .utf8),
               let package = try? JSONDecoder().decode(PluginPackage.self, from: data) else {
-            return
+            return false
         }
-        stageGeneratedPluginPackage(package, source: source)
+        let documented = PluginPackageReviewDocumenter().documented(package)
+        let draft = stageGeneratedPluginPackage(documented, source: source)
+        messages.append(ChatMessage(
+            role: .tool,
+            content: pluginDraftReviewContent(
+                title: "Plugin Package Draft",
+                draft: draft,
+                summary: "Staged \(documented.manifest.name) (\(documented.manifest.id)) for review."
+            )
+        ))
+        return true
     }
 
     private func captureInstalledPluginIfNeeded(

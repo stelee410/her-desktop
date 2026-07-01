@@ -278,7 +278,9 @@ final class CapabilityExecutor {
         let name = clean(arguments["name"] as? String, fallback: "New Plugin")
         let description = clean(arguments["description"] as? String, fallback: "A conversationally generated extension.")
         let kind = clean(arguments["capability_kind"] as? String, fallback: "skill")
-        let requiresApproval = arguments["requires_approval"] as? Bool ?? true
+        let effectiveKind = kind.lowercased()
+        let requestedApproval = arguments["requires_approval"] as? Bool ?? true
+        let requiresApproval = effectiveKind == "command" ? true : requestedApproval
         let slug = slugify(name)
         let adapter = adapterForDraft(kind: kind, arguments: arguments)
         let manifest = PluginManifest(
@@ -296,12 +298,12 @@ final class CapabilityExecutor {
                     invocation: "local.\(slug).run",
                     requiresApproval: requiresApproval,
                     description: description,
-                    inputSchema: nil,
+                    inputSchema: draftInputSchema(kind: effectiveKind),
                     adapter: adapter
                 )
             ]
         )
-        let package = PluginPackage(
+        let package = PluginPackageReviewDocumenter().documented(PluginPackage(
             manifest: manifest,
             files: [
                 .init(
@@ -321,19 +323,9 @@ final class CapabilityExecutor {
 
                     This package was created through Her Desktop vibe coding. Keep the behavior narrow, inspect user intent before acting, and ask for explicit approval before side effects.
                     """
-                ),
-                .init(
-                    path: "README.md",
-                    content: """
-                    # \(name)
-
-                    \(description)
-
-                    This plugin can later be wired to a skill, MCP server, web service, native macOS action, or local command adapter.
-                    """
                 )
             ]
-        )
+        ))
         let data = (try? JSONEncoder.pretty.encode(package)) ?? Data()
         let json = String(data: data, encoding: .utf8) ?? "{}"
         return CapabilityResult(
@@ -1175,6 +1167,32 @@ final class CapabilityExecutor {
                     .replacingOccurrences(of: "\t", with: " ")
                 return "line \(index + 1): \(String(compacted.prefix(180)))"
             }
+    }
+
+    private func draftInputSchema(kind: String) -> [String: JSONValue] {
+        let description: String
+        switch kind.lowercased() {
+        case "webservice":
+            description = "Request or payload instructions for the web service."
+        case "mcp":
+            description = "Request to send through the local MCP bridge."
+        case "command":
+            description = "User input passed into the fixed command template."
+        case "native":
+            description = "Request for the native macOS adapter."
+        default:
+            description = "User request for this capability."
+        }
+        return [
+            "type": .string("object"),
+            "properties": .object([
+                "request": .object([
+                    "type": .string("string"),
+                    "description": .string(description)
+                ])
+            ]),
+            "required": .array([.string("request")])
+        ]
     }
 
     private func adapterForDraft(kind: String, arguments: [String: Any]) -> PluginManifest.CapabilityAdapter? {

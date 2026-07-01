@@ -151,7 +151,45 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(package.manifest.capabilities.first?.adapter?.type, "skill")
         XCTAssertEqual(package.manifest.capabilities.first?.adapter?.skillFile, "SKILL.md")
         XCTAssertTrue(package.manifest.capabilities.first?.requiresApproval == true)
+        let capability = try XCTUnwrap(package.manifest.capabilities.first)
+        XCTAssertEqual(CapabilityInputSchema.fields(for: capability).map(\.name), ["request"])
         XCTAssertTrue(package.files.contains { $0.path == "SKILL.md" })
+        XCTAssertTrue(package.files.contains { $0.path == "README.md" })
+        let readme = try XCTUnwrap(package.files.first { $0.path == "README.md" }?.content)
+        let skill = try XCTUnwrap(package.files.first { $0.path == "SKILL.md" }?.content)
+        XCTAssertTrue(readme.contains("## Capability Contract"))
+        XCTAssertTrue(skill.contains("## Adapter Contract"))
+    }
+
+    @MainActor
+    func testDraftPluginForcesCommandApprovalAndDocumentsContract() async throws {
+        let registry = PluginRegistry(config: .empty)
+        let executor = CapabilityExecutor(registry: registry)
+
+        let result = await executor.execute(CapabilityInvocation(
+            toolCallID: "call_1",
+            functionName: "plugin_draft",
+            capabilityID: "plugin.draft",
+            arguments: [
+                "name": "Command Helper",
+                "description": "Runs a fixed helper command.",
+                "capability_kind": "command",
+                "requires_approval": false,
+                "command": "/usr/bin/true",
+                "command_arguments": "--flag\n{{request}}"
+            ]
+        ))
+
+        let data = try XCTUnwrap(result.content.data(using: .utf8))
+        let package = try JSONDecoder().decode(PluginPackage.self, from: data)
+        let capability = try XCTUnwrap(package.manifest.capabilities.first)
+
+        XCTAssertEqual(capability.kind, "command")
+        XCTAssertTrue(capability.requiresApproval)
+        XCTAssertEqual(capability.adapter?.command, "/usr/bin/true")
+        XCTAssertEqual(capability.adapter?.arguments, ["--flag", "{{request}}"])
+        XCTAssertEqual(CapabilityInputSchema.fields(for: capability).map(\.name), ["request"])
+        XCTAssertNoThrow(try PluginPackageValidator().validate(package))
     }
 
     @MainActor

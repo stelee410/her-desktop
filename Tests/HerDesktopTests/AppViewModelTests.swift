@@ -1173,6 +1173,48 @@ final class AppViewModelTests: XCTestCase {
         })
     }
 
+    func testPluginDraftCapabilityStagesReviewableDraftWithFollowUpActions() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-plugin-draft-capability-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        let model = AppViewModel(config: config, cwd: cwd.path)
+
+        await model.runCapability(
+            capabilityID: "plugin.draft",
+            arguments: [
+                "name": "Dialog Draft",
+                "description": "Created from the conversation tool path.",
+                "capability_kind": "skill",
+                "requires_approval": true
+            ]
+        )
+
+        let draft = try XCTUnwrap(model.generatedPluginDrafts.first)
+        XCTAssertEqual(draft.source, "plugin_draft")
+        XCTAssertEqual(draft.manifest.id, "local.dialog-draft")
+        XCTAssertEqual(draft.package.files.map(\.path).sorted(), ["README.md", "SKILL.md"])
+        let capability = try XCTUnwrap(draft.manifest.capabilities.first)
+        XCTAssertEqual(CapabilityInputSchema.fields(for: capability).map(\.name), ["request"])
+        let lastMessage = try XCTUnwrap(model.messages.last?.content)
+        XCTAssertTrue(lastMessage.contains("Plugin Package Draft"))
+        XCTAssertTrue(lastMessage.contains("draft_id: \(draft.id.uuidString)"))
+        XCTAssertTrue(lastMessage.contains("\"plugin_id\":\"local.dialog-draft\""))
+        XCTAssertTrue(lastMessage.contains("plugin.installDraft arguments"))
+        XCTAssertTrue(lastMessage.contains("plugin.discardDraft arguments"))
+        XCTAssertFalse(lastMessage.contains(#""manifest""#))
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: cwd.appendingPathComponent(".her/plugin-drafts/\(draft.id.uuidString).json").path
+        ))
+        let audit = try AuditEventStore(cwd: cwd.path).loadAll()
+        XCTAssertTrue(audit.contains { event in
+            event.type == "plugin.draft_staged"
+            && event.metadata["pluginID"] == "local.dialog-draft"
+            && event.metadata["source"] == "plugin_draft"
+        })
+    }
+
     func testApprovedPluginInstallCapabilityRecordsLifecycleAndClearsMatchingDraft() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-plugin-install-capability-\(UUID().uuidString)", isDirectory: true)
