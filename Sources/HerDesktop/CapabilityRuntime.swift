@@ -908,7 +908,12 @@ final class CapabilityExecutor {
             try registry.install(package: package, replacingExisting: updatingExisting)
             return CapabilityResult(
                 title: updatingExisting ? "Plugin Updated" : "Plugin Installed",
-                content: "\(updatingExisting ? "Updated" : "Installed") \(package.manifest.name) (\(package.manifest.id)) with \(package.manifest.capabilities.count) capability/capabilities and \(package.files.count) file(s).",
+                content: PluginInstallSummaryFormatter().content(
+                    package: package,
+                    source: "plugin.install capability",
+                    title: updatingExisting ? "Plugin Updated" : "Plugin Installed",
+                    verb: updatingExisting ? "Updated" : "Installed"
+                ),
                 requiresUserApproval: false
             )
         } catch {

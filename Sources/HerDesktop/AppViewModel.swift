@@ -2043,23 +2043,12 @@ final class AppViewModel: ObservableObject {
         title: String = "Plugin Installed",
         verb: String = "Installed"
     ) -> String {
-        let capabilities = package.manifest.capabilities.map { capability in
-            let functionName = CapabilityToolCatalog.functionName(for: capability.id)
-            let approval = capability.requiresApproval ? "approval required" : "no approval"
-            let adapter = capability.adapter?.type ?? capability.kind
-            return "- \(capability.title): \(capability.id) as \(functionName) [\(adapter), \(approval)]"
-        }
-        .joined(separator: "\n")
-
-        return """
-        \(title)
-        \(verb) \(package.manifest.name) (\(package.manifest.id)) from \(source).
-
-        Available in the next turn:
-        \(capabilities.isEmpty ? "- No capabilities declared." : capabilities)
-
-        Package files: \(package.files.count)
-        """
+        PluginInstallSummaryFormatter().content(
+            package: package,
+            source: source,
+            title: title,
+            verb: verb
+        )
     }
 
     private func refreshPluginHealth() {
