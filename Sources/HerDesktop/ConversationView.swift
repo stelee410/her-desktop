@@ -8,6 +8,9 @@ struct ConversationView: View {
     var body: some View {
         VStack(spacing: 0) {
             ToolbarView()
+            LaunchReadinessStrip()
+                .padding(.horizontal, 54)
+                .padding(.top, 12)
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 22) {
@@ -41,6 +44,88 @@ struct ConversationView: View {
             ComposerView()
                 .padding(.horizontal, 54)
                 .padding(.bottom, 24)
+        }
+    }
+}
+
+private struct LaunchReadinessStrip: View {
+    @EnvironmentObject private var model: AppViewModel
+    @Environment(\.openSettings) private var openSettings
+
+    private var summary: ProductReadinessSummary {
+        ProductReadinessBuilder.build(
+            config: model.config,
+            serviceHealth: model.serviceHealth,
+            plugins: model.plugins,
+            localInboxBridgeState: model.localInboxBridgeState,
+            pendingApprovals: model.pendingApprovals,
+            generatedDrafts: model.generatedPluginDrafts,
+            workPlan: model.workPlan,
+            dreamContext: model.dreamContext
+        )
+    }
+
+    var body: some View {
+        let actions = summary.suggestedActions(limit: 3)
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: summary.isReadyForCoreWork ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(summary.isReadyForCoreWork ? .green : AppTheme.coral)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 7) {
+                    Text(summary.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.ink)
+                    Text(summary.score)
+                        .font(.caption2.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(summary.isReadyForCoreWork ? .green : AppTheme.coral)
+                }
+                Text(summary.detail)
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.muted)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            ForEach(actions) { item in
+                if let action = item.action, let title = item.actionTitle {
+                    Button(title) {
+                        perform(action)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .help(item.detail)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(Color.white.opacity(0.48))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.black.opacity(0.05), lineWidth: 1)
+        )
+    }
+
+    private func perform(_ action: ProductReadinessAction) {
+        switch action {
+        case .openSettings:
+            openSettings()
+        case .checkServices:
+            Task { await model.refreshServiceHealth() }
+        case .openPluginDirectory:
+            model.openPluginDirectory()
+        case .openToolsWorkspace:
+            model.selectedSection = .tools
+        case .openProjectsWorkspace:
+            model.selectedSection = .projects
+        case .generateReflection:
+            model.generateReflectionSnapshot()
+        case .startInboxBridge:
+            model.startLocalInboxBridge()
         }
     }
 }

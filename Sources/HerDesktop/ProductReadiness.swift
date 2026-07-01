@@ -38,6 +38,12 @@ struct ProductReadinessSummary: Equatable {
     var isReadyForCoreWork: Bool {
         readyRequiredCount == requiredCount
     }
+
+    func suggestedActions(limit: Int = 3) -> [ProductReadinessItem] {
+        Array(items.filter { item in
+            item.action != nil && item.actionTitle != nil && item.level != .ready
+        }.prefix(max(0, limit)))
+    }
 }
 
 enum ProductReadinessBuilder {

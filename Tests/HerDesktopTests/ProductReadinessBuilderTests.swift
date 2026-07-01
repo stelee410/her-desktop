@@ -109,6 +109,36 @@ final class ProductReadinessBuilderTests: XCTestCase {
         XCTAssertEqual(summary.items.first { $0.id == "voice" }?.action, .openSettings)
     }
 
+    func testSuggestedActionsReturnFirstNonReadyActionableItemsWithLimit() {
+        var config = HerAppConfig.empty
+        config.agentLLMAPIKey = "llm-test"
+        config.agentMemAPIKey = "mem-test"
+
+        let summary = ProductReadinessBuilder.build(
+            config: config,
+            serviceHealth: [
+                health(id: "agentllm", state: .unknown),
+                health(id: "agentmem", state: .offline)
+            ],
+            plugins: [],
+            localInboxBridgeState: LocalInboxBridgeState(),
+            pendingApprovals: [approval()],
+            generatedDrafts: [],
+            workPlan: nil,
+            dreamContext: nil
+        )
+
+        XCTAssertEqual(summary.suggestedActions(limit: 3).map(\.id), ["agentllm", "agentmem", "plugins"])
+        XCTAssertEqual(summary.suggestedActions(limit: 5).map(\.action), [
+            .checkServices,
+            .checkServices,
+            .openPluginDirectory,
+            .openToolsWorkspace,
+            .openProjectsWorkspace
+        ])
+        XCTAssertEqual(summary.suggestedActions(limit: 0), [])
+    }
+
     private func health(id: String, state: ServiceHealthState, summary: String? = nil) -> ServiceHealth {
         ServiceHealth(
             id: id,
