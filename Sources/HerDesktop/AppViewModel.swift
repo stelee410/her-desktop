@@ -29,6 +29,7 @@ final class AppViewModel: ObservableObject {
     @Published var lastError: String?
     @Published var localInboxBridgeState: LocalInboxBridgeState
     @Published var selectedSection: WorkspaceSection
+    @Published var highlightedPluginID: String?
 
     private var agentMem: AgentMemClient
     private var agentLLM: any AgentLLMChatting
@@ -123,6 +124,7 @@ final class AppViewModel: ObservableObject {
         self.dictationTranscript = ""
         self.localInboxBridgeState = LocalInboxBridgeState()
         self.selectedSection = .today
+        self.highlightedPluginID = nil
         rebuildRunningTasks()
     }
 
@@ -593,7 +595,7 @@ final class AppViewModel: ObservableObject {
             saveSessionSnapshot()
             await reloadPlugins()
             rebuildRunningTasks()
-            selectedSection = .tools
+            focusInstalledPlugin(draft.manifest.id)
             return CapabilityResult(
                 title: title,
                 content: pluginInstalledContent(
@@ -1074,7 +1076,7 @@ final class AppViewModel: ObservableObject {
             )
             saveSessionSnapshot()
             await reloadPlugins()
-            selectedSection = .tools
+            focusInstalledPlugin(package.manifest.id)
         } catch {
             lastError = error.localizedDescription
             messages.append(ChatMessage(role: .tool, content: "Plugin Install Failed\n\(error.localizedDescription)"))
@@ -1181,6 +1183,9 @@ final class AppViewModel: ObservableObject {
         do {
             try pluginRegistry.remove(pluginID: pluginID)
             pendingApprovals.removeAll { $0.invocation.capabilityID.hasPrefix(pluginID + ".") }
+            if highlightedPluginID == pluginID {
+                highlightedPluginID = nil
+            }
             messages.append(ChatMessage(
                 role: .tool,
                 content: "Plugin Removed\n\(plugin.name) (\(plugin.id)) was removed from the local plugin directory."
@@ -1538,6 +1543,7 @@ final class AppViewModel: ObservableObject {
                     metadata: ["source": "agentllm-vibe-composer"]
                 )
                 await reloadPlugins()
+                focusInstalledPlugin(package.manifest.id)
             } else {
                 let draft = stageGeneratedPluginPackage(package, source: "agentllm-vibe-composer")
                 messages.append(ChatMessage(
@@ -2539,6 +2545,12 @@ final class AppViewModel: ObservableObject {
             ]
         )
         rebuildRunningTasks()
+        focusInstalledPlugin(documented.manifest.id)
+    }
+
+    private func focusInstalledPlugin(_ pluginID: String) {
+        highlightedPluginID = pluginID
+        selectedSection = .tools
     }
 
     private func pluginPackageArgument(from arguments: [String: Any]) -> PluginPackage? {
@@ -2569,6 +2581,9 @@ final class AppViewModel: ObservableObject {
         guard !pluginID.isEmpty else { return }
         let manifest = plugins.first { $0.id == pluginID }
         pendingApprovals.removeAll { $0.invocation.capabilityID.hasPrefix(pluginID + ".") }
+        if highlightedPluginID == pluginID {
+            highlightedPluginID = nil
+        }
         audit(
             type: "plugin.removed",
             summary: "Removed local plugin \(manifest?.name ?? pluginID) through plugin.remove capability.",

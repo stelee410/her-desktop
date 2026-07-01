@@ -558,6 +558,7 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Installed") })
         XCTAssertTrue(model.pluginEvents.contains { $0.action == .installed && $0.pluginID == "local.calendar-create-event-mcp" })
         XCTAssertEqual(model.selectedSection, .tools)
+        XCTAssertEqual(model.highlightedPluginID, "local.calendar-create-event-mcp")
     }
 
     func testInspectorDraftInstallsCommandPluginWithApprovalAndArguments() async throws {
@@ -668,6 +669,7 @@ final class AppViewModelTests: XCTestCase {
         await model.removePlugin(plugin)
 
         XCTAssertFalse(model.plugins.contains { $0.id == "local.disposable-helper" })
+        XCTAssertNil(model.highlightedPluginID)
         XCTAssertFalse(FileManager.default.fileExists(atPath: pluginRoot.path))
         XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Removed") })
         let audit = try AuditEventStore(cwd: cwd.path).loadAll()
@@ -717,6 +719,7 @@ final class AppViewModelTests: XCTestCase {
         await model.approve(approval)
 
         XCTAssertFalse(model.plugins.contains { $0.id == "local.capability-disposable" })
+        XCTAssertNil(model.highlightedPluginID)
         XCTAssertFalse(FileManager.default.fileExists(atPath: pluginRoot.path))
         XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Removed") })
         let audit = try AuditEventStore(cwd: cwd.path).loadAll()
@@ -967,6 +970,34 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(draftMessage.contains("draft_id: \(draft.id.uuidString)"))
         XCTAssertTrue(draftMessage.contains("\"plugin_id\":\"local.brief-plugin\""))
         XCTAssertTrue(draftMessage.contains("plugin.installDraft arguments"))
+    }
+
+    func testAIVibePluginGenerationCanInstallImmediatelyAndFocusTools() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-ai-vibe-plugin-install-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.agentLLMAPIKey = "test-key"
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        let package = samplePackage(id: "local.instant-helper", name: "Instant Helper")
+        let packageJSON = String(data: try JSONEncoder.pretty.encode(package), encoding: .utf8)!
+        let fakeLLM = FakeLLM(responses: [.assistantText(packageJSON)])
+        let model = AppViewModel(config: config, cwd: cwd.path, agentLLM: fakeLLM)
+
+        await model.generateAIDraftPlugin(
+            named: "Instant Helper",
+            description: "Install this generated helper immediately.",
+            kind: "skill",
+            requiresApproval: true,
+            vibeBrief: "Generate and install this helper from the dialog.",
+            installImmediately: true
+        )
+
+        XCTAssertTrue(model.generatedPluginDrafts.isEmpty)
+        XCTAssertTrue(model.plugins.contains { $0.id == "local.instant-helper" })
+        XCTAssertEqual(model.selectedSection, .tools)
+        XCTAssertEqual(model.highlightedPluginID, "local.instant-helper")
+        XCTAssertTrue(model.messages.contains { $0.content.contains("AI Plugin Installed") })
     }
 
     func testAIVibePluginGenerationSendsUpdateContextToAgentLLM() async throws {
@@ -1428,6 +1459,7 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.generatedPluginDrafts.isEmpty)
         XCTAssertTrue(model.plugins.contains { $0.id == "local.generated" })
         XCTAssertEqual(model.selectedSection, .tools)
+        XCTAssertEqual(model.highlightedPluginID, "local.generated")
         XCTAssertTrue(FileManager.default.fileExists(
             atPath: URL(fileURLWithPath: config.pluginDirectory)
                 .appendingPathComponent("local.generated/plugin.json")
@@ -1532,6 +1564,8 @@ final class AppViewModelTests: XCTestCase {
             atPath: cwd.appendingPathComponent(".her/plugin-drafts/\(draftID.uuidString).json").path
         ))
         XCTAssertTrue(model.plugins.contains { $0.id == "local.capinstall" })
+        XCTAssertEqual(model.selectedSection, .tools)
+        XCTAssertEqual(model.highlightedPluginID, "local.capinstall")
         XCTAssertTrue(FileManager.default.fileExists(
             atPath: URL(fileURLWithPath: config.pluginDirectory)
                 .appendingPathComponent("local.capinstall/plugin.json")

@@ -348,11 +348,17 @@ private struct ToolsWorkspaceView: View {
                 } else {
                     VStack(spacing: 10) {
                         ForEach(model.plugins) { plugin in
+                            let isHighlighted = model.highlightedPluginID == plugin.id
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack {
                                     Label(plugin.name, systemImage: plugin.id.hasPrefix("builtin.") ? "seal" : "folder")
                                         .font(.caption.weight(.semibold))
                                         .foregroundStyle(AppTheme.ink)
+                                    if isHighlighted {
+                                        Label("Ready to run", systemImage: "sparkles")
+                                            .font(.caption2.weight(.semibold))
+                                            .foregroundStyle(AppTheme.coral)
+                                    }
                                     Spacer()
                                     Text("\(plugin.capabilities.count)")
                                         .font(.caption2)
@@ -412,7 +418,7 @@ private struct ToolsWorkspaceView: View {
                                 }
                             }
                             .padding(10)
-                            .background(Color.white.opacity(0.34))
+                            .background(isHighlighted ? AppTheme.coral.opacity(0.10) : Color.white.opacity(0.34))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
                     }
