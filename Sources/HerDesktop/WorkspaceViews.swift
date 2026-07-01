@@ -638,6 +638,23 @@ private struct AgentsWorkspaceView: View {
                 }
             }
 
+            WorkspacePanel(title: "Recent Tool Evidence", trailing: toolEvidence.isEmpty ? "Quiet" : "\(toolEvidence.count)") {
+                if toolEvidence.isEmpty {
+                    EmptyWorkspaceLine(icon: "checkmark.seal", text: "Verified tool results will appear here as bounded evidence for the next turn.")
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(toolEvidence) { evidence in
+                            WorkspaceEventRow(
+                                icon: "checkmark.seal",
+                                title: evidence.title,
+                                detail: evidence.detail,
+                                time: evidence.createdAt
+                            )
+                        }
+                    }
+                }
+            }
+
             WorkspacePanel(title: "Service Routing", trailing: PresenceCopy.serviceStatus(model.serviceHealth).title) {
                 VStack(spacing: 8) {
                     ForEach(model.serviceHealth) { item in
@@ -681,6 +698,10 @@ private struct AgentsWorkspaceView: View {
 
     private var activePhase: String {
         loopSteps.first(where: \.isActive)?.phase.rawValue ?? "Ready"
+    }
+
+    private var toolEvidence: [ToolEvidenceSummary] {
+        ToolEvidenceSummaryBuilder().build(from: model.messages)
     }
 
     private func icon(for phase: AgentLoopPhase) -> String {
