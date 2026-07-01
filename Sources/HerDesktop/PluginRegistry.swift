@@ -393,6 +393,15 @@ final class PluginRegistry {
                         adapter: .init(type: "native")
                     ),
                     .init(
+                        id: "plugin.inspect",
+                        title: "Inspect local plugin",
+                        kind: "native",
+                        invocation: "plugin.inspect",
+                        requiresApproval: false,
+                        description: "Inspect an installed local plugin package without exposing full file contents.",
+                        adapter: .init(type: "native")
+                    ),
+                    .init(
                         id: "plugin.stagePackage",
                         title: "Stage plugin package",
                         kind: "native",
@@ -736,6 +745,10 @@ final class PluginRegistry {
             return objectSchema([:], required: [])
         case "plugin.listInstalled":
             return objectSchema([:], required: [])
+        case "plugin.inspect":
+            return objectSchema([
+                "plugin_id": field("string", "Installed local plugin id to inspect, such as local.example.")
+            ], required: ["plugin_id"])
         case "plugin.stagePackage":
             return objectSchema([
                 "package_json": field("string", "Complete PluginPackage JSON object to validate and stage for review.")

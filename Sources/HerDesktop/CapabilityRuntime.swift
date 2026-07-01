@@ -137,6 +137,12 @@ final class CapabilityExecutor {
                 content: "Installed local plugin listing is handled by the Her Desktop app state because the active plugin registry lives in the app model.",
                 requiresUserApproval: false
             )
+        case "plugin.inspect":
+            return CapabilityResult(
+                title: "Plugin Inspect Failed",
+                content: "Installed local plugin inspection is handled by the Her Desktop app state because package review uses the active plugin registry.",
+                requiresUserApproval: false
+            )
         case "plugin.stagePackage":
             return CapabilityResult(
                 title: "Plugin Package Import Failed",

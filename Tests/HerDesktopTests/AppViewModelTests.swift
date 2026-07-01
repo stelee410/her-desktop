@@ -1113,6 +1113,38 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(lastMessage.contains("remove_arguments: {\"plugin_id\":\"local.installed-helper\",\"confirmed\":true}"))
     }
 
+    func testPluginInspectCapabilityReportsPackageReviewSummary() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-inspect-plugin-capability-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+
+        let model = AppViewModel(config: config, cwd: cwd.path)
+        await model.installDraftPlugin(
+            named: "Inspectable Helper",
+            description: "A helper with inspectable package metadata.",
+            kind: "skill"
+        )
+
+        await model.runCapability(
+            capabilityID: "plugin.inspect",
+            arguments: ["plugin_id": "local.inspectable-helper"]
+        )
+
+        let lastMessage = try XCTUnwrap(model.messages.last?.content)
+        XCTAssertTrue(lastMessage.contains("Plugin Inspection"))
+        XCTAssertTrue(lastMessage.contains("plugin_id: local.inspectable-helper"))
+        XCTAssertTrue(lastMessage.contains("risk: Low"))
+        XCTAssertTrue(lastMessage.contains("local.inspectable-helper.run -> local_inspectable-helper_run"))
+        XCTAssertTrue(lastMessage.contains("package_files:"))
+        XCTAssertTrue(lastMessage.contains("README.md"))
+        XCTAssertTrue(lastMessage.contains("SKILL.md"))
+        XCTAssertTrue(lastMessage.contains("export_arguments: {\"plugin_id\":\"local.inspectable-helper\",\"confirmed\":true}"))
+        XCTAssertTrue(lastMessage.contains("remove_arguments: {\"plugin_id\":\"local.inspectable-helper\",\"confirmed\":true}"))
+        XCTAssertFalse(lastMessage.contains("## Runtime Notes"))
+    }
+
     func testViewModelLoadsRecentAuditEventsOnStartup() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-load-audit-\(UUID().uuidString)", isDirectory: true)

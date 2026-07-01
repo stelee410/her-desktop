@@ -127,6 +127,13 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertTrue(listInstalledProperties.isEmpty)
         XCTAssertEqual(listInstalledParameters["required"] as? [String], [])
 
+        let inspect = try XCTUnwrap(toolFunction(named: "plugin_inspect", in: catalog))
+        let inspectParameters = try XCTUnwrap(inspect["parameters"] as? [String: Any])
+        let inspectProperties = try XCTUnwrap(inspectParameters["properties"] as? [String: Any])
+
+        XCTAssertEqual((inspectProperties["plugin_id"] as? [String: Any])?["type"] as? String, "string")
+        XCTAssertEqual(inspectParameters["required"] as? [String], ["plugin_id"])
+
         let stagePackage = try XCTUnwrap(toolFunction(named: "plugin_stagePackage", in: catalog))
         let stagePackageParameters = try XCTUnwrap(stagePackage["parameters"] as? [String: Any])
         let stagePackageProperties = try XCTUnwrap(stagePackageParameters["properties"] as? [String: Any])
@@ -581,6 +588,18 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual(capability?.adapter?.type, "native")
         XCTAssertEqual(capability?.requiresApproval, false)
         XCTAssertTrue(CapabilityInputSchema.fields(for: capability!).isEmpty)
+    }
+
+    func testBuiltInPluginInspectDoesNotRequireApproval() {
+        let registry = PluginRegistry(config: .empty)
+        let capability = registry.capability(id: "plugin.inspect")
+
+        XCTAssertEqual(capability?.kind, "native")
+        XCTAssertEqual(capability?.adapter?.type, "native")
+        XCTAssertEqual(capability?.requiresApproval, false)
+        XCTAssertEqual(CapabilityInputSchema.fields(for: capability!).map(\.name), [
+            "plugin_id"
+        ])
     }
 
     func testBuiltInPluginStagePackageDoesNotRequireApproval() {

@@ -75,6 +75,7 @@ struct PluginPackageReview: Equatable {
         "inbox.capture",
         "plugin.listDrafts",
         "plugin.listInstalled",
+        "plugin.inspect",
         "plugin.stagePackage"
     ]
 
@@ -343,6 +344,15 @@ struct PluginPackageReview: Equatable {
                 title: "Installed Local Plugin List",
                 detail: "Lists installed local plugins available for export or removal.",
                 systemImage: "puzzlepiece.extension",
+                requiresApproval: approval
+            )
+        }
+        if id == "plugin.inspect" {
+            return PermissionSummary(
+                id: id,
+                title: "Local Plugin Inspection",
+                detail: "Summarizes an installed local plugin package without exposing full file contents.",
+                systemImage: "doc.text.magnifyingglass",
                 requiresApproval: approval
             )
         }

@@ -222,6 +222,39 @@ final class PluginPackageReviewTests: XCTestCase {
         XCTAssertEqual(review.riskLevel, .low)
     }
 
+    func testPluginInspectPermissionIsExplicitAndLowRisk() {
+        let package = PluginPackage(
+            manifest: PluginManifest(
+                id: "local.plugin-inspector",
+                name: "Plugin Inspector",
+                version: "0.1.0",
+                description: "Plugin inspect package.",
+                author: "Test",
+                systemPromptAddendum: nil,
+                capabilities: [
+                    .init(
+                        id: "plugin.inspect",
+                        title: "Inspect Plugin",
+                        kind: "native",
+                        invocation: "plugin.inspect",
+                        requiresApproval: false,
+                        adapter: .init(type: "native")
+                    )
+                ]
+            ),
+            files: [
+                .init(path: "README.md", content: "# Inspect\n\nSummarizes a local plugin.")
+            ]
+        )
+
+        let review = PluginPackageReview(package: package)
+
+        XCTAssertEqual(review.permissionSummaries.first?.title, "Local Plugin Inspection")
+        XCTAssertEqual(review.permissionSummaries.first?.detail, "Summarizes an installed local plugin package without exposing full file contents.")
+        XCTAssertEqual(review.permissionSummaries.first?.systemImage, "doc.text.magnifyingglass")
+        XCTAssertEqual(review.riskLevel, .low)
+    }
+
     func testPluginStagePackagePermissionIsExplicitAndLowRisk() {
         let package = PluginPackage(
             manifest: PluginManifest(

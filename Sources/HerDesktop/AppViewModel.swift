@@ -1930,6 +1930,9 @@ final class AppViewModel: ObservableObject {
         if invocation.capabilityID == "plugin.listInstalled" {
             return listInstalledLocalPluginsCapability()
         }
+        if invocation.capabilityID == "plugin.inspect" {
+            return inspectInstalledLocalPluginCapability(arguments: invocation.arguments)
+        }
         if invocation.capabilityID == "plugin.stagePackage" {
             return stagePluginPackageCapability(arguments: invocation.arguments)
         }
@@ -2030,6 +2033,77 @@ final class AppViewModel: ObservableObject {
             """,
             requiresUserApproval: false
         )
+    }
+
+    private func inspectInstalledLocalPluginCapability(arguments: [String: Any]) -> CapabilityResult {
+        let pluginID = stringArgument(arguments, keys: ["plugin_id", "pluginID"], fallback: "")
+        guard !pluginID.isEmpty else {
+            return CapabilityResult(
+                title: "Plugin Inspect Failed",
+                content: "plugin_id is required.",
+                requiresUserApproval: false
+            )
+        }
+
+        do {
+            let package = try pluginRegistry.package(pluginID: pluginID)
+            let review = PluginPackageReview(package: package)
+            let capabilityLines = package.manifest.capabilities.map { capability in
+                let functionName = CapabilityToolCatalog.functionName(for: capability.id)
+                let adapter = capability.adapter?.type ?? capability.kind
+                let approval = capability.requiresApproval ? "approval_required" : "no_approval"
+                let fields = CapabilityInputSchema.fields(for: capability)
+                    .map(\.name)
+                    .joined(separator: ", ")
+                return "- \(capability.id) -> \(functionName) [kind=\(capability.kind), adapter=\(adapter), \(approval), fields=\(fields.isEmpty ? "none" : fields)]"
+            }
+            let permissionLines = review.permissionSummaries.map { permission in
+                "- \(permission.title): \(permission.detail) [\(permission.requiresApproval ? "approval_required" : "no_approval")]"
+            }
+            let fileLines = review.fileSummaries.map { file in
+                "- \(file.path) (\(file.lineCount) line(s), \(file.byteCount) byte(s))"
+            }
+            let exportArguments = """
+            {"plugin_id":"\(package.manifest.id)","confirmed":true}
+            """
+            let removeArguments = """
+            {"plugin_id":"\(package.manifest.id)","confirmed":true}
+            """
+
+            return CapabilityResult(
+                title: "Plugin Inspection",
+                content: """
+                plugin_id: \(package.manifest.id)
+                name: \(package.manifest.name)
+                version: \(package.manifest.version)
+                description: \(package.manifest.description)
+                author: \(package.manifest.author ?? "unspecified")
+                risk: \(review.riskLevel.rawValue)
+                capabilities: \(review.capabilityCount)
+                permissions: \(review.permissionCount)
+                files: \(review.fileCount)
+
+                capability_functions:
+                \(capabilityLines.isEmpty ? "(none)" : capabilityLines.joined(separator: "\n"))
+
+                permissions_summary:
+                \(permissionLines.isEmpty ? "(none)" : permissionLines.joined(separator: "\n"))
+
+                package_files:
+                \(fileLines.isEmpty ? "(none)" : fileLines.joined(separator: "\n"))
+
+                export_arguments: \(exportArguments)
+                remove_arguments: \(removeArguments)
+                """,
+                requiresUserApproval: false
+            )
+        } catch {
+            return CapabilityResult(
+                title: "Plugin Inspect Failed",
+                content: error.localizedDescription,
+                requiresUserApproval: false
+            )
+        }
     }
 
     private func retrieveMemory(for text: String) async throws -> String {

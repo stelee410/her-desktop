@@ -76,6 +76,29 @@
       "adapter" : {
         "type" : "native"
       },
+      "description" : "Inspect an installed local plugin package without exposing full file contents.",
+      "id" : "plugin.inspect",
+      "inputSchema" : {
+        "properties" : {
+          "plugin_id" : {
+            "description" : "Installed local plugin id to inspect, such as local.example.",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "plugin_id"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "plugin.inspect",
+      "kind" : "native",
+      "requiresApproval" : false,
+      "title" : "Inspect local plugin"
+    },
+    {
+      "adapter" : {
+        "type" : "native"
+      },
       "description" : "List installed local plugins with follow-up export and removal arguments.",
       "id" : "plugin.listInstalled",
       "inputSchema" : {
