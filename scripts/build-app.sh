@@ -4,10 +4,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-BIN_DIR="$(swift build -c release --show-bin-path)"
+read -r -a SWIFT_BUILD_FLAGS_ARRAY <<< "${SWIFT_BUILD_FLAGS:-}"
+
+BIN_DIR="$(swift build -c release "${SWIFT_BUILD_FLAGS_ARRAY[@]}" --show-bin-path)"
 RESOURCE_BUNDLE_NAME="HerDesktop_HerDesktop.bundle"
 rm -rf "$BIN_DIR/$RESOURCE_BUNDLE_NAME"
-swift build -c release
+swift build -c release "${SWIFT_BUILD_FLAGS_ARRAY[@]}"
 
 APP_DIR="$ROOT/.build/app/HerDesktop.app"
 CONTENTS="$APP_DIR/Contents"
