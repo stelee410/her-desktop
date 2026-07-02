@@ -39,6 +39,7 @@ tool output and artifact manifests redact recognized tokens before display.
 
 For the packaged Mac app, saved configuration defaults to `~/Library/Application Support/Her Desktop/config.json`.
 You can also edit the same values from the native macOS Settings window after launch; the main Inspector and Settings share the same save path. For MVP use, only the AgentLLM API key is required. AgentMem and plugin checks are diagnostics and enhancements, not first-run blockers.
+When launched as a GUI app, Her Desktop resolves its runtime state directory before saving sessions: dev builds launched from `.build/app/HerDesktop.app` use the repository root, and installed builds fall back to `~/Library/Application Support/Her Desktop/` instead of the read-only filesystem root.
 
 ## Run
 

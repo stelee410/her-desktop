@@ -37,12 +37,19 @@ enum ConfigLoader {
     }
 
     static func localConfigCandidates(cwd: String = FileManager.default.currentDirectoryPath) -> [URL] {
+        localConfigCandidates(cwd: cwd, bundleURL: Bundle.main.bundleURL)
+    }
+
+    static func localConfigCandidates(
+        cwd: String = FileManager.default.currentDirectoryPath,
+        bundleURL: URL?
+    ) -> [URL] {
         var urls: [URL] = []
         if let override = ProcessInfo.processInfo.environment["HER_CONFIG_PATH"]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !override.isEmpty {
             urls.append(URL(fileURLWithPath: (override as NSString).expandingTildeInPath))
         }
-        urls.append(URL(fileURLWithPath: cwd).appendingPathComponent("Config/her-desktop.local.json"))
+        urls.append(contentsOf: projectLocalConfigCandidates(cwd: cwd, bundleURL: bundleURL))
         urls.append(applicationSupportConfigURL())
         urls.append(URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".her/desktop/config.json"))
         return uniqueURLs(urls)
@@ -53,8 +60,7 @@ enum ConfigLoader {
            !override.isEmpty {
             return URL(fileURLWithPath: (override as NSString).expandingTildeInPath)
         }
-        let projectConfigDir = URL(fileURLWithPath: cwd).appendingPathComponent("Config", isDirectory: true)
-        if FileManager.default.fileExists(atPath: projectConfigDir.path) {
+        if let projectConfigDir = firstProjectConfigDirectory(cwd: cwd, bundleURL: Bundle.main.bundleURL) {
             return projectConfigDir.appendingPathComponent("her-desktop.local.json")
         }
         return applicationSupportConfigURL()
@@ -94,6 +100,52 @@ enum ConfigLoader {
         return base
             .appendingPathComponent("Her Desktop", isDirectory: true)
             .appendingPathComponent("config.json")
+    }
+
+    private static func projectLocalConfigCandidates(cwd: String, bundleURL: URL?) -> [URL] {
+        let starts = projectSearchStarts(cwd: cwd, bundleURL: bundleURL)
+        return starts.flatMap { start in
+            ancestorDirectories(from: start).map {
+                $0.appendingPathComponent("Config/her-desktop.local.json")
+            }
+        }
+    }
+
+    private static func firstProjectConfigDirectory(cwd: String, bundleURL: URL?) -> URL? {
+        for start in projectSearchStarts(cwd: cwd, bundleURL: bundleURL) {
+            for directory in ancestorDirectories(from: start) {
+                let configDirectory = directory.appendingPathComponent("Config", isDirectory: true)
+                if FileManager.default.fileExists(atPath: configDirectory.path) {
+                    return configDirectory
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func projectSearchStarts(cwd: String, bundleURL: URL?) -> [URL] {
+        var starts = [URL(fileURLWithPath: cwd, isDirectory: true)]
+        if let bundleURL {
+            starts.append(bundleURL)
+            starts.append(bundleURL.deletingLastPathComponent())
+        }
+        return uniqueURLs(starts)
+    }
+
+    private static func ancestorDirectories(from start: URL) -> [URL] {
+        var directories: [URL] = []
+        var current = start.standardizedFileURL
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: current.path, isDirectory: &isDirectory), !isDirectory.boolValue {
+            current.deleteLastPathComponent()
+        }
+        while true {
+            directories.append(current)
+            let parent = current.deletingLastPathComponent().standardizedFileURL
+            if parent.path == current.path { break }
+            current = parent
+        }
+        return directories
     }
 
     private static func uniqueURLs(_ urls: [URL]) -> [URL] {

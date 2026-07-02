@@ -23,7 +23,9 @@ final class ConfigLoaderTests: XCTestCase {
         "HER_USER_ID",
         "HER_DESKTOP_USER_ID",
         "HER_PLUGIN_DIR",
-        "HER_DESKTOP_PLUGIN_DIR"
+        "HER_DESKTOP_PLUGIN_DIR",
+        "HER_DESKTOP_WORKSPACE_DIR",
+        "HER_WORKSPACE_DIR"
     ]
 
     func testSaveLocalWritesProjectConfigWhenConfigDirectoryExists() throws {
@@ -111,6 +113,53 @@ final class ConfigLoaderTests: XCTestCase {
         XCTAssertTrue(url.path.contains("Application Support/Her Desktop/config.json"))
     }
 
+    func testDefaultRuntimeDirectoryNeverUsesReadonlyRoot() {
+        withCleanServiceEnvironment {
+            let runtime = HerWorkspacePaths.defaultRuntimeDirectory(cwd: "/", bundleURL: nil)
+
+            XCTAssertNotEqual(runtime.path, "/")
+            XCTAssertTrue(runtime.path.contains("Application Support/Her Desktop"))
+            XCTAssertEqual(HerWorkspacePaths.sessionPath(cwd: runtime.path).lastPathComponent, "session.json")
+            XCTAssertFalse(HerWorkspacePaths.sessionPath(cwd: runtime.path).path.hasPrefix("/.her"))
+        }
+    }
+
+    func testDefaultRuntimeDirectoryFindsProjectRootFromDevAppBundle() throws {
+        try withCleanServiceEnvironmentThrowing {
+            let root = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("her-dev-runtime-root-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(
+                at: root.appendingPathComponent(".build/app/HerDesktop.app", isDirectory: true),
+                withIntermediateDirectories: true
+            )
+            try FileManager.default.createDirectory(
+                at: root.appendingPathComponent("Config", isDirectory: true),
+                withIntermediateDirectories: true
+            )
+            try "".write(to: root.appendingPathComponent("Package.swift"), atomically: true, encoding: .utf8)
+
+            let bundleURL = root.appendingPathComponent(".build/app/HerDesktop.app", isDirectory: true)
+            let runtime = HerWorkspacePaths.defaultRuntimeDirectory(cwd: "/", bundleURL: bundleURL)
+            let writableConfig = ConfigLoader.preferredWritableLocalConfigURL(cwd: runtime.path)
+
+            XCTAssertEqual(runtime.standardizedFileURL.path, root.standardizedFileURL.path)
+            XCTAssertEqual(writableConfig.path, root.appendingPathComponent("Config/her-desktop.local.json").path)
+            XCTAssertEqual(HerWorkspacePaths.sessionPath(cwd: runtime.path).path, root.appendingPathComponent(".her/session.json").path)
+        }
+    }
+
+    func testWorkspaceDirectoryEnvironmentOverrideWins() {
+        withCleanServiceEnvironment {
+            let root = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("her-runtime-override-\(UUID().uuidString)", isDirectory: true)
+            setenv("HER_DESKTOP_WORKSPACE_DIR", root.path, 1)
+
+            let runtime = HerWorkspacePaths.defaultRuntimeDirectory(cwd: "/", bundleURL: nil)
+
+            XCTAssertEqual(runtime.path, root.path)
+        }
+    }
+
     func testDraftRejectsInvalidURLs() {
         var draft = HerAppConfigDraft(config: .empty)
         draft.agentLLMBaseURL = "not a url"
@@ -164,5 +213,22 @@ final class ConfigLoaderTests: XCTestCase {
             }
         }
         body()
+    }
+
+    private func withCleanServiceEnvironmentThrowing(_ body: () throws -> Void) throws {
+        let previous = Dictionary(uniqueKeysWithValues: serviceEnvKeys.map { key in
+            (key, getenv(key).map { String(cString: $0) })
+        })
+        serviceEnvKeys.forEach { unsetenv($0) }
+        defer {
+            for key in serviceEnvKeys {
+                if let value = previous[key] ?? nil {
+                    setenv(key, value, 1)
+                } else {
+                    unsetenv(key)
+                }
+            }
+        }
+        try body()
     }
 }

@@ -73,7 +73,7 @@ final class AppViewModel: ObservableObject {
 
     init(
         config explicitConfig: HerAppConfig? = nil,
-        cwd: String = FileManager.default.currentDirectoryPath,
+        cwd: String = HerWorkspacePaths.defaultRuntimeDirectory().path,
         agentLLM: (any AgentLLMChatting)? = nil,
         speechSynthesizer: NativeSpeechSynthesizing = MacSpeechSynthesizer(),
         speechDictation: NativeSpeechDictating = MacSpeechDictationService(),

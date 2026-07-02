@@ -3,6 +3,25 @@ import Foundation
 enum HerWorkspacePaths {
     static let localDirectoryName = ".her"
 
+    static func defaultRuntimeDirectory(
+        cwd: String = FileManager.default.currentDirectoryPath,
+        bundleURL: URL? = Bundle.main.bundleURL
+    ) -> URL {
+        let env = ProcessInfo.processInfo.environment
+        if let override = envValue(env, "HER_DESKTOP_WORKSPACE_DIR", "HER_WORKSPACE_DIR") {
+            return URL(fileURLWithPath: (override as NSString).expandingTildeInPath, isDirectory: true)
+                .standardizedFileURL
+        }
+        if let projectRoot = nearestProjectRoot(cwd: cwd, bundleURL: bundleURL) {
+            return projectRoot
+        }
+        let current = URL(fileURLWithPath: cwd, isDirectory: true).standardizedFileURL
+        if isWritableUserDirectory(current) {
+            return current
+        }
+        return applicationSupportRuntimeDirectory()
+    }
+
     static func localAgentDirectory(cwd: String = FileManager.default.currentDirectoryPath) -> URL {
         URL(fileURLWithPath: cwd, isDirectory: true)
             .appendingPathComponent(localDirectoryName, isDirectory: true)
@@ -80,6 +99,77 @@ enum HerWorkspacePaths {
         }
         return URL(fileURLWithPath: cwd, isDirectory: true)
             .appendingPathComponent(path, isDirectory: true)
+    }
+
+    static func applicationSupportRuntimeDirectory() -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support", isDirectory: true)
+        return base.appendingPathComponent("Her Desktop", isDirectory: true)
+    }
+
+    private static func nearestProjectRoot(cwd: String, bundleURL: URL?) -> URL? {
+        for start in projectSearchStarts(cwd: cwd, bundleURL: bundleURL) {
+            for directory in ancestorDirectories(from: start) {
+                if FileManager.default.fileExists(atPath: directory.appendingPathComponent("Package.swift").path)
+                    || FileManager.default.fileExists(atPath: directory.appendingPathComponent("Config/her-desktop.local.json").path) {
+                    return directory
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func projectSearchStarts(cwd: String, bundleURL: URL?) -> [URL] {
+        var starts = [URL(fileURLWithPath: cwd, isDirectory: true)]
+        if let bundleURL {
+            starts.append(bundleURL)
+            starts.append(bundleURL.deletingLastPathComponent())
+        }
+        return uniqueURLs(starts)
+    }
+
+    private static func ancestorDirectories(from start: URL) -> [URL] {
+        var directories: [URL] = []
+        var current = start.standardizedFileURL
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: current.path, isDirectory: &isDirectory), !isDirectory.boolValue {
+            current.deleteLastPathComponent()
+        }
+        while true {
+            directories.append(current)
+            let parent = current.deletingLastPathComponent().standardizedFileURL
+            if parent.path == current.path { break }
+            current = parent
+        }
+        return directories
+    }
+
+    private static func isWritableUserDirectory(_ url: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        guard path != "/", path.hasPrefix(NSHomeDirectory()) else { return false }
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
+            && FileManager.default.isWritableFile(atPath: path)
+    }
+
+    private static func envValue(_ env: [String: String], _ keys: String...) -> String? {
+        for key in keys {
+            if let value = env[key]?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty {
+                return value
+            }
+        }
+        return nil
+    }
+
+    private static func uniqueURLs(_ urls: [URL]) -> [URL] {
+        var seen = Set<String>()
+        return urls.filter { url in
+            let path = url.standardizedFileURL.path
+            guard !seen.contains(path) else { return false }
+            seen.insert(path)
+            return true
+        }
     }
 }
 
