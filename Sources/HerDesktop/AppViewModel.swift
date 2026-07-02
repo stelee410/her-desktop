@@ -131,7 +131,7 @@ final class AppViewModel: ObservableObject {
         self.messages = restoredMessages.isEmpty ? [
             ChatMessage(role: .assistant, content: loaded.hasLLMKey
                 ? "我在这里。今天想从哪里开始？"
-                : "先在 Settings 里配置 AgentLLM API key，就可以开始和我对话。AgentMem、插件和其他扩展都可以之后再接。")
+                : Self.firstRunSetupMessage(config: loaded))
         ] : restoredMessages
         self.connectionState = loaded.hasLLMKey ? .ready : .offline
         self.memorySignal = .empty
@@ -169,7 +169,7 @@ final class AppViewModel: ObservableObject {
             let updated = try draft.makeConfig()
             _ = try ConfigLoader.saveLocal(updated, cwd: runtimeCwd)
             applyConfiguration(updated)
-            messages.append(ChatMessage(role: .tool, content: "Configuration Saved\nLocal service configuration was updated."))
+            messages.append(ChatMessage(role: .assistant, content: configurationSavedMessage(config: updated)))
             audit(
                 type: "config.saved",
                 summary: "Local service configuration was updated.",
@@ -306,6 +306,11 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    func appendReadinessGuidance() {
+        messages.append(ChatMessage(role: .assistant, content: readinessGuidanceMessage()))
+        saveSessionSnapshot()
+    }
+
     func sendDraft() async {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let attachments = pendingAttachments
@@ -322,7 +327,7 @@ final class AppViewModel: ObservableObject {
         guard config.hasLLMKey || allowsMissingLLMKeyForInjectedClient else {
             connectionState = .offline
             lastError = ServiceError.missingAPIKey("AgentLLM").localizedDescription
-            messages.append(ChatMessage(role: .assistant, content: "现在只需要先配置 AgentLLM API key。打开 Settings 填入 key 后保存，我们就可以开始。"))
+            messages.append(ChatMessage(role: .assistant, content: Self.firstRunSetupMessage(config: config)))
             saveSessionSnapshot()
             return
         }
@@ -377,6 +382,58 @@ final class AppViewModel: ObservableObject {
         \(nextStep)
 
         AgentMem、插件和其他扩展都可以之后再接；现在先把 AgentLLM 聊天通路跑通。
+        """
+    }
+
+    private static func firstRunSetupMessage(config: HerAppConfig) -> String {
+        """
+        我们先把入口收得很小：现在只需要配置 AgentLLM API key，就可以开始和我对话。
+
+        打开 Settings，把 AgentLLM API key 填进去；base URL 保持 \(config.agentLLMBaseURL.absoluteString)，model 保持 \(config.agentLLMModel)，然后保存并检查。
+
+        AgentMem、插件、MCP、语音这些都不是第一步。等聊天通路跑通后，我会在对话里一步步带你接上它们。
+        """
+    }
+
+    private func configurationSavedMessage(config: HerAppConfig) -> String {
+        guard config.hasLLMKey else {
+            return Self.firstRunSetupMessage(config: config)
+        }
+        if config.hasMemKey {
+            return "AgentLLM key 已保存。我会先检查聊天通路；AgentMem 也已配置，会作为长期记忆增强使用。"
+        }
+        return "AgentLLM key 已保存。我会先检查聊天通路；AgentMem 和插件扩展可以之后按需要再接。"
+    }
+
+    private func readinessGuidanceMessage() -> String {
+        let summary = productReadinessSummary
+        if !config.hasLLMKey {
+            return Self.firstRunSetupMessage(config: config)
+        }
+
+        if let llm = summary.items.first(where: { $0.id == "agentllm" }), llm.level == .attention {
+            return """
+            AgentLLM key 已经配置，但聊天通路还没有确认可用：\(llm.detail)
+
+            下一步先做一件事：在 Settings 里确认 base URL 是服务根地址、API key 没有多余空格、model 是当前可用模型，然后保存并检查。修好后直接把刚才的话再发一次，我会接着做。
+
+            AgentMem、插件和 MCP 先不用处理，它们不会阻塞 MVP 聊天。
+            """
+        }
+
+        let pluginItem = summary.items.first { $0.id == "plugins" }
+        if pluginItem?.level == .attention {
+            return """
+            现在已经可以开始聊天和工作。插件运行时还有可选项需要注意：\(pluginItem?.detail ?? "")
+
+            这不是第一步阻塞项。你可以直接告诉我想完成什么；等需要某个工具或扩展时，我会在对话里说明缺什么、是否需要生成插件、以及安装前需要你确认什么。
+            """
+        }
+
+        return """
+        核心聊天通路已经准备好。你可以直接把要做的事发给我。
+
+        如果后面需要长期记忆、MCP 工具或新的内置扩展，我会通过对话先解释目的和权限，再生成草稿、等待你确认后安装。
         """
     }
 
@@ -1875,7 +1932,11 @@ final class AppViewModel: ObservableObject {
     ) async {
         guard config.hasLLMKey else {
             lastError = ServiceError.missingAPIKey("AgentLLM").localizedDescription
-            messages.append(ChatMessage(role: .assistant, content: "需要先配置 AgentLLM API key，才能用 AI 生成插件草稿。"))
+            messages.append(ChatMessage(role: .assistant, content: """
+            需要先配置 AgentLLM API key，才能用 AI 生成插件草稿。
+
+            先把 Settings 里的 AgentLLM API key 填好并保存；插件生成、MCP 接入和安装确认都可以在聊天通路跑通后继续。
+            """))
             saveSessionSnapshot()
             return
         }

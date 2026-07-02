@@ -122,7 +122,6 @@ struct InspectorView: View {
 
 private struct ProductReadinessCard: View {
     @EnvironmentObject private var model: AppViewModel
-    @Environment(\.openSettings) private var openSettings
 
     private var summary: ProductReadinessSummary {
         model.productReadinessSummary
@@ -150,12 +149,21 @@ private struct ProductReadinessCard: View {
 
                 HStack(spacing: 8) {
                     Button {
+                        model.appendReadinessGuidance()
+                    } label: {
+                        Label(summary.isReadyForCoreWork ? "Ask Her" : "Guide Me", systemImage: "bubble.left.and.text.bubble.right")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(AppTheme.coral)
+                    .controlSize(.small)
+                    .help("Ask Her to explain the next setup step in the conversation")
+
+                    Button {
                         perform(.runDiagnostics)
                     } label: {
                         Label("Diagnostics", systemImage: "stethoscope")
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(AppTheme.coral)
+                    .buttonStyle(.bordered)
                     .controlSize(.small)
                     .help("Run read-only product diagnostics")
 
@@ -197,13 +205,6 @@ private struct ProductReadinessCard: View {
                                         .truncationMode(.middle)
                                         .textSelection(.enabled)
                                     Spacer(minLength: 0)
-                                    if let action = item.action, let title = item.actionTitle {
-                                        Button(title) {
-                                            perform(action)
-                                        }
-                                        .buttonStyle(.bordered)
-                                        .controlSize(.mini)
-                                    }
                                 }
                             }
                         }
@@ -217,7 +218,7 @@ private struct ProductReadinessCard: View {
     }
 
     private func perform(_ action: ProductReadinessAction) {
-        model.performProductReadinessAction(action) { openSettings() }
+        model.performProductReadinessAction(action)
     }
 
     private func label(for item: ProductReadinessItem) -> String {

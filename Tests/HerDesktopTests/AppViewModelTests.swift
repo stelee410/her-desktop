@@ -93,11 +93,23 @@ final class AppViewModelTests: XCTestCase {
         let model = AppViewModel(config: .empty, cwd: root.path)
 
         XCTAssertTrue(model.messages.first?.content.contains("配置 AgentLLM API key") == true)
+        XCTAssertTrue(model.messages.first?.content.contains("AgentMem、插件、MCP、语音这些都不是第一步") == true)
 
         await model.send("你好")
 
         XCTAssertEqual(model.connectionState, .offline)
-        XCTAssertTrue(model.messages.last?.content.contains("只需要先配置 AgentLLM API key") == true)
+        XCTAssertTrue(model.messages.last?.content.contains("只需要配置 AgentLLM API key") == true)
+    }
+
+    func testReadinessGuidanceAppendsConversationalSetupStep() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-readiness-guidance-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(config: .empty, cwd: root.path)
+
+        model.appendReadinessGuidance()
+
+        XCTAssertTrue(model.messages.last?.content.contains("现在只需要配置 AgentLLM API key") == true)
+        XCTAssertTrue(model.messages.last?.content.contains("等聊天通路跑通后") == true)
     }
 
     func testAgentLLMAuthFailureUsesConversationalRecoveryPrompt() async throws {
@@ -2799,7 +2811,23 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(model.config.agentLLMModel, "saved-model")
         XCTAssertEqual(loaded.agentLLMModel, "saved-model")
         XCTAssertEqual(model.config.pluginDirectory, draft.pluginDirectory)
-        XCTAssertTrue(model.messages.contains { $0.content.contains("Configuration Saved") })
+        XCTAssertTrue(model.messages.contains { $0.content.contains("现在只需要配置 AgentLLM API key") })
+    }
+
+    func testSaveConfigurationWithLLMKeyUsesConversationalConfirmation() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-save-config-llm-key-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("Config", isDirectory: true), withIntermediateDirectories: true)
+        let config = HerAppConfig.empty
+        let model = AppViewModel(config: config, cwd: root.path)
+
+        var draft = HerAppConfigDraft(config: config)
+        draft.agentLLMAPIKey = "llm-test"
+        await model.saveConfiguration(draft)
+
+        XCTAssertTrue(model.config.hasLLMKey)
+        XCTAssertTrue(model.messages.contains { $0.content.contains("AgentLLM key 已保存") })
+        XCTAssertTrue(model.messages.contains { $0.content.contains("AgentMem 和插件扩展可以之后按需要再接") })
     }
 
     private func samplePackage(

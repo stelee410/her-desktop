@@ -87,7 +87,13 @@ AgentLLM conversation can continue. Post-turn writeback uses single-turn
 `user_input` plus `agent_response` for short exchanges, then switches to the
 recommended V7 `summary` mode once a session has enough confirmed context.
 The Memory-Key itself is the runtime memory identity.
-Product Readiness treats AgentLLM as the only required service for starting a conversation. AgentMem, local agent/user labels, plugins, voice, inbox, work plans, and reflection snapshots are optional enhancements and should not block first use.
+
+Product Readiness treats AgentLLM as the only required service for starting a
+conversation. AgentMem, local agent/user labels, plugins, voice, inbox, work
+plans, and reflection snapshots are optional enhancements and should not block
+first use. The readiness strip and Inspector show status only; first-run setup
+guidance is delivered as an assistant message in the chat surface so the user is
+led conversationally instead of through an onboarding menu.
 
 ## Build A Mac App Bundle
 

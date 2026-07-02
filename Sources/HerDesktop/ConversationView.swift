@@ -50,14 +50,12 @@ struct ConversationView: View {
 
 private struct LaunchReadinessStrip: View {
     @EnvironmentObject private var model: AppViewModel
-    @Environment(\.openSettings) private var openSettings
 
     private var summary: ProductReadinessSummary {
         model.productReadinessSummary
     }
 
     var body: some View {
-        let actions = summary.suggestedActions(limit: 3)
         HStack(alignment: .center, spacing: 10) {
             Image(systemName: summary.isReadyForCoreWork ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
                 .foregroundStyle(summary.isReadyForCoreWork ? .green : AppTheme.coral)
@@ -81,24 +79,13 @@ private struct LaunchReadinessStrip: View {
             Spacer(minLength: 8)
 
             Button {
-                perform(.runDiagnostics)
+                model.appendReadinessGuidance()
             } label: {
-                Image(systemName: "stethoscope")
+                Label(summary.isReadyForCoreWork ? "Ask Her" : "Guide Me", systemImage: "bubble.left.and.text.bubble.right")
             }
             .buttonStyle(.bordered)
             .controlSize(.mini)
-            .help("Run product diagnostics")
-
-            ForEach(actions) { item in
-                if let action = item.action, let title = item.actionTitle {
-                    Button(title) {
-                        perform(action)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
-                    .help(item.detail)
-                }
-            }
+            .help("Ask Her to explain the next setup step in the conversation")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
@@ -110,9 +97,6 @@ private struct LaunchReadinessStrip: View {
         )
     }
 
-    private func perform(_ action: ProductReadinessAction) {
-        model.performProductReadinessAction(action) { openSettings() }
-    }
 }
 
 private struct ToolbarView: View {
