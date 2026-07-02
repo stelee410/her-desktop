@@ -66,7 +66,7 @@ final class InteractionEventBus {
         attachments: [MessageAttachment],
         surface: InteractionSurface = .mac
     ) -> NormalizedInteractionTurn {
-        let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanText = SecretRedactor.redact(text.trimmingCharacters(in: .whitespacesAndNewlines))
         let displayText = cleanText.isEmpty
             ? "Attached \(attachments.count) file(s)."
             : cleanText

@@ -30,6 +30,10 @@ enum SecretRedactor {
         redact(error.localizedDescription, config: config)
     }
 
+    static func firstAgentLLMAPIKey(in text: String) -> String? {
+        firstMatch(pattern: #"sk-[A-Za-z0-9_\-]{12,}"#, in: text)
+    }
+
     private static func redactKnown(_ secret: String, in text: String) -> String {
         let trimmed = secret.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 8 else { return text }
@@ -40,5 +44,15 @@ enum SecretRedactor {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
         let range = NSRange(text.startIndex..., in: text)
         return regex.stringByReplacingMatches(in: text, range: range, withTemplate: template)
+    }
+
+    private static func firstMatch(pattern: String, in text: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let range = NSRange(text.startIndex..., in: text)
+        guard let match = regex.firstMatch(in: text, range: range),
+              let matchRange = Range(match.range, in: text) else {
+            return nil
+        }
+        return String(text[matchRange])
     }
 }

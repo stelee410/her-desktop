@@ -321,6 +321,10 @@ final class AppViewModel: ObservableObject {
     }
 
     func send(_ text: String, attachments: [MessageAttachment] = []) async {
+        if await saveInlineAgentLLMKeyIfPresent(text: text, attachments: attachments) {
+            return
+        }
+
         let normalized = interactionEventBus.userMessage(text: text, attachments: attachments)
         recordInteractionEvent(normalized.event)
         messages.append(ChatMessage(role: .user, content: normalized.displayText, attachments: attachments))
@@ -359,6 +363,48 @@ final class AppViewModel: ObservableObject {
             messages.append(ChatMessage(role: .assistant, content: conversationalRecoveryMessage(for: error)))
             saveSessionSnapshot()
         }
+    }
+
+    private func saveInlineAgentLLMKeyIfPresent(text: String, attachments: [MessageAttachment]) async -> Bool {
+        guard !config.hasLLMKey,
+              let key = SecretRedactor.firstAgentLLMAPIKey(in: text) else {
+            return false
+        }
+
+        let redactedText = SecretRedactor.redact(text)
+        let normalized = interactionEventBus.userMessage(text: redactedText, attachments: attachments)
+        recordInteractionEvent(normalized.event)
+        messages.append(ChatMessage(role: .user, content: normalized.displayText, attachments: attachments))
+
+        do {
+            var updated = config
+            updated.agentLLMAPIKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+            _ = try ConfigLoader.saveLocal(updated, cwd: runtimeCwd)
+            applyConfiguration(updated)
+            lastError = nil
+            messages.append(ChatMessage(role: .assistant, content: inlineAgentLLMKeySavedMessage(hasAttachments: !attachments.isEmpty)))
+            audit(
+                type: "config.agentllm_key_saved_from_chat",
+                summary: "AgentLLM API key was saved from a redacted chat message.",
+                metadata: [
+                    "agentLLMBaseURL": updated.agentLLMBaseURL.absoluteString,
+                    "agentLLMModel": updated.agentLLMModel,
+                    "hasAttachments": String(!attachments.isEmpty)
+                ]
+            )
+            saveSessionSnapshot()
+            await refreshServiceHealth()
+        } catch {
+            lastError = SecretRedactor.redact(error, config: config)
+            messages.append(ChatMessage(role: .assistant, content: """
+            我识别到了 AgentLLM API key，但保存本地配置时失败了：\(lastError ?? "Unknown error")
+
+            请打开 Settings 保存一次；我不会把这条消息里的 key 明文写进聊天记录。
+            """))
+            audit(type: "config.agentllm_key_inline_save_failed", summary: lastError ?? error.localizedDescription)
+            saveSessionSnapshot()
+        }
+        return true
     }
 
     private func conversationalRecoveryMessage(for error: Error) -> String {
@@ -403,6 +449,17 @@ final class AppViewModel: ObservableObject {
             return "AgentLLM key 已保存。我会先检查聊天通路；AgentMem 也已配置，会作为长期记忆增强使用。"
         }
         return "AgentLLM key 已保存。我会先检查聊天通路；AgentMem 和插件扩展可以之后按需要再接。"
+    }
+
+    private func inlineAgentLLMKeySavedMessage(hasAttachments: Bool) -> String {
+        let attachmentNote = hasAttachments
+            ? "\n\n我没有把这条带密钥的消息发给模型；如果附件里还有要处理的任务，请重新发一次任务内容。"
+            : ""
+        return """
+        AgentLLM key 已经保存，我也把聊天记录里的密钥打码了。现在我会检查聊天通路。
+
+        检查通过后，直接发你要做的事就可以开始；AgentMem、插件和 MCP 都不是第一步。\(attachmentNote)
+        """
     }
 
     private func readinessGuidanceMessage() -> String {

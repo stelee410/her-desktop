@@ -101,6 +101,41 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.messages.last?.content.contains("只需要配置 AgentLLM API key") == true)
     }
 
+    func testPastedAgentLLMKeyIsSavedAndRedactedFromLocalTranscript() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-inline-llm-key-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("Config", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        let inlineKey = "sk-" + "inline_test_key_1234567890"
+        let session = mockSession { request in
+            if request.url?.path == "/health" {
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                return (response, Data("ready".utf8))
+            }
+            XCTAssertEqual(request.url?.path, "/v1/chat/completions")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer \(inlineKey)")
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data(#"{"choices":[{"message":{"role":"assistant","content":"OK"}}]}"#.utf8))
+        }
+        let model = AppViewModel(config: .empty, cwd: root.path, urlSession: session)
+
+        await model.send("AgentLLM key: \(inlineKey)")
+
+        XCTAssertEqual(model.config.agentLLMAPIKey, inlineKey)
+        XCTAssertEqual(ConfigLoader.load(cwd: root.path).agentLLMAPIKey, inlineKey)
+        XCTAssertEqual(model.connectionState, .ready)
+        XCTAssertEqual(model.serviceHealth.first { $0.id == "agentllm" }?.state, .online)
+        XCTAssertTrue(model.messages.contains { $0.role == .user && $0.content.contains("[redacted]") })
+        XCTAssertFalse(model.messages.contains { $0.content.contains(inlineKey) })
+        XCTAssertFalse(model.interactionEvents.contains { $0.summary.contains(inlineKey) })
+
+        let sessionText = try String(contentsOf: HerWorkspacePaths.sessionPath(cwd: root.path), encoding: .utf8)
+        XCTAssertTrue(sessionText.contains("[redacted]"))
+        XCTAssertFalse(sessionText.contains(inlineKey))
+    }
+
     func testReadinessGuidanceAppendsConversationalSetupStep() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-readiness-guidance-\(UUID().uuidString)", isDirectory: true)
