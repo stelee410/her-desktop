@@ -38,7 +38,7 @@ export HER_AGENT_MEM_API_KEY="mem_..."
 tool output and artifact manifests redact recognized tokens before display.
 
 For the packaged Mac app, saved configuration defaults to `~/Library/Application Support/Her Desktop/config.json`.
-You can also edit the same values from the native macOS Settings window after launch; the main Inspector and Settings share the same save path and immediately re-check AgentLLM health plus chat data-plane readiness, AgentMem relationship/query readiness, and plugin runtime health after saving.
+You can also edit the same values from the native macOS Settings window after launch; the main Inspector and Settings share the same save path. For MVP use, only the AgentLLM API key is required. AgentMem and plugin checks are diagnostics and enhancements, not first-run blockers.
 
 ## Run
 
@@ -46,7 +46,7 @@ You can also edit the same values from the native macOS Settings window after la
 swift run HerDesktop
 ```
 
-Her Desktop also installs a native menu bar presence while running. The menu bar entry can reopen the main window, start a fresh conversation, quick-capture a note into the inbox, toggle local dictation and spoken replies, check AgentLLM/AgentMem health, start or stop the local inbox bridge, open Settings, and jump to plugin/workspace directories.
+Her Desktop also installs a native menu bar presence while running. The menu bar entry can reopen the main window, start a fresh conversation, quick-capture a note into the inbox, toggle local dictation and spoken replies, check services, start or stop the local inbox bridge, open Settings, and jump to plugin/workspace directories.
 
 ## Test
 
@@ -56,8 +56,10 @@ swift test
 
 ## Live Service Smoke Test
 
-After configuring runtime secrets through `Config/her-desktop.local.json`, the
-Settings window, or environment variables, use the smoke helper to verify the
+Her Desktop's MVP path only requires an AgentLLM API key. AgentMem is optional:
+without a Memory-Key, chat still works and memory signals degrade to empty local
+context. After configuring runtime secrets through `Config/her-desktop.local.json`,
+the Settings window, or environment variables, use the smoke helper to verify the
 same online services the app uses:
 
 ```bash
@@ -81,7 +83,7 @@ AgentLLM conversation can continue. Post-turn writeback uses single-turn
 `user_input` plus `agent_response` for short exchanges, then switches to the
 recommended V7 `summary` mode once a session has enough confirmed context.
 The Memory-Key itself is the runtime memory identity.
-Product Readiness treats local agent/user labels as optional display or platform-mapping metadata; they do not gate AgentMem V7 memory scope.
+Product Readiness treats AgentLLM as the only required service for starting a conversation. AgentMem, local agent/user labels, plugins, voice, inbox, work plans, and reflection snapshots are optional enhancements and should not block first use.
 
 ## Build A Mac App Bundle
 
@@ -114,7 +116,7 @@ Plugin lifecycle management is also capability-backed: `plugin.stagePackage` val
 Prompt defaults are bundled from `Sources/HerDesktop/Resources/SOUL.md` and `Sources/HerDesktop/Resources/INFINITI.md`; workspace-local `SOUL.md`, `AGENTS.md`, `AGENT.md`, `INFINITI.md`, `CLAUDE.md`, or `.claude/CLAUDE.md` still override them. The system prompt includes a Prompt Document Provenance section showing which persona/project document source was loaded, mirroring Infiniti Agent's source-aware prompt contract.
 The system prompt follows Infiniti Agent's memory layering discipline: current chat, verified tool results, app state, AgentMem retrieval, companion profile, Dream Context, and plugin lifecycle events are separate evidence layers. Retrieved memory is relevant background, not a complete database dump; missing retrieval should not be treated as proof that a user preference, plugin state, or prior decision does not exist.
 The registry discovers bundled `*.plugin.json` resources dynamically, so adding a new built-in extension should not require a Swift registration list.
-Product Readiness also verifies that the core built-in extension set is present (`Workspace`, `AgentMem`, `Vibe Plugin Creator`, `MCP Bridge`, `Native macOS`, `Companion Reflection`, and `Product Diagnostics`) before calling the plugin runtime ready for core work. The read-only `product.diagnostics` capability exposes that same readiness/service/plugin/session snapshot through the plugin contract without echoing API keys or Memory keys, and the Today readiness strip plus Inspector readiness card can run that diagnostic directly. The approved `product.exportDiagnostics` capability writes a Markdown readiness report into `.her/workspace/diagnostics/` for handoff or review, again reporting keys only as configured/not configured.
+Product Readiness also reports whether the core built-in extension set is present (`Workspace`, `AgentMem`, `Vibe Plugin Creator`, `MCP Bridge`, `Native macOS`, `Companion Reflection`, and `Product Diagnostics`), but missing or unchecked plugins do not block the first chat once AgentLLM is configured. The read-only `product.diagnostics` capability exposes that same readiness/service/plugin/session snapshot through the plugin contract without echoing API keys or Memory keys, and the Today readiness strip plus Inspector readiness card can run that diagnostic directly. The approved `product.exportDiagnostics` capability writes a Markdown readiness report into `.her/workspace/diagnostics/` for handoff or review, again reporting keys only as configured/not configured.
 
 When adding a new built-in extension, keep it plugin-first:
 

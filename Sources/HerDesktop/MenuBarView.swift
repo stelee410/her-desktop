@@ -135,7 +135,7 @@ struct HerMenuBarView: View {
         case .error:
             return model.lastError ?? "Something needs attention."
         case .offline:
-            return "Open Settings to connect AgentLLM and AgentMem."
+            return "Open Settings to add an AgentLLM API key."
         }
     }
 

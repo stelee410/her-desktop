@@ -44,7 +44,7 @@ struct ProductReadinessSummary: Equatable {
 
     func suggestedActions(limit: Int = 3) -> [ProductReadinessItem] {
         Array(items.filter { item in
-            item.action != nil && item.actionTitle != nil && item.level != .ready
+            item.required && item.action != nil && item.actionTitle != nil && item.level == .attention
         }.prefix(max(0, limit)))
     }
 }
@@ -77,14 +77,14 @@ enum ProductReadinessBuilder {
         let title: String
         let detail: String
         if readyRequired == required.count && attention.isEmpty {
-            title = "Ready"
-            detail = "Conversation, memory, plugins, and local continuity are in place."
+            title = "Ready to Chat"
+            detail = "AgentLLM is configured. Optional memory, plugins, and local tools can be added later."
         } else if readyRequired == required.count {
-            title = "Core Ready"
-            detail = "\(attention.count) non-blocking item(s) need attention."
+            title = "Ready to Chat"
+            detail = "\(attention.count) optional item(s) can be configured later."
         } else {
             title = "Setup Needed"
-            detail = "\(required.count - readyRequired) required item(s) need attention before Her is fully useful."
+            detail = "Add an AgentLLM API key to start using Her."
         }
         return ProductReadinessSummary(
             title: title,
@@ -127,24 +127,22 @@ enum ProductReadinessBuilder {
             return item(
                 id: "agentmem",
                 title: "AgentMem",
-                detail: "Add an AgentMem memory key in Settings.",
-                level: .attention,
+                detail: "Optional; add a Memory-Key later for long-term relationship memory.",
+                level: .optional,
                 systemImage: "brain.head.profile",
-                required: true,
-                actionTitle: "Settings",
-                action: .openSettings
+                required: false
             )
         }
         let health = serviceHealth.first { $0.id == "agentmem" }
         switch health?.state {
         case .online:
-            return item(id: "agentmem", title: "AgentMem", detail: health?.summary ?? "Online", level: .ready, systemImage: "brain.head.profile", required: true)
+            return item(id: "agentmem", title: "AgentMem", detail: health?.summary ?? "Online", level: .ready, systemImage: "brain.head.profile", required: false)
         case .checking:
-            return item(id: "agentmem", title: "AgentMem", detail: "Health check is running.", level: .attention, systemImage: "arrow.triangle.2.circlepath", required: true)
+            return item(id: "agentmem", title: "AgentMem", detail: "Optional memory health check is running.", level: .attention, systemImage: "arrow.triangle.2.circlepath", required: false)
         case .offline:
-            return item(id: "agentmem", title: "AgentMem", detail: health?.summary ?? "Offline", level: .attention, systemImage: "brain.head.profile", required: true, actionTitle: "Check", action: .checkServices)
+            return item(id: "agentmem", title: "AgentMem", detail: health?.summary ?? "Offline", level: .attention, systemImage: "brain.head.profile", required: false)
         case .unknown, nil:
-            return item(id: "agentmem", title: "AgentMem", detail: "Configured; run Check Services.", level: .attention, systemImage: "brain.head.profile", required: true, actionTitle: "Check", action: .checkServices)
+            return item(id: "agentmem", title: "AgentMem", detail: "Optional memory is configured but not checked.", level: .optional, systemImage: "brain.head.profile", required: false)
         }
     }
 
@@ -154,12 +152,10 @@ enum ProductReadinessBuilder {
             return item(
                 id: "plugins",
                 title: "Plugin Runtime",
-                detail: "No installed capabilities were found.",
-                level: .attention,
+                detail: "Optional extensions can be added later.",
+                level: .optional,
                 systemImage: "puzzlepiece.extension",
-                required: true,
-                actionTitle: "Compose",
-                action: .composePlugin
+                required: false
             )
         }
         let installedIDs = Set(plugins.map(\.id))
@@ -172,9 +168,7 @@ enum ProductReadinessBuilder {
                 detail: "Missing core built-in extension(s): \(names).",
                 level: .attention,
                 systemImage: "puzzlepiece.extension",
-                required: true,
-                actionTitle: "Tools",
-                action: .openToolsWorkspace
+                required: false
             )
         }
         return item(
@@ -183,7 +177,7 @@ enum ProductReadinessBuilder {
             detail: "\(plugins.count) plugin(s), \(capabilityCount) capability item(s).",
             level: .ready,
             systemImage: "puzzlepiece.extension",
-            required: true
+            required: false
         )
     }
 

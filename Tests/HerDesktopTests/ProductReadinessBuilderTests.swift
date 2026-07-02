@@ -2,7 +2,7 @@ import XCTest
 @testable import HerDesktop
 
 final class ProductReadinessBuilderTests: XCTestCase {
-    func testMissingKeysBlockCoreReadiness() {
+    func testMissingAgentLLMKeyBlocksCoreReadiness() {
         let summary = ProductReadinessBuilder.build(
             config: .empty,
             serviceHealth: [],
@@ -15,12 +15,12 @@ final class ProductReadinessBuilderTests: XCTestCase {
         )
 
         XCTAssertEqual(summary.title, "Setup Needed")
-        XCTAssertEqual(summary.score, "1/3")
+        XCTAssertEqual(summary.score, "0/1")
         XCTAssertFalse(summary.isReadyForCoreWork)
         XCTAssertEqual(summary.items.first { $0.id == "agentllm" }?.level, .attention)
         XCTAssertEqual(summary.items.first { $0.id == "agentllm" }?.action, .openSettings)
-        XCTAssertEqual(summary.items.first { $0.id == "agentmem" }?.level, .attention)
-        XCTAssertEqual(summary.items.first { $0.id == "agentmem" }?.actionTitle, "Settings")
+        XCTAssertEqual(summary.items.first { $0.id == "agentmem" }?.level, .optional)
+        XCTAssertFalse(summary.items.first { $0.id == "agentmem" }?.required == true)
         XCTAssertEqual(summary.items.first { $0.id == "plugins" }?.level, .ready)
         XCTAssertEqual(summary.items.first { $0.id == "labels" }?.level, .ready)
         XCTAssertTrue(summary.items.first { $0.id == "labels" }?.detail.contains("local label only") == true)
@@ -29,13 +29,11 @@ final class ProductReadinessBuilderTests: XCTestCase {
     func testOnlineServicesAndPluginRuntimeAreCoreReady() {
         var config = HerAppConfig.empty
         config.agentLLMAPIKey = "llm-test"
-        config.agentMemAPIKey = "mem-test"
 
         let summary = ProductReadinessBuilder.build(
             config: config,
             serviceHealth: [
                 health(id: "agentllm", state: .online, summary: "ready · Chat OK"),
-                health(id: "agentmem", state: .online, summary: "known · Query OK"),
                 health(id: "plugins", state: .online, summary: "1 installed")
             ],
             plugins: corePlugins(),
@@ -46,9 +44,10 @@ final class ProductReadinessBuilderTests: XCTestCase {
             dreamContext: dreamContext()
         )
 
-        XCTAssertEqual(summary.title, "Ready")
-        XCTAssertEqual(summary.score, "3/3")
+        XCTAssertEqual(summary.title, "Ready to Chat")
+        XCTAssertEqual(summary.score, "1/1")
         XCTAssertTrue(summary.isReadyForCoreWork)
+        XCTAssertEqual(summary.items.first { $0.id == "agentmem" }?.level, .optional)
         XCTAssertEqual(summary.items.first { $0.id == "inbox" }?.level, .ready)
         XCTAssertEqual(summary.items.first { $0.id == "workplan" }?.level, .ready)
         XCTAssertEqual(summary.items.first { $0.id == "reflection" }?.level, .ready)
@@ -59,13 +58,11 @@ final class ProductReadinessBuilderTests: XCTestCase {
     func testPendingReviewQueueKeepsCoreReadyButNeedsAttention() {
         var config = HerAppConfig.empty
         config.agentLLMAPIKey = "llm-test"
-        config.agentMemAPIKey = "mem-test"
 
         let summary = ProductReadinessBuilder.build(
             config: config,
             serviceHealth: [
-                health(id: "agentllm", state: .online),
-                health(id: "agentmem", state: .online)
+                health(id: "agentllm", state: .online)
             ],
             plugins: corePlugins(),
             localInboxBridgeState: LocalInboxBridgeState(),
@@ -75,7 +72,7 @@ final class ProductReadinessBuilderTests: XCTestCase {
             dreamContext: nil
         )
 
-        XCTAssertEqual(summary.title, "Core Ready")
+        XCTAssertEqual(summary.title, "Ready to Chat")
         XCTAssertTrue(summary.isReadyForCoreWork)
         XCTAssertEqual(summary.items.first { $0.id == "reviews" }?.level, .attention)
         XCTAssertEqual(summary.items.first { $0.id == "reviews" }?.detail, "1 approval(s), 0 plugin draft(s) waiting.")
@@ -102,9 +99,10 @@ final class ProductReadinessBuilderTests: XCTestCase {
         )
 
         XCTAssertEqual(summary.items.first { $0.id == "agentllm" }?.action, .checkServices)
-        XCTAssertEqual(summary.items.first { $0.id == "agentmem" }?.actionTitle, "Check")
-        XCTAssertEqual(summary.items.first { $0.id == "plugins" }?.action, .composePlugin)
-        XCTAssertEqual(summary.items.first { $0.id == "plugins" }?.actionTitle, "Compose")
+        XCTAssertNil(summary.items.first { $0.id == "agentmem" }?.actionTitle)
+        XCTAssertFalse(summary.items.first { $0.id == "agentmem" }?.required == true)
+        XCTAssertNil(summary.items.first { $0.id == "plugins" }?.action)
+        XCTAssertFalse(summary.items.first { $0.id == "plugins" }?.required == true)
         XCTAssertEqual(summary.items.first { $0.id == "workplan" }?.action, .openProjectsWorkspace)
         XCTAssertEqual(summary.items.first { $0.id == "reflection" }?.action, .generateReflection)
         XCTAssertEqual(summary.items.first { $0.id == "inbox" }?.action, .startInboxBridge)
@@ -114,15 +112,13 @@ final class ProductReadinessBuilderTests: XCTestCase {
     func testLocalLabelsAreOptionalBecauseAgentMemV7UsesMemoryKeyIdentity() {
         var config = HerAppConfig.empty
         config.agentLLMAPIKey = "llm-test"
-        config.agentMemAPIKey = "mem-test"
         config.agentCode = ""
         config.userID = ""
 
         let summary = ProductReadinessBuilder.build(
             config: config,
             serviceHealth: [
-                health(id: "agentllm", state: .online),
-                health(id: "agentmem", state: .online)
+                health(id: "agentllm", state: .online)
             ],
             plugins: corePlugins(),
             localInboxBridgeState: LocalInboxBridgeState(),
@@ -132,7 +128,7 @@ final class ProductReadinessBuilderTests: XCTestCase {
             dreamContext: nil
         )
 
-        XCTAssertEqual(summary.score, "3/3")
+        XCTAssertEqual(summary.score, "1/1")
         XCTAssertTrue(summary.isReadyForCoreWork)
         XCTAssertEqual(summary.items.first { $0.id == "labels" }?.level, .optional)
         XCTAssertFalse(summary.items.first { $0.id == "labels" }?.required == true)
@@ -144,15 +140,13 @@ final class ProductReadinessBuilderTests: XCTestCase {
     func testSuggestedActionsDoNotPromoteOptionalLocalLabels() {
         var config = HerAppConfig.empty
         config.agentLLMAPIKey = "llm-test"
-        config.agentMemAPIKey = "mem-test"
         config.agentCode = ""
         config.userID = ""
 
         let summary = ProductReadinessBuilder.build(
             config: config,
             serviceHealth: [
-                health(id: "agentllm", state: .online),
-                health(id: "agentmem", state: .online)
+                health(id: "agentllm", state: .online)
             ],
             plugins: corePlugins(),
             localInboxBridgeState: LocalInboxBridgeState(),
@@ -164,12 +158,11 @@ final class ProductReadinessBuilderTests: XCTestCase {
 
         XCTAssertEqual(summary.items.first { $0.id == "labels" }?.level, .optional)
         XCTAssertFalse(summary.suggestedActions(limit: 8).map(\.id).contains("labels"))
-        XCTAssertEqual(summary.suggestedActions(limit: 3).map(\.id), ["reviews", "workplan", "reflection"])
+        XCTAssertEqual(summary.suggestedActions(limit: 3).map(\.id), [])
     }
 
-    func testSuggestedActionsReturnFirstNonReadyActionableItemsWithLimit() {
+    func testSuggestedActionsReturnOnlyRequiredAttentionItemsWithLimit() {
         var config = HerAppConfig.empty
-        config.agentLLMAPIKey = "llm-test"
         config.agentMemAPIKey = "mem-test"
 
         let summary = ProductReadinessBuilder.build(
@@ -186,27 +179,19 @@ final class ProductReadinessBuilderTests: XCTestCase {
             dreamContext: nil
         )
 
-        XCTAssertEqual(summary.suggestedActions(limit: 3).map(\.id), ["agentllm", "agentmem", "plugins"])
-        XCTAssertEqual(summary.suggestedActions(limit: 5).map(\.action), [
-            .checkServices,
-            .checkServices,
-            .composePlugin,
-            .openToolsWorkspace,
-            .openProjectsWorkspace
-        ])
+        XCTAssertEqual(summary.suggestedActions(limit: 3).map(\.id), ["agentllm"])
+        XCTAssertEqual(summary.suggestedActions(limit: 5).map(\.action), [.openSettings])
         XCTAssertEqual(summary.suggestedActions(limit: 0), [])
     }
 
-    func testMissingCoreBuiltInPluginsBlockPluginRuntimeReadiness() {
+    func testMissingCoreBuiltInPluginsDoesNotBlockChatReadiness() {
         var config = HerAppConfig.empty
         config.agentLLMAPIKey = "llm-test"
-        config.agentMemAPIKey = "mem-test"
 
         let summary = ProductReadinessBuilder.build(
             config: config,
             serviceHealth: [
-                health(id: "agentllm", state: .online),
-                health(id: "agentmem", state: .online)
+                health(id: "agentllm", state: .online)
             ],
             plugins: [plugin(id: "builtin.workspace", name: "Workspace")],
             localInboxBridgeState: LocalInboxBridgeState(),
@@ -217,10 +202,11 @@ final class ProductReadinessBuilderTests: XCTestCase {
         )
 
         let pluginItem = summary.items.first { $0.id == "plugins" }
-        XCTAssertEqual(summary.score, "2/3")
-        XCTAssertFalse(summary.isReadyForCoreWork)
+        XCTAssertEqual(summary.score, "1/1")
+        XCTAssertTrue(summary.isReadyForCoreWork)
         XCTAssertEqual(pluginItem?.level, .attention)
-        XCTAssertEqual(pluginItem?.action, .openToolsWorkspace)
+        XCTAssertFalse(pluginItem?.required == true)
+        XCTAssertNil(pluginItem?.action)
         XCTAssertTrue(pluginItem?.detail.contains("Vibe Plugin Creator") == true)
         XCTAssertTrue(pluginItem?.detail.contains("MCP Bridge") == true)
     }

@@ -42,7 +42,7 @@ final class ProductDiagnosticsSnapshotBuilderTests: XCTestCase {
             sessionID: "session_test"
         )
 
-        XCTAssertTrue(content.contains("product_readiness: Ready (3/3, ready)"))
+        XCTAssertTrue(content.contains("product_readiness: Ready to Chat (1/1, ready)"))
         XCTAssertTrue(content.contains("agentllm_key_configured: true"))
         XCTAssertTrue(content.contains("agentmem_memory_key_configured: true"))
         XCTAssertTrue(content.contains("builtin.product-diagnostics"))

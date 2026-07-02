@@ -62,6 +62,7 @@ final class AppViewModel: ObservableObject {
     private let speechSynthesizer: NativeSpeechSynthesizing
     private let speechDictation: NativeSpeechDictating
     private let urlSession: URLSession
+    private let allowsMissingLLMKeyForInjectedClient: Bool
     private var serviceHealthVerifier: ServiceHealthVerifier
     private var conversationContextBuilder: ConversationContextBuilder
     private let runtimeCwd: String
@@ -83,6 +84,7 @@ final class AppViewModel: ObservableObject {
         self.config = loaded
         self.agentMem = AgentMemClient(config: loaded, session: urlSession)
         self.agentLLM = agentLLM ?? AgentLLMClient(config: loaded, session: urlSession)
+        self.allowsMissingLLMKeyForInjectedClient = agentLLM != nil
         self.pluginRegistry = PluginRegistry(config: loaded, baseDirectory: cwd)
         self.speechSynthesizer = speechSynthesizer
         self.speechDictation = speechDictation
@@ -127,7 +129,9 @@ final class AppViewModel: ObservableObject {
         self.mcpDiscoveredTools = []
         self.pendingAttachments = []
         self.messages = restoredMessages.isEmpty ? [
-            ChatMessage(role: .assistant, content: "我在这里。今天想从哪里开始？")
+            ChatMessage(role: .assistant, content: loaded.hasLLMKey
+                ? "我在这里。今天想从哪里开始？"
+                : "先在 Settings 里配置 AgentLLM API key，就可以开始和我对话。AgentMem、插件和其他扩展都可以之后再接。")
         ] : restoredMessages
         self.connectionState = loaded.hasLLMKey ? .ready : .offline
         self.memorySignal = .empty
@@ -315,6 +319,13 @@ final class AppViewModel: ObservableObject {
         let normalized = interactionEventBus.userMessage(text: text, attachments: attachments)
         recordInteractionEvent(normalized.event)
         messages.append(ChatMessage(role: .user, content: normalized.displayText, attachments: attachments))
+        guard config.hasLLMKey || allowsMissingLLMKeyForInjectedClient else {
+            connectionState = .offline
+            lastError = ServiceError.missingAPIKey("AgentLLM").localizedDescription
+            messages.append(ChatMessage(role: .assistant, content: "现在只需要先配置 AgentLLM API key。打开 Settings 填入 key 后保存，我们就可以开始。"))
+            saveSessionSnapshot()
+            return
+        }
         connectionState = .thinking
         lastError = nil
 

@@ -21,7 +21,7 @@ struct SettingsView: View {
                     Text("Her Desktop Settings")
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(AppTheme.ink)
-                    Text("Connect the partner brain, memory, plugins, and voice preferences.")
+                    Text("Add an AgentLLM API key to start. Memory, plugins, and voice are optional.")
                         .font(.caption)
                         .foregroundStyle(AppTheme.muted)
                 }
@@ -31,7 +31,9 @@ struct SettingsView: View {
 
             HStack(spacing: 8) {
                 CredentialStatePill(title: "LLM Key", configured: model.config.hasLLMKey)
-                CredentialStatePill(title: "Mem Key", configured: model.config.hasMemKey)
+                if model.config.hasMemKey {
+                    CredentialStatePill(title: "Memory", configured: true)
+                }
                 Spacer()
                 Label(model.connectionState.rawValue.capitalized, systemImage: statusIcon)
                     .font(.caption.weight(.medium))
@@ -137,7 +139,7 @@ struct HerConfigurationFields: View {
                 TextField("AgentLLM model", text: $draft.agentLLMModel)
             }
 
-            fieldSection("AgentMem", systemImage: "brain.head.profile") {
+            fieldSection("Optional Memory", systemImage: "brain.head.profile") {
                 TextField("AgentMem base URL", text: $draft.agentMemBaseURL)
                 SecureField("AgentMem API key", text: $draft.agentMemAPIKey)
             }

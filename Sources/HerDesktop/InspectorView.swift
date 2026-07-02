@@ -589,7 +589,9 @@ private struct ServiceConfigurationCard: View {
                 }
                 HStack(spacing: 8) {
                     CredentialStatePill(title: "LLM Key", configured: model.config.hasLLMKey)
-                    CredentialStatePill(title: "Mem Key", configured: model.config.hasMemKey)
+                    if model.config.hasMemKey {
+                        CredentialStatePill(title: "Memory", configured: true)
+                    }
                     Spacer(minLength: 0)
                 }
 
@@ -642,7 +644,7 @@ private struct ServiceConfigurationCard: View {
     }
 
     private var configState: String {
-        if !model.config.hasLLMKey || !model.config.hasMemKey {
+        if !model.config.hasLLMKey {
             return "Incomplete"
         }
         return "Local"

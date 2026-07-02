@@ -87,6 +87,19 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(WorkspaceSection.allCases.map(\.title), ["Today", "Memory", "Projects", "Tools", "Agents"])
     }
 
+    func testMissingAgentLLMKeyUsesConversationSetupPrompt() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-missing-llm-key-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(config: .empty, cwd: root.path)
+
+        XCTAssertTrue(model.messages.first?.content.contains("配置 AgentLLM API key") == true)
+
+        await model.send("你好")
+
+        XCTAssertEqual(model.connectionState, .offline)
+        XCTAssertTrue(model.messages.last?.content.contains("只需要先配置 AgentLLM API key") == true)
+    }
+
     func testProductReadinessComposeActionOpensToolsAndComposer() {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-readiness-compose-\(UUID().uuidString)", isDirectory: true)
