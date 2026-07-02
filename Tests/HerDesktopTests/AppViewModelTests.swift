@@ -100,6 +100,42 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.messages.last?.content.contains("只需要先配置 AgentLLM API key") == true)
     }
 
+    func testAgentLLMAuthFailureUsesConversationalRecoveryPrompt() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-llm-auth-failure-\(UUID().uuidString)", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.agentLLMAPIKey = "llm-test"
+        let fake = FakeLLM(responses: [])
+        fake.onChat = {
+            throw ServiceError.httpStatus(401, #"{"error":"invalid token"}"#)
+        }
+        let model = AppViewModel(config: config, cwd: root.path, agentLLM: fake)
+
+        await model.send("你好")
+
+        XCTAssertEqual(model.connectionState, ConnectionState.error)
+        XCTAssertTrue(model.messages.last?.content.contains("重新粘贴 AgentLLM API key") == true)
+        XCTAssertTrue(model.messages.last?.content.contains("AgentMem、插件和其他扩展都可以之后再接") == true)
+    }
+
+    func testAgentLLMTimeoutUsesConversationalRecoveryPrompt() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-llm-timeout-\(UUID().uuidString)", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.agentLLMAPIKey = "llm-test"
+        let fake = FakeLLM(responses: [])
+        fake.onChat = {
+            throw URLError(.timedOut)
+        }
+        let model = AppViewModel(config: config, cwd: root.path, agentLLM: fake)
+
+        await model.send("你好")
+
+        XCTAssertEqual(model.connectionState, ConnectionState.error)
+        XCTAssertTrue(model.messages.last?.content.contains("请求超时") == true)
+        XCTAssertTrue(model.messages.last?.content.contains("重新发送这句话") == true)
+    }
+
     func testProductReadinessComposeActionOpensToolsAndComposer() {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-readiness-compose-\(UUID().uuidString)", isDirectory: true)

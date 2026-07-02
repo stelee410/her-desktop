@@ -61,6 +61,9 @@ without a Memory-Key, chat still works and memory signals degrade to empty local
 context. After configuring runtime secrets through `Config/her-desktop.local.json`,
 the Settings window, or environment variables, use the smoke helper to verify the
 same online services the app uses:
+If AgentLLM is missing, unavailable, unauthorized, or slow, the chat surface
+responds with a conversational recovery step that tells the user what to check
+next; AgentMem and plugins remain optional enhancements during recovery.
 
 ```bash
 scripts/smoke-services.sh
