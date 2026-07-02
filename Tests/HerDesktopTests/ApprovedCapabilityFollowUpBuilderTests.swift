@@ -32,13 +32,19 @@ final class ApprovedCapabilityFollowUpBuilderTests: XCTestCase {
             systemPrompt: "system",
             transcript: transcript,
             approval: approval,
-            result: result
+            result: result,
+            availableToolSummaries: [
+                "native_readTextFile -> native.readTextFile",
+                "workspace_inspect -> workspace.inspect"
+            ]
         )
 
         XCTAssertEqual(messages.first?.role, "system")
         XCTAssertEqual(messages.last?.role, "user")
         XCTAssertTrue(messages.last?.content?.contains("native.readTextFile") == true)
         XCTAssertTrue(messages.last?.content?.contains("Project notes from the approved file.") == true)
+        XCTAssertTrue(messages.last?.content?.contains("Current available tools after approval:") == true)
+        XCTAssertTrue(messages.last?.content?.contains("workspace_inspect -> workspace.inspect") == true)
         XCTAssertTrue(messages.last?.content?.contains("Continue the user's workflow") == true)
         XCTAssertFalse(messages.dropLast().contains { $0.content?.contains("Approval Required") == true })
         XCTAssertFalse(messages.dropLast().contains { $0.content == "hidden" })

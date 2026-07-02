@@ -1465,6 +1465,10 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(model.selectedSection, .tools)
         XCTAssertEqual(model.highlightedPluginID, "local.instant-helper")
         XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Installed") })
+        XCTAssertTrue(toolNames(in: fakeLLM.toolRequests.last ?? []).contains("local_instant-helper_run"))
+        let followUpPrompt = try XCTUnwrap(fakeLLM.requests.last?.last?.content)
+        XCTAssertTrue(followUpPrompt.contains("Current available tools after approval:"))
+        XCTAssertTrue(followUpPrompt.contains("local_instant-helper_run -> local.instant-helper.run"))
         let userPrompt = try XCTUnwrap(fakeLLM.requests.first?.first { $0.role == "user" }?.content)
         XCTAssertTrue(userPrompt.contains("User wants install after generation: true"))
     }

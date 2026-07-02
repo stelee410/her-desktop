@@ -3515,7 +3515,8 @@ final class AppViewModel: ObservableObject {
                 systemPrompt: prompt,
                 transcript: messages,
                 approval: approval,
-                result: result
+                result: result,
+                availableToolSummaries: toolCatalogSummaries(from: catalog)
             )
             let content = try await runAgentToolLoop(llmMessages: &llmMessages, catalog: catalog)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3532,6 +3533,12 @@ final class AppViewModel: ObservableObject {
             ))
             saveSessionSnapshot()
         }
+    }
+
+    private func toolCatalogSummaries(from catalog: CapabilityToolCatalog) -> [String] {
+        catalog.functionToCapability
+            .map { functionName, capabilityID in "\(functionName) -> \(capabilityID)" }
+            .sorted()
     }
 
     private func saveSessionSnapshot() {
