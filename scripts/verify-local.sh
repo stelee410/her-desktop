@@ -26,4 +26,9 @@ swift test "${SWIFT_TEST_FLAGS_ARRAY[@]}"
 echo "==> Building app bundle"
 SWIFT_BUILD_FLAGS="$BUILD_FLAGS" scripts/build-app.sh
 
+if [[ "${HER_VERIFY_APP_LAUNCH:-0}" == "1" ]]; then
+  echo "==> Running packaged app launch smoke"
+  scripts/smoke-app-launch.sh
+fi
+
 echo "==> Local verification passed"

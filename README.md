@@ -60,6 +60,9 @@ AgentLLM/AgentMem-looking secrets, runs optional `swift-format` lint when that
 tool is installed, runs `swift test --jobs 1`, and builds/signs the local app
 bundle. GitHub Actions runs the same script on a clean checkout as a public repo
 guardrail, not as a replacement for local verification.
+For release-candidate checks on a Mac desktop session, add
+`HER_VERIFY_APP_LAUNCH=1` to also run the packaged app launch smoke after the
+bundle is built.
 
 ## Live Service Smoke Test
 
