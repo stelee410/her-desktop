@@ -446,7 +446,7 @@ final class AppViewModelTests: XCTestCase {
         let fakeLLM = FakeLLM(responses: [
             .assistantText("我会按我们现在的节奏来。")
         ])
-        let model = AppViewModel(cwd: root.path, agentLLM: fakeLLM)
+        let model = AppViewModel(config: .empty, cwd: root.path, agentLLM: fakeLLM)
         model.agentProfile = AgentProfile(
             displayName: "Her",
             userDisplayName: "Steven",
