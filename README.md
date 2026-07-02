@@ -112,6 +112,7 @@ open .build/app/HerDesktop.app
 The bundle script validates that every built-in plugin manifest in `Sources/HerDesktop/Resources/BuiltinPlugins/` is present in the generated `.app`, signs the app with an ad-hoc identity by default, verifies the sealed bundle, and writes a local archive to `.build/dist/HerDesktop.zip`.
 Set `HER_CODESIGN_IDENTITY="Developer ID Application: ..."` to use a real signing identity, or `HER_SKIP_CODESIGN=1` for unsigned debugging builds. Public distribution still needs Developer ID signing plus Apple notarization.
 The app icon source lives at `Assets/AppIcon-source.png`; the bundle consumes `Assets/AppIcon.icns`.
+After building, `scripts/smoke-app-launch.sh` can start the packaged app with a temporary workspace/config, verify bundled prompt/plugin resources are present, confirm the process stays alive for a short launch window, and guard against the old `/.her` runtime-path failure.
 
 For public distribution, use the notarization helper after configuring Apple credentials:
 
