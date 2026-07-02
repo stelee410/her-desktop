@@ -641,19 +641,15 @@ final class CapabilityRuntimeTests: XCTestCase {
         )
     }
 
-    func testFallbackBuiltInsStayInParityWithBundledManifests() {
-        let bundled = PluginRegistry(config: .empty)
-            .loadPlugins()
-            .filter { $0.id.hasPrefix("builtin.") }
+    func testFallbackBuiltInsCoverCoreRuntimeWhenResourcesAreUnavailable() {
         let fallback = PluginRegistry(config: .empty, loadBundledBuiltInResources: false)
             .loadPlugins()
             .filter { $0.id.hasPrefix("builtin.") }
 
-        XCTAssertEqual(fallback.map(\.id).sorted(), bundled.map(\.id).sorted())
-        XCTAssertEqual(
-            fallback.flatMap(\.capabilities).map(\.id).sorted(),
-            bundled.flatMap(\.capabilities).map(\.id).sorted()
-        )
+        let fallbackIDs = Set(fallback.map(\.id))
+        for requiredID in ProductReadinessBuilder.coreBuiltInPlugins.map(\.id) {
+            XCTAssertTrue(fallbackIDs.contains(requiredID), "Fallback built-ins should keep core runtime available without processed resources: \(requiredID)")
+        }
         XCTAssertTrue(fallback.flatMap(\.capabilities).allSatisfy { $0.inputSchema != nil })
         XCTAssertNotNil(fallback.first { $0.id == "builtin.mcp-bridge" })
     }

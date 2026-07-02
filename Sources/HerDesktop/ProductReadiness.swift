@@ -181,7 +181,7 @@ enum ProductReadinessBuilder {
         )
     }
 
-    private static let coreBuiltInPlugins: [(id: String, name: String)] = [
+    static let coreBuiltInPlugins: [(id: String, name: String)] = [
         ("builtin.workspace", "Workspace"),
         ("builtin.agentmem", "AgentMem"),
         ("builtin.vibe-plugin-creator", "Vibe Plugin Creator"),
