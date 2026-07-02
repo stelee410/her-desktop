@@ -2058,7 +2058,6 @@ final class AppViewModel: ObservableObject {
                 promptBuilder: promptBuilder
             )
             let package = generation.package
-            let updatingExisting = plugins.contains { $0.id == package.manifest.id }
             if generation.repaired {
                 auditPluginEvent(
                     type: "plugin.ai_generation_repaired",
@@ -2067,39 +2066,19 @@ final class AppViewModel: ObservableObject {
                     metadata: ["source": "agentllm-vibe-composer"]
                 )
             }
+            let draft = stageGeneratedPluginPackage(package, source: "agentllm-vibe-composer")
+            var reviewContent = pluginDraftReviewContent(
+                title: installImmediately ? "AI Plugin Install Ready" : "AI Plugin Draft Created",
+                draft: draft,
+                summary: generation.repaired
+                    ? "Created \(package.manifest.name) (\(package.manifest.id)) for review after one repair pass."
+                    : "Created \(package.manifest.name) (\(package.manifest.id)) for review."
+            )
             if installImmediately {
-                try pluginRegistry.install(package: package, replacingExisting: updatingExisting)
-                messages.append(ChatMessage(
-                    role: .tool,
-                    content: pluginInstalledContent(
-                        package: package,
-                        source: "an AgentLLM-generated package",
-                        title: updatingExisting ? "AI Plugin Updated" : "AI Plugin Installed",
-                        verb: updatingExisting ? "Updated" : "Installed"
-                    )
-                ))
-                auditPluginEvent(
-                    type: updatingExisting ? "plugin.updated" : "plugin.installed",
-                    package: package,
-                    summary: updatingExisting ? "Updated AgentLLM-generated plugin package." : "Installed AgentLLM-generated plugin package.",
-                    metadata: ["source": "agentllm-vibe-composer"]
-                )
-                await reloadPlugins()
-                focusInstalledPlugin(package.manifest.id)
-                prepareInstalledCapabilityRun(for: package.manifest)
-            } else {
-                let draft = stageGeneratedPluginPackage(package, source: "agentllm-vibe-composer")
-                messages.append(ChatMessage(
-                    role: .tool,
-                    content: pluginDraftReviewContent(
-                        title: "AI Plugin Draft Created",
-                        draft: draft,
-                        summary: generation.repaired
-                            ? "Created \(package.manifest.name) (\(package.manifest.id)) for review after one repair pass."
-                            : "Created \(package.manifest.name) (\(package.manifest.id)) for review."
-                    )
-                ))
+                let approval = enqueueInstallDraftApproval(for: draft)
+                reviewContent += installDraftApprovalQueuedContent(approval: approval, draft: draft)
             }
+            messages.append(ChatMessage(role: .tool, content: reviewContent))
             connectionState = .ready
             saveSessionSnapshot()
         } catch {
@@ -3278,16 +3257,23 @@ final class AppViewModel: ObservableObject {
         if installImmediately {
             let approval = enqueueInstallDraftApproval(for: draft)
             queuedInstallApproval = true
-            content += """
-
-
-            Install requested:
-            - Queued plugin.installDraft approval_id: \(approval.id.uuidString)
-            - Approve it to install \(draft.manifest.name) and refresh the tool catalog for the next model step.
-            """
+            content += installDraftApprovalQueuedContent(approval: approval, draft: draft)
         }
         messages.append(ChatMessage(role: .tool, content: content))
         return PluginDraftCapture(content: content, queuedInstallApproval: queuedInstallApproval)
+    }
+
+    private func installDraftApprovalQueuedContent(
+        approval: PendingApproval,
+        draft: GeneratedPluginDraft
+    ) -> String {
+        """
+
+
+        Install requested:
+        - Queued plugin.installDraft approval_id: \(approval.id.uuidString)
+        - Approve it to install \(draft.manifest.name) and refresh the tool catalog for the next model step.
+        """
     }
 
     private func enqueueInstallDraftApproval(for draft: GeneratedPluginDraft) -> PendingApproval {

@@ -2437,7 +2437,7 @@ private struct VibePluginComposerSheet: View {
                         isPresented = false
                     }
                 } label: {
-                    Label(isUpdatingPlugin ? "AI Update Install" : "AI Install", systemImage: "wand.and.sparkles")
+                    Label(isUpdatingPlugin ? "AI Review Update" : "AI Review & Install", systemImage: "wand.and.sparkles")
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(AppTheme.coral)

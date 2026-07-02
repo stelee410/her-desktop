@@ -1423,7 +1423,7 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(draftMessage.contains("plugin.installDraft arguments"))
     }
 
-    func testAIVibePluginGenerationCanInstallImmediatelyAndFocusTools() async throws {
+    func testAIVibePluginGenerationInstallImmediatelyQueuesApprovalBeforeInstall() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-ai-vibe-plugin-install-\(UUID().uuidString)", isDirectory: true)
         let cwd = root.appendingPathComponent("workspace", isDirectory: true)
@@ -1432,7 +1432,10 @@ final class AppViewModelTests: XCTestCase {
         config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
         let package = samplePackage(id: "local.instant-helper", name: "Instant Helper")
         let packageJSON = String(data: try JSONEncoder.pretty.encode(package), encoding: .utf8)!
-        let fakeLLM = FakeLLM(responses: [.assistantText(packageJSON)])
+        let fakeLLM = FakeLLM(responses: [
+            .assistantText(packageJSON),
+            .assistantText("Installed and ready.")
+        ])
         let model = AppViewModel(config: config, cwd: cwd.path, agentLLM: fakeLLM)
 
         await model.generateAIDraftPlugin(
@@ -1444,11 +1447,24 @@ final class AppViewModelTests: XCTestCase {
             installImmediately: true
         )
 
+        let draft = try XCTUnwrap(model.generatedPluginDrafts.first)
+        XCTAssertEqual(draft.manifest.id, "local.instant-helper")
+        XCTAssertFalse(model.plugins.contains { $0.id == "local.instant-helper" })
+        let approval = try XCTUnwrap(model.pendingApprovals.first)
+        XCTAssertEqual(approval.invocation.capabilityID, "plugin.installDraft")
+        XCTAssertEqual(approval.invocation.arguments["plugin_id"] as? String, "local.instant-helper")
+        XCTAssertEqual(approval.invocation.arguments["draft_id"] as? String, draft.id.uuidString)
+        XCTAssertEqual(approval.invocation.arguments["confirmed"] as? Bool, true)
+        XCTAssertTrue(model.messages.contains { $0.content.contains("AI Plugin Install Ready") })
+        XCTAssertTrue(model.messages.contains { $0.content.contains("Queued plugin.installDraft approval_id") })
+
+        await model.approve(approval)
+
         XCTAssertTrue(model.generatedPluginDrafts.isEmpty)
         XCTAssertTrue(model.plugins.contains { $0.id == "local.instant-helper" })
         XCTAssertEqual(model.selectedSection, .tools)
         XCTAssertEqual(model.highlightedPluginID, "local.instant-helper")
-        XCTAssertTrue(model.messages.contains { $0.content.contains("AI Plugin Installed") })
+        XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Installed") })
         let userPrompt = try XCTUnwrap(fakeLLM.requests.first?.first { $0.role == "user" }?.content)
         XCTAssertTrue(userPrompt.contains("User wants install after generation: true"))
     }
