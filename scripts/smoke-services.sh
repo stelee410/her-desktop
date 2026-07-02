@@ -43,7 +43,6 @@ HER_AGENT_LLM_API_KEY="${HER_AGENT_LLM_API_KEY:-$(config_value agentLLMAPIKey)}"
 HER_AGENT_MEM_API_KEY="${HER_AGENT_MEM_API_KEY:-$(config_value agentMemAPIKey)}"
 
 : "${HER_AGENT_LLM_API_KEY:?Set HER_AGENT_LLM_API_KEY or configure agentLLMAPIKey}"
-: "${HER_AGENT_MEM_API_KEY:?Set HER_AGENT_MEM_API_KEY or configure agentMemAPIKey}"
 
 LLM_BASE="${HER_AGENT_LLM_BASE_URL:-$(config_value agentLLMBaseURL)}"
 MEM_BASE="${HER_AGENT_MEM_BASE_URL:-$(config_value agentMemBaseURL)}"
@@ -121,6 +120,16 @@ curl_retry --http1.1 --connect-timeout 10 --max-time 45 --retry 3 --retry-all-er
   -H "Content-Type: application/json" \
   -d "$CHAT_BODY" \
   | python3 -c 'import json,sys; text=json.load(sys.stdin)["choices"][0]["message"].get("content","").strip(); assert text, "empty model response"; print(text[:240])'
+
+if [[ -z "$HER_AGENT_MEM_API_KEY" ]]; then
+  echo "AgentMem optional"
+  if [[ "${HER_SMOKE_WRITE_MEMORY:-0}" == "1" ]]; then
+    echo "HER_SMOKE_WRITE_MEMORY=1 requires HER_AGENT_MEM_API_KEY or agentMemAPIKey." >&2
+    exit 1
+  fi
+  echo "Skipped AgentMem checks because no Memory-Key is configured; AgentLLM-only MVP smoke passed."
+  exit 0
+fi
 
 echo "AgentMem relationship"
 curl_retry --http1.1 --connect-timeout 10 --max-time 30 --retry 3 --retry-all-errors --retry-delay 1 -fsS "$MEM_BASE/v1/memory/relationship" \

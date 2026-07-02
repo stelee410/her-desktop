@@ -71,10 +71,11 @@ scripts/smoke-services.sh
 
 The helper uses the same config precedence as the app: `HER_CONFIG_PATH`, then
 the project-local config, then the Application Support config. Environment
-variables still win. It checks AgentLLM health, runs one chat completion, reads
-AgentMem relationship and emotion signals, and performs an AgentMem V7
-Memory-Key query. To also verify live AgentMem writeback, set `HER_SMOKE_WRITE_MEMORY=1`;
-the script sends a small smoke-test turn with a deterministic idempotency key.
+variables still win. It always checks AgentLLM health and one chat completion.
+When a Memory-Key is configured, it also reads AgentMem relationship and emotion
+signals and performs an AgentMem V7 Memory-Key query. To also verify live
+AgentMem writeback, set `HER_SMOKE_WRITE_MEMORY=1`; the script sends a small
+smoke-test turn with a deterministic idempotency key.
 
 AgentMem V7 compatibility note: data-plane calls are routed by
 `X-Memory-API-Key`, so Her Desktop does not send `agent_code` or `user_id` to
