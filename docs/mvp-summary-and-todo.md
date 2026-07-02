@@ -50,7 +50,7 @@ The MVP loop is considered closed because the app can now:
 
 Latest verified baseline:
 
-- Commit: `ea295be Add release candidate verification option`
+- Commit: `2c7db6d Document MVP status and TODOs`
 - Branch: `main`
 - GitHub Actions: latest five `main` CI runs succeeded as of 2026-07-02.
 - Local verification passed with `scripts/verify-local.sh`.
