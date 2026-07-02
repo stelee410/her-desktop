@@ -314,6 +314,43 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(model.messages.last?.content, "草稿已经进入 review queue，我可以等你确认后安装。")
     }
 
+    func testPluginDraftToolCanQueueInstallApprovalWhenRequested() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-plugin-draft-install-request-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+        let fakeLLM = FakeLLM(responses: [
+            .toolCall(
+                id: "call_plugin_draft_install",
+                name: "plugin_draft",
+                arguments: #"{"name":"Dialog Install","description":"Created and installed from model tool use.","capability_kind":"skill","requires_approval":true,"install_immediately":true}"#
+            )
+        ])
+        let model = AppViewModel(config: config, cwd: cwd.path, agentLLM: fakeLLM)
+
+        await model.send("帮我生成并安装一个本地扩展")
+
+        let draft = try XCTUnwrap(model.generatedPluginDrafts.first)
+        XCTAssertEqual(draft.manifest.id, "local.dialog-install")
+        let approval = try XCTUnwrap(model.pendingApprovals.first)
+        XCTAssertEqual(approval.invocation.capabilityID, "plugin.installDraft")
+        XCTAssertEqual(approval.invocation.arguments["plugin_id"] as? String, "local.dialog-install")
+        XCTAssertEqual(approval.invocation.arguments["draft_id"] as? String, draft.id.uuidString)
+        XCTAssertEqual(approval.invocation.arguments["confirmed"] as? Bool, true)
+        XCTAssertTrue(model.messages.contains { $0.content.contains("Queued plugin.installDraft approval_id") })
+        XCTAssertEqual(model.messages.last?.role, .assistant)
+        XCTAssertTrue(model.messages.last?.content.contains("审批队列") == true)
+
+        await model.approve(approval)
+
+        XCTAssertTrue(model.generatedPluginDrafts.isEmpty)
+        XCTAssertTrue(model.pendingApprovals.isEmpty)
+        XCTAssertTrue(model.plugins.contains { $0.id == "local.dialog-install" })
+        XCTAssertEqual(model.highlightedPluginID, "local.dialog-install")
+        XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Installed") })
+    }
+
     func testToolLoopRefreshesCatalogAfterPluginDirectoryChanges() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-refresh-catalog-\(UUID().uuidString)", isDirectory: true)
@@ -1377,6 +1414,8 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(model.selectedSection, .tools)
         XCTAssertEqual(model.highlightedPluginID, "local.instant-helper")
         XCTAssertTrue(model.messages.contains { $0.content.contains("AI Plugin Installed") })
+        let userPrompt = try XCTUnwrap(fakeLLM.requests.first?.first { $0.role == "user" }?.content)
+        XCTAssertTrue(userPrompt.contains("User wants install after generation: true"))
     }
 
     func testAIVibePluginGenerationSendsUpdateContextToAgentLLM() async throws {

@@ -65,6 +65,7 @@ struct VibePluginPackageRequest: Equatable {
     var updatePluginID: String = ""
     var existingPackageContext: String = ""
     var vibeBrief: String = ""
+    var installImmediately: Bool = false
 }
 
 struct VibePluginPackagePromptBuilder {
@@ -179,6 +180,7 @@ struct VibePluginPackagePromptBuilder {
         \(clipped(request.existingPackageContext, limit: 12_000))
         Capability kind: \(request.kind)
         Requires approval: \(request.requiresApproval)
+        User wants install after generation: \(request.installImmediately)
         Web service URL, if relevant: \(request.webServiceURL)
         Web service method, if relevant: \(request.webServiceMethod)
         MCP local endpoint URL, if relevant: \(request.mcpEndpointURL)

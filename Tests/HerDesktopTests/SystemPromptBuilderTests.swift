@@ -125,6 +125,7 @@ final class SystemPromptBuilderTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Use `plugin.inspect`"))
         XCTAssertTrue(prompt.contains("Use `plugin.readFile`"))
         XCTAssertTrue(prompt.contains("call `plugin.draft` with update_plugin_id"))
+        XCTAssertTrue(prompt.contains("install_immediately=true"))
         XCTAssertTrue(prompt.contains("Use `plugin.stagePackage`"))
         XCTAssertTrue(prompt.contains("Use `plugin.installDraft`"))
         XCTAssertTrue(prompt.contains("exact plugin_id and draft_id"))

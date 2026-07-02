@@ -789,6 +789,7 @@ final class PluginRegistry {
                 "mcp_input_schema_json": field("string", "Optional raw MCP input schema JSON from mcp.discover; supported fields become native plugin form inputs."),
                 "command": field("string", "Optional command executable path for command capabilities."),
                 "command_arguments": field("string", "Optional fixed argument templates for command capabilities, one per line."),
+                "install_immediately": field("boolean", "When true, stage the generated draft and queue plugin.installDraft approval immediately instead of waiting for a separate install request."),
                 "update_plugin_id": field("string", "Optional installed local plugin id to update, such as local.example. When set, draft a complete replacement package using this exact id."),
                 "existing_package_context": field("string", "Optional context copied from plugin.inspect or plugin.readFile to preserve useful behavior while updating.")
             ], required: ["name", "description"])

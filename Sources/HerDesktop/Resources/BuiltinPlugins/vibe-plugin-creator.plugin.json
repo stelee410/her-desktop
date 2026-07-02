@@ -36,6 +36,10 @@
             "description" : "Optional context copied from plugin.inspect or plugin.readFile to preserve useful behavior while updating.",
             "type" : "string"
           },
+          "install_immediately" : {
+            "description" : "When true, stage the generated draft and queue plugin.installDraft approval immediately instead of waiting for a separate install request.",
+            "type" : "boolean"
+          },
           "method" : {
             "description" : "Optional HTTP method for webservice capabilities.",
             "enum" : [

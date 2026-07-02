@@ -44,7 +44,8 @@ final class VibePluginPackageGeneratorTests: XCTestCase {
                 mcpInputSchemaJSON: #"{"type":"object","properties":{"prompt":{"type":"string"}},"required":["prompt"]}"#,
                 commandPath: "",
                 commandArguments: "",
-                vibeBrief: "Build this as a reusable research assistant extension from the chat dialog."
+                vibeBrief: "Build this as a reusable research assistant extension from the chat dialog.",
+                installImmediately: true
             ),
             existingPluginIDs: ["builtin.workspace", "local.news"]
         )
@@ -62,6 +63,7 @@ final class VibePluginPackageGeneratorTests: XCTestCase {
         XCTAssertTrue(messages.last?.content?.contains("MCP discovered input schema JSON") == true)
         XCTAssertTrue(messages.last?.content?.contains("Research Scout") == true)
         XCTAssertTrue(messages.last?.content?.contains("reusable research assistant extension") == true)
+        XCTAssertTrue(messages.last?.content?.contains("User wants install after generation: true") == true)
     }
 
     func testPromptIncludesUpdateTargetAndExistingPackageContext() {

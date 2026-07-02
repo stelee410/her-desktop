@@ -673,20 +673,27 @@ final class AppViewModel: ObservableObject {
         finishCapabilityActivity(activityID, result: result)
         refreshWebServiceArtifacts()
         captureExternalInboxEventIfNeeded(invocation: invocation, result: result)
-        let capturedPluginDraftContent = captureGeneratedPluginDraft(from: result, source: toolCall.function.name)
+        let capturedPluginDraft = captureGeneratedPluginDraft(
+            from: result,
+            source: toolCall.function.name,
+            installImmediately: boolArgument(invocation.arguments, keys: ["install_immediately", "installImmediately"], fallback: false)
+        )
         captureInstalledPluginIfNeeded(invocation: invocation, result: result, approved: false)
         captureRemovedPluginIfNeeded(invocation: invocation, result: result, approved: false)
-        if capturedPluginDraftContent == nil {
+        if capturedPluginDraft == nil {
             messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
         }
         auditCapabilityExecution(invocation: invocation, result: result, approved: false)
         Task {
-            let memoryResult = capturedPluginDraftContent.map {
-                CapabilityResult(title: "Plugin Package Draft", content: $0, requiresUserApproval: false)
+            let memoryResult = capturedPluginDraft.map {
+                CapabilityResult(title: "Plugin Package Draft", content: $0.content, requiresUserApproval: $0.queuedInstallApproval)
             } ?? result
             await persistCapabilityMemory(invocation: invocation, result: memoryResult, approved: false)
         }
-        return ToolCallHandlingResult(content: capturedPluginDraftContent ?? result.content, needsApproval: false)
+        return ToolCallHandlingResult(
+            content: capturedPluginDraft?.content ?? result.content,
+            needsApproval: capturedPluginDraft?.queuedInstallApproval ?? false
+        )
     }
 
     func setSpeakAssistantReplies(_ enabled: Bool) {
@@ -1224,16 +1231,20 @@ final class AppViewModel: ObservableObject {
         finishCapabilityActivity(activityID, result: result)
         refreshWebServiceArtifacts()
         captureExternalInboxEventIfNeeded(invocation: invocation, result: result)
-        let capturedPluginDraftContent = captureGeneratedPluginDraft(from: result, source: invocation.functionName)
+        let capturedPluginDraft = captureGeneratedPluginDraft(
+            from: result,
+            source: invocation.functionName,
+            installImmediately: boolArgument(arguments, keys: ["install_immediately", "installImmediately"], fallback: false)
+        )
         captureInstalledPluginIfNeeded(invocation: invocation, result: result, approved: false)
         captureRemovedPluginIfNeeded(invocation: invocation, result: result, approved: false)
-        if capturedPluginDraftContent == nil {
+        if capturedPluginDraft == nil {
             messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
         }
         auditCapabilityExecution(invocation: invocation, result: result, approved: false)
         Task {
-            let memoryResult = capturedPluginDraftContent.map {
-                CapabilityResult(title: "Plugin Package Draft", content: $0, requiresUserApproval: false)
+            let memoryResult = capturedPluginDraft.map {
+                CapabilityResult(title: "Plugin Package Draft", content: $0.content, requiresUserApproval: $0.queuedInstallApproval)
             } ?? result
             await persistCapabilityMemory(invocation: invocation, result: memoryResult, approved: false)
         }
@@ -1970,7 +1981,8 @@ final class AppViewModel: ObservableObject {
             commandArguments: commandArguments,
             updatePluginID: updatePluginID,
             existingPackageContext: existingPackageContext,
-            vibeBrief: vibeBrief
+            vibeBrief: vibeBrief,
+            installImmediately: installImmediately
         )
         let promptBuilder = VibePluginPackagePromptBuilder()
         let existingPluginIDs = plugins.map(\.id)
@@ -3055,6 +3067,28 @@ final class AppViewModel: ObservableObject {
         return fallback
     }
 
+    private func boolArgument(_ arguments: [String: Any], keys: [String], fallback: Bool) -> Bool {
+        for key in keys {
+            guard let value = arguments[key] else { continue }
+            if let boolValue = value as? Bool {
+                return boolValue
+            }
+            if let number = value as? NSNumber {
+                return number.boolValue
+            }
+            let text = String(describing: value)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            if ["true", "yes", "1", "y"].contains(text) {
+                return true
+            }
+            if ["false", "no", "0", "n"].contains(text) {
+                return false
+            }
+        }
+        return fallback
+    }
+
     private func integerArgument(_ arguments: [String: Any], keys: [String], fallback: Int) -> Int {
         for key in keys {
             guard let value = arguments[key] else { continue }
@@ -3166,7 +3200,11 @@ final class AppViewModel: ObservableObject {
     }
 
     @discardableResult
-    private func captureGeneratedPluginDraft(from result: CapabilityResult, source: String) -> String? {
+    private func captureGeneratedPluginDraft(
+        from result: CapabilityResult,
+        source: String,
+        installImmediately: Bool = false
+    ) -> PluginDraftCapture? {
         guard result.title == "Plugin Package Draft",
               let data = result.content.data(using: .utf8),
               let package = try? JSONDecoder().decode(PluginPackage.self, from: data) else {
@@ -3174,13 +3212,39 @@ final class AppViewModel: ObservableObject {
         }
         let documented = PluginPackageReviewDocumenter().documented(package)
         let draft = stageGeneratedPluginPackage(documented, source: source)
-        let content = pluginDraftReviewContent(
+        var content = pluginDraftReviewContent(
             title: "Plugin Package Draft",
             draft: draft,
             summary: "Staged \(documented.manifest.name) (\(documented.manifest.id)) for review."
         )
+        var queuedInstallApproval = false
+        if installImmediately {
+            let approval = enqueueInstallDraftApproval(for: draft)
+            queuedInstallApproval = true
+            content += """
+
+
+            Install requested:
+            - Queued plugin.installDraft approval_id: \(approval.id.uuidString)
+            - Approve it to install \(draft.manifest.name) and refresh the tool catalog for the next model step.
+            """
+        }
         messages.append(ChatMessage(role: .tool, content: content))
-        return content
+        return PluginDraftCapture(content: content, queuedInstallApproval: queuedInstallApproval)
+    }
+
+    private func enqueueInstallDraftApproval(for draft: GeneratedPluginDraft) -> PendingApproval {
+        let invocation = CapabilityInvocation(
+            toolCallID: "install-draft-\(draft.id.uuidString)",
+            functionName: CapabilityToolCatalog.functionName(for: "plugin.installDraft"),
+            capabilityID: "plugin.installDraft",
+            arguments: [
+                "plugin_id": draft.manifest.id,
+                "draft_id": draft.id.uuidString,
+                "confirmed": true
+            ]
+        )
+        return enqueueApproval(for: invocation)
     }
 
     private func captureInstalledPluginIfNeeded(
@@ -4031,6 +4095,11 @@ final class AppViewModel: ObservableObject {
 private struct ToolCallHandlingResult {
     var content: String
     var needsApproval: Bool
+}
+
+private struct PluginDraftCapture {
+    var content: String
+    var queuedInstallApproval: Bool
 }
 
 private struct AIGeneratedPluginPackage {

@@ -108,6 +108,7 @@ final class CapabilityRuntimeTests: XCTestCase {
         let properties = parameters?["properties"] as? [String: Any]
 
         XCTAssertNotNil(properties?["tool_name"])
+        XCTAssertNotNil(properties?["install_immediately"])
     }
 
     func testBuiltInToolCatalogUsesManifestOwnedSchemas() throws {
@@ -122,6 +123,7 @@ final class CapabilityRuntimeTests: XCTestCase {
         XCTAssertEqual((draftProperties["update_plugin_id"] as? [String: Any])?["type"] as? String, "string")
         XCTAssertEqual((draftProperties["existing_package_context"] as? [String: Any])?["type"] as? String, "string")
         XCTAssertEqual((draftProperties["mcp_input_schema_json"] as? [String: Any])?["type"] as? String, "string")
+        XCTAssertEqual((draftProperties["install_immediately"] as? [String: Any])?["type"] as? String, "boolean")
         XCTAssertEqual(draftParameters["required"] as? [String], ["name", "description"])
 
         let write = try XCTUnwrap(toolFunction(named: "workspace_writeTextFile", in: catalog))
