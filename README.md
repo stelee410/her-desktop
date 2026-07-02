@@ -52,8 +52,14 @@ Her Desktop also installs a native menu bar presence while running. The menu bar
 ## Test
 
 ```bash
-swift test
+scripts/verify-local.sh
 ```
+
+The local verifier is the main development gate: it scans tracked files for
+AgentLLM/AgentMem-looking secrets, runs optional `swift-format` lint when that
+tool is installed, runs `swift test --jobs 1`, and builds/signs the local app
+bundle. GitHub Actions runs the same script on a clean checkout as a public repo
+guardrail, not as a replacement for local verification.
 
 ## Live Service Smoke Test
 

@@ -15,11 +15,5 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check tracked files for secrets
-        run: scripts/check-secrets.sh
-
-      - name: Run tests
-        run: swift test --jobs 1
-
-      - name: Build app bundle
-        run: SWIFT_BUILD_FLAGS="--jobs 1" scripts/build-app.sh
+      - name: Verify
+        run: scripts/verify-local.sh
