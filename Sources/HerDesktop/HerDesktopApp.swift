@@ -2,8 +2,12 @@ import SwiftUI
 
 @main
 struct HerDesktopApp: App {
-    @StateObject private var viewModel = AppViewModel()
+    @StateObject private var viewModel: AppViewModel
     @State private var isQuickCapturePresented = false
+
+    init() {
+        _viewModel = StateObject(wrappedValue: AppViewModel())
+    }
 
     var body: some Scene {
         WindowGroup("Her Desktop", id: "main") {
