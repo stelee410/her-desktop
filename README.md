@@ -12,6 +12,7 @@ This repository currently contains the first executable SwiftUI foundation:
 - `SOUL.md` / `INFINITI.md` prompt loading inspired by Infiniti Agent, with bundled defaults for fresh workspaces.
 
 The current product/technical architecture diagram lives in [`docs/her-desktop-architecture.md`](docs/her-desktop-architecture.md).
+The MVP closure summary and remaining TODO list live in [`docs/mvp-summary-and-todo.md`](docs/mvp-summary-and-todo.md).
 
 ## Configure
 
