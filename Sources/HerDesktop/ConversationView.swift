@@ -275,10 +275,14 @@ private struct MessageBubble: View {
                         isThinking: message.content.isEmpty
                     )
                 }
-                Text(message.content)
-                    .font(.system(size: 14))
-                    .foregroundStyle(AppTheme.ink)
-                    .textSelection(.enabled)
+                if message.role == .assistant {
+                    MarkdownMessageView(content: message.content)
+                } else {
+                    Text(message.content)
+                        .font(.system(size: 14))
+                        .foregroundStyle(AppTheme.ink)
+                        .textSelection(.enabled)
+                }
                 if let approvalID = message.approvalID {
                     ApprovalActionRow(approvalID: approvalID)
                 }
