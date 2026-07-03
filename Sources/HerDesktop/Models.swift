@@ -54,6 +54,8 @@ struct ChatMessage: Identifiable, Codable, Equatable {
     var id: UUID = UUID()
     var role: MessageRole
     var content: String
+    var reasoning: String = ""
+    var approvalID: UUID?
     var createdAt: Date = Date()
     var attachments: [MessageAttachment] = []
 
@@ -61,12 +63,16 @@ struct ChatMessage: Identifiable, Codable, Equatable {
         id: UUID = UUID(),
         role: MessageRole,
         content: String,
+        reasoning: String = "",
+        approvalID: UUID? = nil,
         createdAt: Date = Date(),
         attachments: [MessageAttachment] = []
     ) {
         self.id = id
         self.role = role
         self.content = content
+        self.reasoning = reasoning
+        self.approvalID = approvalID
         self.createdAt = createdAt
         self.attachments = attachments
     }
@@ -75,6 +81,8 @@ struct ChatMessage: Identifiable, Codable, Equatable {
         case id
         case role
         case content
+        case reasoning
+        case approvalID
         case createdAt
         case attachments
     }
@@ -84,6 +92,8 @@ struct ChatMessage: Identifiable, Codable, Equatable {
         id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         role = try container.decode(MessageRole.self, forKey: .role)
         content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
+        reasoning = try container.decodeIfPresent(String.self, forKey: .reasoning) ?? ""
+        approvalID = try container.decodeIfPresent(UUID.self, forKey: .approvalID)
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         attachments = try container.decodeIfPresent([MessageAttachment].self, forKey: .attachments) ?? []
     }
@@ -541,9 +551,12 @@ struct WebServiceArtifact: Identifiable, Equatable {
 }
 
 struct HerAppConfig: Codable, Equatable {
+    static let defaultAgentLLMMaxTokens = 8192
+
     var agentLLMBaseURL: URL
     var agentLLMAPIKey: String
     var agentLLMModel: String
+    var agentLLMMaxTokens: Int
     var agentMemBaseURL: URL
     var agentMemAPIKey: String
     var agentCode: String
@@ -559,6 +572,7 @@ struct HerAppConfig: Codable, Equatable {
         agentLLMBaseURL: URL,
         agentLLMAPIKey: String,
         agentLLMModel: String,
+        agentLLMMaxTokens: Int = HerAppConfig.defaultAgentLLMMaxTokens,
         agentMemBaseURL: URL,
         agentMemAPIKey: String,
         agentCode: String,
@@ -570,6 +584,7 @@ struct HerAppConfig: Codable, Equatable {
         self.agentLLMBaseURL = agentLLMBaseURL
         self.agentLLMAPIKey = agentLLMAPIKey
         self.agentLLMModel = agentLLMModel
+        self.agentLLMMaxTokens = agentLLMMaxTokens
         self.agentMemBaseURL = agentMemBaseURL
         self.agentMemAPIKey = agentMemAPIKey
         self.agentCode = agentCode
@@ -583,6 +598,7 @@ struct HerAppConfig: Codable, Equatable {
         case agentLLMBaseURL
         case agentLLMAPIKey
         case agentLLMModel
+        case agentLLMMaxTokens
         case agentMemBaseURL
         case agentMemAPIKey
         case agentCode
@@ -597,6 +613,7 @@ struct HerAppConfig: Codable, Equatable {
         agentLLMBaseURL = try container.decode(URL.self, forKey: .agentLLMBaseURL)
         agentLLMAPIKey = try container.decode(String.self, forKey: .agentLLMAPIKey)
         agentLLMModel = try container.decode(String.self, forKey: .agentLLMModel)
+        agentLLMMaxTokens = try container.decodeIfPresent(Int.self, forKey: .agentLLMMaxTokens) ?? HerAppConfig.defaultAgentLLMMaxTokens
         agentMemBaseURL = try container.decode(URL.self, forKey: .agentMemBaseURL)
         agentMemAPIKey = try container.decode(String.self, forKey: .agentMemAPIKey)
         agentCode = try container.decode(String.self, forKey: .agentCode)
@@ -622,6 +639,7 @@ struct HerAppConfigDraft: Equatable {
     var agentLLMBaseURL: String
     var agentLLMAPIKey: String
     var agentLLMModel: String
+    var agentLLMMaxTokens: String
     var agentMemBaseURL: String
     var agentMemAPIKey: String
     var agentCode: String
@@ -634,6 +652,7 @@ struct HerAppConfigDraft: Equatable {
         self.agentLLMBaseURL = config.agentLLMBaseURL.absoluteString
         self.agentLLMAPIKey = config.agentLLMAPIKey
         self.agentLLMModel = config.agentLLMModel
+        self.agentLLMMaxTokens = String(config.agentLLMMaxTokens)
         self.agentMemBaseURL = config.agentMemBaseURL.absoluteString
         self.agentMemAPIKey = config.agentMemAPIKey
         self.agentCode = config.agentCode
@@ -650,6 +669,7 @@ struct HerAppConfigDraft: Equatable {
             agentLLMBaseURL: llmURL,
             agentLLMAPIKey: agentLLMAPIKey.trimmingCharacters(in: .whitespacesAndNewlines),
             agentLLMModel: agentLLMModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "linkyun-default" : agentLLMModel.trimmingCharacters(in: .whitespacesAndNewlines),
+            agentLLMMaxTokens: Int(agentLLMMaxTokens.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0 > 0 ? $0 : nil } ?? HerAppConfig.defaultAgentLLMMaxTokens,
             agentMemBaseURL: memURL,
             agentMemAPIKey: agentMemAPIKey.trimmingCharacters(in: .whitespacesAndNewlines),
             agentCode: agentCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "her-desktop" : agentCode.trimmingCharacters(in: .whitespacesAndNewlines),

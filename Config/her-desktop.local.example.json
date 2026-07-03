@@ -2,6 +2,7 @@
   "agentLLMBaseURL": "https://agentllm.linkyun.co",
   "agentLLMAPIKey": "sk-REPLACE_ME",
   "agentLLMModel": "linkyun-default",
+  "agentLLMMaxTokens": 8192,
   "agentMemBaseURL": "https://agentmem.oyii.ai",
   "agentMemAPIKey": "mem_REPLACE_ME",
   "agentCode": "her-desktop",

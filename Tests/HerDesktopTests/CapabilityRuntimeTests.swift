@@ -1499,6 +1499,90 @@ final class CapabilityRuntimeTests: XCTestCase {
     }
 
     @MainActor
+    func testWebServiceAdapterSubstitutesURLPlaceholdersWithEncodedArguments() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-plugin-web-url-template-\(UUID().uuidString)", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.path
+        let registry = PluginRegistry(config: config)
+        let manifest = webServiceManifest(
+            id: "local.weather",
+            url: "https://weather.example/{city}?format=j1",
+            method: "GET"
+        )
+        try registry.install(manifest: manifest)
+
+        let session = mockSession { request in
+            XCTAssertEqual(request.httpMethod, "GET")
+            XCTAssertEqual(
+                request.url?.absoluteString,
+                "https://weather.example/%E6%B7%B1%E5%9C%B3?format=j1&units=metric"
+            )
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data(#"{"weather":"sunny"}"#.utf8))
+        }
+        let executor = CapabilityExecutor(registry: registry, urlSession: session)
+
+        let result = await executor.execute(CapabilityInvocation(
+            toolCallID: "call_weather",
+            functionName: "local_weather_run",
+            capabilityID: "local.weather.run",
+            arguments: [
+                "city": "深圳",
+                "units": "metric"
+            ]
+        ))
+
+        XCTAssertEqual(result.title, "Web Service Result")
+        XCTAssertTrue(result.content.contains("status: 200"))
+        XCTAssertFalse(result.content.contains("city="), "Placeholder-consumed argument should not repeat as query")
+    }
+
+    @MainActor
+    func testWebServiceAdapterEncodesPlaceholderValuesAgainstInjection() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-plugin-web-url-injection-\(UUID().uuidString)", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.path
+        let registry = PluginRegistry(config: config)
+        let manifest = webServiceManifest(
+            id: "local.inject",
+            url: "https://service.example/{path}",
+            method: "GET"
+        )
+        try registry.install(manifest: manifest)
+
+        let session = mockSession { request in
+            XCTAssertEqual(
+                request.url?.absoluteString,
+                "https://service.example/..%2F..%2Fadmin%3Fdrop%3D1"
+            )
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data("ok".utf8))
+        }
+        let executor = CapabilityExecutor(registry: registry, urlSession: session)
+
+        let result = await executor.execute(CapabilityInvocation(
+            toolCallID: "call_inject",
+            functionName: "local_inject_run",
+            capabilityID: "local.inject.run",
+            arguments: ["path": "../../admin?drop=1"]
+        ))
+
+        XCTAssertEqual(result.title, "Web Service Result")
+    }
+
+    @MainActor
     func testWebServiceAdapterRendersBodyTemplate() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-plugin-web-template-\(UUID().uuidString)", isDirectory: true)

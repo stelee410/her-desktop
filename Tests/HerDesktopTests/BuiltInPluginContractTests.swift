@@ -121,7 +121,8 @@ final class BuiltInPluginContractTests: XCTestCase {
                 "plugin.listInstalled",
                 "plugin.inspect",
                 "plugin.stagePackage",
-                "product.diagnostics"
+                "product.diagnostics",
+                "shell.inspect"
             ].contains(capability.id)
         }
         return false

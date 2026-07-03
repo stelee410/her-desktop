@@ -19,6 +19,65 @@ struct CapabilityResult: Equatable {
     var requiresUserApproval: Bool
 }
 
+/// Small curated shell command set. Commands run directly (no shell), from
+/// fixed system paths, so pipes, redirection, and `$()` injection are
+/// impossible by construction.
+enum LocalShellCommandSet {
+    /// Read-only inspection commands; run without user approval, path
+    /// arguments confined to the workspace.
+    static let inspect: [String: String] = [
+        "ls": "/bin/ls",
+        "cat": "/bin/cat",
+        "head": "/usr/bin/head",
+        "tail": "/usr/bin/tail",
+        "wc": "/usr/bin/wc",
+        "grep": "/usr/bin/grep",
+        "find": "/usr/bin/find",
+        "stat": "/usr/bin/stat",
+        "file": "/usr/bin/file",
+        "du": "/usr/bin/du",
+        "df": "/bin/df",
+        "pwd": "/bin/pwd",
+        "date": "/bin/date",
+        "which": "/usr/bin/which",
+        "uname": "/usr/bin/uname",
+        "sw_vers": "/usr/bin/sw_vers",
+        "echo": "/bin/echo"
+    ]
+
+    /// Side-effect commands; always behind user approval.
+    static let run: [String: String] = [
+        "curl": "/usr/bin/curl",
+        "cp": "/bin/cp",
+        "mv": "/bin/mv",
+        "mkdir": "/bin/mkdir",
+        "touch": "/usr/bin/touch",
+        "rm": "/bin/rm",
+        "tar": "/usr/bin/tar",
+        "zip": "/usr/bin/zip",
+        "unzip": "/usr/bin/unzip",
+        "ditto": "/usr/bin/ditto",
+        "chmod": "/bin/chmod",
+        "open": "/usr/bin/open",
+        "sips": "/usr/bin/sips",
+        "textutil": "/usr/bin/textutil"
+    ]
+
+    /// Destructive run-tier commands whose path arguments must stay inside
+    /// the workspace even after user approval.
+    static let workspaceConfinedRunCommands: Set<String> = ["rm", "chmod", "mkdir", "touch"]
+
+    /// find flags that execute programs, delete entries, or write files.
+    static let blockedFindFlags: Set<String> = [
+        "-exec", "-execdir", "-ok", "-okdir", "-delete",
+        "-fprint", "-fprint0", "-fprintf", "-fls"
+    ]
+
+    static func allowedSummary(readOnly: Bool) -> String {
+        (readOnly ? inspect : run).keys.sorted().joined(separator: ", ")
+    }
+}
+
 struct PendingApproval: Identifiable, Equatable {
     var id: UUID = UUID()
     var title: String
@@ -236,6 +295,10 @@ final class CapabilityExecutor {
             return await executeNativeSpeak(arguments: invocation.arguments)
         case "native.inspectAttachment":
             return executeNativeInspectAttachment(arguments: invocation.arguments)
+        case "shell.inspect":
+            return await executeLocalShell(invocation: invocation, readOnly: true)
+        case "shell.run":
+            return await executeLocalShell(invocation: invocation, readOnly: false)
         case "product.diagnostics":
             return CapabilityResult(
                 title: "Product Diagnostics Unavailable",
@@ -761,11 +824,18 @@ final class CapabilityExecutor {
 
     private func executeWebService(capability: PluginManifest.Capability, invocation: CapabilityInvocation) async -> CapabilityResult {
         guard let adapter = capability.adapter,
-              let rawURL = adapter.url,
-              let url = URL(string: renderConfigurationTemplate(rawURL)) else {
+              let rawURL = adapter.url else {
             return CapabilityResult(
                 title: "Web Service Not Configured",
                 content: "Capability \(capability.id) is a webservice, but no adapter.url is configured.",
+                requiresUserApproval: true
+            )
+        }
+        let template = renderWebServiceURLTemplate(rawURL, arguments: invocation.arguments)
+        guard let url = URL(string: template.rendered) else {
+            return CapabilityResult(
+                title: "Web Service Not Configured",
+                content: "Capability \(capability.id) adapter.url did not resolve to a valid URL: \(SecretRedactor.redact(template.rendered, config: config))",
                 requiresUserApproval: true
             )
         }
@@ -780,7 +850,8 @@ final class CapabilityExecutor {
         let method = (adapter.method ?? "POST").uppercased()
         var requestURL = url
         if method == "GET" {
-            requestURL = urlWithQuery(url, arguments: invocation.arguments)
+            let queryArguments = invocation.arguments.filter { !template.usedKeys.contains($0.key) }
+            requestURL = urlWithQuery(url, arguments: queryArguments)
         }
         var request = URLRequest(url: requestURL)
         request.httpMethod = method == "GET" ? "GET" : "POST"
@@ -948,6 +1019,158 @@ final class CapabilityExecutor {
             "name": toolName,
             "arguments": jsonCompatible(arguments)
         ]
+    }
+
+    private func executeLocalShell(invocation: CapabilityInvocation, readOnly: Bool) async -> CapabilityResult {
+        let commandName = clean(invocation.arguments["command"] as? String, fallback: "")
+        let allowlist = readOnly ? LocalShellCommandSet.inspect : LocalShellCommandSet.run
+        guard !commandName.isEmpty else {
+            return CapabilityResult(
+                title: "Shell Command Failed",
+                content: "Missing required command. Allowed commands: \(LocalShellCommandSet.allowedSummary(readOnly: readOnly)).",
+                requiresUserApproval: false
+            )
+        }
+        guard let executablePath = allowlist[commandName] else {
+            var hint = ""
+            if readOnly, LocalShellCommandSet.run[commandName] != nil {
+                hint = " \(commandName) has side effects; call shell.run (user approval) instead."
+            } else if !readOnly, LocalShellCommandSet.inspect[commandName] != nil {
+                hint = " \(commandName) is read-only; call shell.inspect instead."
+            }
+            return CapabilityResult(
+                title: "Shell Command Blocked",
+                content: "\(commandName) is not in the \(readOnly ? "read-only" : "side-effect") allowlist.\(hint) Allowed commands: \(LocalShellCommandSet.allowedSummary(readOnly: readOnly)).",
+                requiresUserApproval: false
+            )
+        }
+
+        let args = localShellArguments(from: invocation.arguments)
+        if args.contains(where: { $0.contains("\0") }) {
+            return CapabilityResult(
+                title: "Shell Command Blocked",
+                content: "Arguments must not contain NUL bytes.",
+                requiresUserApproval: false
+            )
+        }
+        if commandName == "find",
+           let blockedFlag = args.first(where: { LocalShellCommandSet.blockedFindFlags.contains($0) }) {
+            return CapabilityResult(
+                title: "Shell Command Blocked",
+                content: "find \(blockedFlag) executes or mutates and is not allowed. Use shell.run file commands for changes.",
+                requiresUserApproval: false
+            )
+        }
+        let confineToWorkspace = readOnly || LocalShellCommandSet.workspaceConfinedRunCommands.contains(commandName)
+        if confineToWorkspace, let escaping = args.first(where: shellArgumentEscapesWorkspace) {
+            return CapabilityResult(
+                title: "Shell Command Blocked",
+                content: "Argument \(escaping) points outside the current workspace. \(commandName) may only touch paths inside \(workspaceRoot.path).",
+                requiresUserApproval: false
+            )
+        }
+        guard let workingDirectory = resolveCommandWorkingDirectory(invocation.arguments["working_directory"] as? String) else {
+            return CapabilityResult(
+                title: "Shell Working Directory Blocked",
+                content: "Shell working directories must stay inside the current workspace.",
+                requiresUserApproval: false
+            )
+        }
+        guard fileManager.isExecutableFile(atPath: executablePath) else {
+            return CapabilityResult(
+                title: "Shell Command Failed",
+                content: "System executable is missing or not executable: \(executablePath)",
+                requiresUserApproval: false
+            )
+        }
+
+        let requestedTimeout = (invocation.arguments["timeout_seconds"] as? NSNumber)?.doubleValue ?? 30
+        let timeout = min(max(requestedTimeout, 1), 120)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executablePath)
+        process.arguments = args
+        process.currentDirectoryURL = workingDirectory
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+
+        let startedAt = Date()
+        do {
+            let status = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Int32, Error>) in
+                process.terminationHandler = { finished in
+                    continuation.resume(returning: finished.terminationStatus)
+                }
+                do {
+                    try process.run()
+                } catch {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                    if process.isRunning {
+                        process.terminate()
+                    }
+                }
+            }
+            let timedOut = status == 15 && Date().timeIntervalSince(startedAt) >= timeout - 0.1
+            let stdoutText = SecretRedactor.redact(
+                String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "",
+                config: config
+            )
+            let stderrText = SecretRedactor.redact(
+                String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "",
+                config: config
+            )
+            return CapabilityResult(
+                title: timedOut ? "Shell Command Timed Out" : "Shell Command Result",
+                content: """
+                command: \(commandName) \(args.joined(separator: " "))
+                working_directory: \(workingDirectory.path)
+                exit_status: \(status)
+                timed_out: \(timedOut)
+
+                stdout:
+                \(String(stdoutText.prefix(6_000)))
+
+                stderr:
+                \(String(stderrText.prefix(6_000)))
+                """,
+                requiresUserApproval: false
+            )
+        } catch {
+            return CapabilityResult(
+                title: "Shell Command Failed",
+                content: SecretRedactor.redact(error, config: config),
+                requiresUserApproval: false
+            )
+        }
+    }
+
+    /// Accepts args as an array (preferred: one element per argument) or a
+    /// whitespace-separated string from manual runs; quoting is not supported.
+    private func localShellArguments(from arguments: [String: Any]) -> [String] {
+        if let array = arguments["args"] as? [Any] {
+            return array.map { String(describing: $0) }.filter { !$0.isEmpty }
+        }
+        if let text = arguments["args"] as? String {
+            return text
+                .split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "\n" })
+                .map(String.init)
+        }
+        return []
+    }
+
+    /// Flags pass through; every other argument is treated as a potential path
+    /// and must resolve inside the workspace root.
+    private func shellArgumentEscapesWorkspace(_ argument: String) -> Bool {
+        guard !argument.isEmpty, !argument.hasPrefix("-") else { return false }
+        let root = workspaceRoot.standardizedFileURL.path
+        let expanded = (argument as NSString).expandingTildeInPath
+        let resolved = expanded.hasPrefix("/")
+            ? URL(fileURLWithPath: expanded).standardizedFileURL.path
+            : workspaceRoot.appendingPathComponent(expanded).standardizedFileURL.path
+        return resolved != root && !resolved.hasPrefix(root + "/")
     }
 
     private func executeCommand(capability: PluginManifest.Capability, invocation: CapabilityInvocation) async -> CapabilityResult {
@@ -1745,6 +1968,29 @@ final class CapabilityExecutor {
         return rendered
     }
 
+    /// Substitutes `{key}` / `{{key}}` placeholders in a webservice URL with
+    /// strictly percent-encoded argument values (RFC 3986 unreserved set), so
+    /// Chinese city names work and arguments cannot inject path or query
+    /// structure. Returns which argument keys were consumed.
+    private func renderWebServiceURLTemplate(
+        _ template: String,
+        arguments: [String: Any]
+    ) -> (rendered: String, usedKeys: Set<String>) {
+        var rendered = renderConfigurationTemplate(template)
+        var usedKeys = Set<String>()
+        var unreserved = CharacterSet.alphanumerics
+        unreserved.insert(charactersIn: "-._~")
+        for (key, value) in arguments {
+            let encoded = String(describing: value)
+                .addingPercentEncoding(withAllowedCharacters: unreserved) ?? ""
+            for token in ["{{\(key)}}", "{\(key)}"] where rendered.contains(token) {
+                rendered = rendered.replacingOccurrences(of: token, with: encoded)
+                usedKeys.insert(key)
+            }
+        }
+        return (rendered, usedKeys)
+    }
+
     private func renderConfigurationTemplate(_ template: String) -> String {
         template
             .replacingOccurrences(of: "{{agent_llm_base_url}}", with: config.agentLLMBaseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")))
@@ -2028,7 +2274,8 @@ final class CapabilityExecutor {
         let added = arguments
             .map { URLQueryItem(name: $0.key, value: String(describing: $0.value)) }
             .sorted { $0.name < $1.name }
-        components.queryItems = existing + added
+        let combined = existing + added
+        components.queryItems = combined.isEmpty ? nil : combined
         return components.url ?? url
     }
 

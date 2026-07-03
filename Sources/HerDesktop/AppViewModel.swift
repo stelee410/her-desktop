@@ -45,6 +45,13 @@ final class AppViewModel: ObservableObject {
     @Published var isVibePluginComposerPresented: Bool
     @Published var pendingVibePluginComposerPreset: VibePluginComposerPreset?
 
+    @Published private(set) var streamingAssistantMessageID: UUID?
+
+    /// True while a reply is pending but no streamed bubble has appeared yet.
+    var isAwaitingAssistantReply: Bool {
+        connectionState == .thinking && streamingAssistantMessageID == nil
+    }
+
     private var agentMem: AgentMemClient
     private var agentLLM: any AgentLLMChatting
     private var pluginRegistry: PluginRegistry
@@ -352,12 +359,13 @@ final class AppViewModel: ObservableObject {
             var llmMessages = conversationContextBuilder.build(systemPrompt: prompt, messages: messages)
             let reply = try await runAgentToolLoop(llmMessages: &llmMessages, catalog: catalog)
             let final = reply.isEmpty ? "我收到啦，但这次模型没有返回正文。" : reply
-            messages.append(ChatMessage(role: .assistant, content: final))
+            deliverAssistantReply(final)
             connectionState = .ready
             saveSessionSnapshot()
             Task { await persistTurnMemory(userInput: normalized.contextText, agentResponse: final, attachments: attachments) }
             Task { await speakAssistantReplyIfEnabled(final) }
         } catch {
+            discardEmptyStreamedAssistantMessage()
             connectionState = .error
             lastError = error.localizedDescription
             messages.append(ChatMessage(role: .assistant, content: conversationalRecoveryMessage(for: error)))
@@ -670,11 +678,19 @@ final class AppViewModel: ObservableObject {
     ) async throws -> String {
         var currentCatalog = catalog
         for round in 0...maxToolRounds {
-            let message = try await agentLLM.chat(messages: llmMessages, tools: currentCatalog.tools)
+            streamingAssistantMessageID = nil
+            let message = try await agentLLM.chat(
+                messages: llmMessages,
+                tools: currentCatalog.tools,
+                onEvent: { [weak self] event in
+                    self?.applyAssistantStreamEvent(event)
+                }
+            )
             let toolCalls = message.toolCalls ?? []
             guard !toolCalls.isEmpty else {
-                return message.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return finalizeStreamedAssistantReply(with: message)
             }
+            finalizeStreamedToolRoundNarration()
 
             guard round < maxToolRounds else {
                 return "我已经连续执行了 \(maxToolRounds) 轮工具调用，先停在这里，避免在没有你确认的情况下继续扩张任务。"
@@ -701,6 +717,63 @@ final class AppViewModel: ObservableObject {
         return "我已经到达本轮工具调用上限，先把当前状态停住。"
     }
 
+    private func applyAssistantStreamEvent(_ event: AgentLLMStreamEvent) {
+        if streamingAssistantMessageID == nil {
+            let message = ChatMessage(role: .assistant, content: "")
+            messages.append(message)
+            streamingAssistantMessageID = message.id
+        }
+        guard let id = streamingAssistantMessageID,
+              let index = messages.firstIndex(where: { $0.id == id }) else { return }
+        switch event {
+        case .reasoningDelta(let delta):
+            messages[index].reasoning += delta
+        case .contentDelta(let delta):
+            messages[index].content += delta
+        }
+    }
+
+    private func finalizeStreamedAssistantReply(with message: AgentLLMChatResponse.Choice.Message) -> String {
+        let reply = message.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if let id = streamingAssistantMessageID,
+           let index = messages.firstIndex(where: { $0.id == id }) {
+            messages[index].content = reply
+        }
+        return reply
+    }
+
+    private func finalizeStreamedToolRoundNarration() {
+        defer { streamingAssistantMessageID = nil }
+        guard let id = streamingAssistantMessageID,
+              let index = messages.firstIndex(where: { $0.id == id }) else { return }
+        let hasVisibleText = !messages[index].content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !messages[index].reasoning.isEmpty
+        if !hasVisibleText {
+            messages.remove(at: index)
+        }
+    }
+
+    /// Routes the final reply into the live streamed bubble when one exists,
+    /// otherwise appends a fresh assistant message.
+    private func deliverAssistantReply(_ final: String) {
+        defer { streamingAssistantMessageID = nil }
+        if let id = streamingAssistantMessageID,
+           let index = messages.firstIndex(where: { $0.id == id }) {
+            messages[index].content = final
+        } else {
+            messages.append(ChatMessage(role: .assistant, content: final))
+        }
+    }
+
+    private func discardEmptyStreamedAssistantMessage() {
+        defer { streamingAssistantMessageID = nil }
+        guard let id = streamingAssistantMessageID,
+              let index = messages.firstIndex(where: { $0.id == id }),
+              messages[index].content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              messages[index].reasoning.isEmpty else { return }
+        messages.remove(at: index)
+    }
+
     private func handleToolCall(
         _ toolCall: AgentLLMChatResponse.Choice.Message.ToolCall,
         catalog: CapabilityToolCatalog
@@ -713,12 +786,18 @@ final class AppViewModel: ObservableObject {
             arguments: parseArguments(toolCall.function.arguments)
         )
         if requiresApproval(capabilityID: capabilityID) {
-            let approval = enqueueApproval(for: invocation)
-            messages.append(ChatMessage(role: .tool, content: "Approval Required\n\(approval.title)\n\(approval.detail)"))
-            return ToolCallHandlingResult(
-                content: "Pending user approval in Her Desktop. Approval id: \(approval.id.uuidString).",
-                needsApproval: true
-            )
+            let (approval, isNew) = enqueueApproval(for: invocation)
+            if isNew {
+                messages.append(ChatMessage(
+                    role: .tool,
+                    content: "Approval Required\n\(approval.title)\n\(approval.detail)",
+                    approvalID: approval.id
+                ))
+            }
+            let guidance = isNew
+                ? "Pending user approval in Her Desktop. Approval id: \(approval.id.uuidString). The user now sees an approval card with 批准/拒绝 buttons in the conversation. Tell them to tap 批准 on that card, and do not call this tool again for the same action."
+                : "This exact action is already waiting for user approval (approval id: \(approval.id.uuidString)). Do not call the tool again; remind the user to tap 批准 on the existing approval card in the conversation."
+            return ToolCallHandlingResult(content: guidance, needsApproval: true)
         }
 
         let activityID = beginCapabilityActivity(
@@ -1268,11 +1347,19 @@ final class AppViewModel: ObservableObject {
         )
 
         if requiresApproval(capabilityID: capabilityID) {
-            let approval = enqueueApproval(for: invocation)
-            messages.append(ChatMessage(
-                role: .tool,
-                content: "Approval Required\n\(approval.title)\n\(approval.detail)"
-            ))
+            let (approval, isNew) = enqueueApproval(for: invocation)
+            if isNew {
+                messages.append(ChatMessage(
+                    role: .tool,
+                    content: "Approval Required\n\(approval.title)\n\(approval.detail)",
+                    approvalID: approval.id
+                ))
+            } else {
+                messages.append(ChatMessage(
+                    role: .tool,
+                    content: "这个操作已经在等待批准了，直接在对话里的审批卡片上点「批准」或「拒绝」即可。"
+                ))
+            }
             saveSessionSnapshot()
             return
         }
@@ -2074,11 +2161,13 @@ final class AppViewModel: ObservableObject {
                     ? "Created \(package.manifest.name) (\(package.manifest.id)) for review after one repair pass."
                     : "Created \(package.manifest.name) (\(package.manifest.id)) for review."
             )
+            var queuedApprovalID: UUID?
             if installImmediately {
                 let approval = enqueueInstallDraftApproval(for: draft)
+                queuedApprovalID = approval.id
                 reviewContent += installDraftApprovalQueuedContent(approval: approval, draft: draft)
             }
-            messages.append(ChatMessage(role: .tool, content: reviewContent))
+            messages.append(ChatMessage(role: .tool, content: reviewContent, approvalID: queuedApprovalID))
             connectionState = .ready
             saveSessionSnapshot()
         } catch {
@@ -2995,10 +3084,17 @@ final class AppViewModel: ObservableObject {
     }
 
     @discardableResult
-    private func enqueueApproval(for invocation: CapabilityInvocation) -> PendingApproval {
+    /// Enqueues an approval, or returns the matching pending one so repeated
+    /// tool calls for the same action cannot pile up duplicate requests.
+    private func enqueueApproval(for invocation: CapabilityInvocation) -> (approval: PendingApproval, isNew: Bool) {
         let capability = pluginRegistry.capability(id: invocation.capabilityID, in: plugins)
         let title = capability?.title ?? invocation.capabilityID
         let detail = approvalDetail(for: invocation)
+        if let existing = pendingApprovals.first(where: {
+            $0.invocation.capabilityID == invocation.capabilityID && $0.detail == detail
+        }) {
+            return (existing, false)
+        }
         let activityID = beginCapabilityActivity(
             invocation: invocation,
             status: .pending,
@@ -3016,7 +3112,7 @@ final class AppViewModel: ObservableObject {
                 "functionName": invocation.functionName
             ]
         )
-        return approval
+        return (approval, true)
     }
 
     @discardableResult
@@ -3254,12 +3350,14 @@ final class AppViewModel: ObservableObject {
             summary: "Staged \(documented.manifest.name) (\(documented.manifest.id)) for review."
         )
         var queuedInstallApproval = false
+        var queuedApprovalID: UUID?
         if installImmediately {
             let approval = enqueueInstallDraftApproval(for: draft)
             queuedInstallApproval = true
+            queuedApprovalID = approval.id
             content += installDraftApprovalQueuedContent(approval: approval, draft: draft)
         }
-        messages.append(ChatMessage(role: .tool, content: content))
+        messages.append(ChatMessage(role: .tool, content: content, approvalID: queuedApprovalID))
         return PluginDraftCapture(content: content, queuedInstallApproval: queuedInstallApproval)
     }
 
@@ -3287,7 +3385,7 @@ final class AppViewModel: ObservableObject {
                 "confirmed": true
             ]
         )
-        return enqueueApproval(for: invocation)
+        return enqueueApproval(for: invocation).approval
     }
 
     private func captureInstalledPluginIfNeeded(
@@ -3521,11 +3619,14 @@ final class AppViewModel: ObservableObject {
             let content = try await runAgentToolLoop(llmMessages: &llmMessages, catalog: catalog)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !content.isEmpty {
-                messages.append(ChatMessage(role: .assistant, content: content))
+                deliverAssistantReply(content)
                 saveSessionSnapshot()
                 Task { await speakAssistantReplyIfEnabled(content) }
+            } else {
+                discardEmptyStreamedAssistantMessage()
             }
         } catch {
+            discardEmptyStreamedAssistantMessage()
             lastError = "The capability ran, but result synthesis failed: \(error.localizedDescription)"
             messages.append(ChatMessage(
                 role: .assistant,

@@ -1,0 +1,121 @@
+{
+  "author" : "Her",
+  "capabilities" : [
+    {
+      "adapter" : {
+        "type" : "native"
+      },
+      "description" : "Run a read-only inspection command inside the current workspace. Commands execute directly without a shell: no pipes, redirection, or wildcard expansion. Path arguments must stay inside the workspace. Use grep/find for searching instead of shell globs.",
+      "id" : "shell.inspect",
+      "inputSchema" : {
+        "properties" : {
+          "args" : {
+            "description" : "Arguments passed directly to the executable, one array element per argument. No shell parsing, so quoting is unnecessary and pipes/redirection do not work.",
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "command" : {
+            "description" : "Read-only command name from the allowlist.",
+            "enum" : [
+              "ls",
+              "cat",
+              "head",
+              "tail",
+              "wc",
+              "grep",
+              "find",
+              "stat",
+              "file",
+              "du",
+              "df",
+              "pwd",
+              "date",
+              "which",
+              "uname",
+              "sw_vers",
+              "echo"
+            ],
+            "type" : "string"
+          },
+          "timeout_seconds" : {
+            "description" : "Optional timeout, 1-120 seconds. Default 30.",
+            "type" : "number"
+          },
+          "working_directory" : {
+            "description" : "Optional workspace-relative working directory.",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "command"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "shell.inspect",
+      "kind" : "native",
+      "requiresApproval" : false,
+      "title" : "Run read-only shell command"
+    },
+    {
+      "adapter" : {
+        "type" : "native"
+      },
+      "description" : "Run a side-effect shell command (network via curl, file operations like cp/mv/mkdir/rm, archives via tar/zip/unzip, open files or URLs) after user approval. Commands execute directly without a shell: no pipes, redirection, or wildcard expansion. rm, chmod, mkdir, and touch may only touch paths inside the workspace.",
+      "id" : "shell.run",
+      "inputSchema" : {
+        "properties" : {
+          "args" : {
+            "description" : "Arguments passed directly to the executable, one array element per argument. No shell parsing, so quoting is unnecessary and pipes/redirection do not work.",
+            "items" : {
+              "type" : "string"
+            },
+            "type" : "array"
+          },
+          "command" : {
+            "description" : "Side-effect command name from the allowlist.",
+            "enum" : [
+              "curl",
+              "cp",
+              "mv",
+              "mkdir",
+              "touch",
+              "rm",
+              "tar",
+              "zip",
+              "unzip",
+              "ditto",
+              "chmod",
+              "open",
+              "sips",
+              "textutil"
+            ],
+            "type" : "string"
+          },
+          "timeout_seconds" : {
+            "description" : "Optional timeout, 1-120 seconds. Default 30.",
+            "type" : "number"
+          },
+          "working_directory" : {
+            "description" : "Optional workspace-relative working directory.",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "command"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "shell.run",
+      "kind" : "native",
+      "requiresApproval" : true,
+      "title" : "Run shell command with side effects"
+    }
+  ],
+  "description" : "Small curated local shell command set: read-only inspection runs freely inside the workspace, side-effect commands run behind user approval. No shell interpretation, fixed system executable paths.",
+  "id" : "builtin.local-shell",
+  "name" : "Local Shell",
+  "systemPromptAddendum" : "Local shell commands run without a shell: pass one argument per args element, and never rely on pipes, redirection, or wildcards. Prefer shell.inspect for reading; shell.run needs user approval and rm/chmod/mkdir/touch stay inside the workspace.",
+  "version" : "0.1.0"
+}

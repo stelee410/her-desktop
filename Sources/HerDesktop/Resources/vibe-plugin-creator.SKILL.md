@@ -25,6 +25,9 @@ If the user asks to remove an installed local extension, use the approved `plugi
 
 - `skill`: include `SKILL.md` with narrow usage instructions.
 - `webservice`: declare method, URL, optional headers, and body template. Use runtime placeholders for secrets.
+  - The URL may embed input arguments as `{param}` path or query placeholders, e.g. `https://wttr.in/{city}?format=j1`. The runtime replaces each placeholder with the percent-encoded argument value (Chinese and spaces are safe) at execution time.
+  - For GET, any arguments not consumed by a URL placeholder are appended as query parameters automatically; put an argument in the path only via a placeholder.
+  - Declare one inputSchema property per placeholder with the same name, and describe the expected value (e.g. "City name in Chinese or English").
 - `mcp`: use local HTTP JSON-RPC bridge URLs only. Prefer `tools/call` with an explicit `toolName`.
 - `command`: use a fixed executable and fixed argument templates. Command capabilities must require approval.
 - `native`: only declare capabilities that Her Desktop already knows how to execute, or clearly mark the executor as future work.

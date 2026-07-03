@@ -13,7 +13,11 @@ final class AppViewModelTests: XCTestCase {
             self.responses = responses
         }
 
-        func chat(messages: [AgentLLMMessage], tools: [[String: Any]]) async throws -> AgentLLMChatResponse.Choice.Message {
+        func chat(
+            messages: [AgentLLMMessage],
+            tools: [[String: Any]],
+            onEvent: @escaping @MainActor (AgentLLMStreamEvent) -> Void
+        ) async throws -> AgentLLMChatResponse.Choice.Message {
             requests.append(messages)
             toolRequests.append(tools)
             try await onChat?()
@@ -691,6 +695,30 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(model.pendingApprovals.first?.invocation.capabilityID, "native.speak")
         XCTAssertEqual(model.messages.last?.role, .assistant)
         XCTAssertTrue(model.messages.last?.content.contains("审批队列") == true)
+    }
+
+    func testRepeatedApprovalToolCallsDoNotDuplicateQueueEntries() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-approval-dedup-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        try FileManager.default.createDirectory(at: cwd, withIntermediateDirectories: true)
+        let fakeLLM = FakeLLM(responses: [
+            .toolCall(id: "call_1", name: "native_speak", arguments: #"{"text":"hello aloud"}"#),
+            .toolCall(id: "call_2", name: "native_speak", arguments: #"{"text":"hello aloud"}"#)
+        ])
+        let model = AppViewModel(cwd: cwd.path, agentLLM: fakeLLM)
+
+        await model.send("说出来")
+        let firstApproval = try XCTUnwrap(model.pendingApprovals.first)
+        XCTAssertEqual(model.pendingApprovals.count, 1)
+        let approvalCards = model.messages.filter { $0.approvalID != nil }
+        XCTAssertEqual(approvalCards.count, 1)
+        XCTAssertEqual(approvalCards.first?.approvalID, firstApproval.id)
+
+        await model.send("批准")
+        XCTAssertEqual(model.pendingApprovals.count, 1)
+        XCTAssertEqual(model.pendingApprovals.first?.id, firstApproval.id)
+        XCTAssertEqual(model.messages.filter { $0.approvalID != nil }.count, 1)
     }
 
     func testAttachFilesStagesPendingAttachments() throws {

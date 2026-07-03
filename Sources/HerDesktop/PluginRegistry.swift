@@ -504,6 +504,64 @@ final class PluginRegistry {
                 ]
             ),
             PluginManifest(
+                id: "builtin.local-shell",
+                name: "Local Shell",
+                version: "0.1.0",
+                description: "Small curated local shell command set: read-only inspection runs freely inside the workspace, side-effect commands run behind user approval.",
+                author: "Her",
+                systemPromptAddendum: "Local shell commands run without a shell: pass one argument per args element, and never rely on pipes, redirection, or wildcards. Prefer shell.inspect for reading; shell.run needs user approval and rm/chmod/mkdir/touch stay inside the workspace.",
+                capabilities: [
+                    .init(
+                        id: "shell.inspect",
+                        title: "Run read-only shell command",
+                        kind: "native",
+                        invocation: "shell.inspect",
+                        requiresApproval: false,
+                        description: "Run a read-only inspection command (ls, cat, grep, find, ...) inside the current workspace without shell interpretation.",
+                        inputSchema: [
+                            "type": .string("object"),
+                            "properties": .object([
+                                "command": .object([
+                                    "type": .string("string"),
+                                    "description": .string("Read-only command name from the allowlist: \(LocalShellCommandSet.allowedSummary(readOnly: true)).")
+                                ]),
+                                "args": .object([
+                                    "type": .string("array"),
+                                    "items": .object(["type": .string("string")]),
+                                    "description": .string("Arguments passed directly to the executable, one array element per argument.")
+                                ])
+                            ]),
+                            "required": .array([.string("command")])
+                        ],
+                        adapter: .init(type: "native")
+                    ),
+                    .init(
+                        id: "shell.run",
+                        title: "Run shell command with side effects",
+                        kind: "native",
+                        invocation: "shell.run",
+                        requiresApproval: true,
+                        description: "Run a side-effect shell command (curl, cp, mv, mkdir, rm, tar, ...) after user approval, without shell interpretation.",
+                        inputSchema: [
+                            "type": .string("object"),
+                            "properties": .object([
+                                "command": .object([
+                                    "type": .string("string"),
+                                    "description": .string("Side-effect command name from the allowlist: \(LocalShellCommandSet.allowedSummary(readOnly: false)).")
+                                ]),
+                                "args": .object([
+                                    "type": .string("array"),
+                                    "items": .object(["type": .string("string")]),
+                                    "description": .string("Arguments passed directly to the executable, one array element per argument.")
+                                ])
+                            ]),
+                            "required": .array([.string("command")])
+                        ],
+                        adapter: .init(type: "native")
+                    )
+                ]
+            ),
+            PluginManifest(
                 id: "builtin.agentllm-media",
                 name: "AgentLLM Media",
                 version: "0.1.0",

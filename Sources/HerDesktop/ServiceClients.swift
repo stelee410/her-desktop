@@ -307,11 +307,13 @@ struct AgentLLMChatResponse: Codable {
 
             var role: String?
             var content: String?
+            var reasoningContent: String?
             var toolCalls: [ToolCall]?
 
             enum CodingKeys: String, CodingKey {
                 case role
                 case content
+                case reasoningContent = "reasoning_content"
                 case toolCalls = "tool_calls"
             }
         }
@@ -359,9 +361,137 @@ struct AgentLLMMessage: Codable, Equatable {
     }
 }
 
+enum AgentLLMStreamEvent {
+    case reasoningDelta(String)
+    case contentDelta(String)
+}
+
 @MainActor
 protocol AgentLLMChatting {
-    func chat(messages: [AgentLLMMessage], tools: [[String: Any]]) async throws -> AgentLLMChatResponse.Choice.Message
+    func chat(
+        messages: [AgentLLMMessage],
+        tools: [[String: Any]],
+        onEvent: @escaping @MainActor (AgentLLMStreamEvent) -> Void
+    ) async throws -> AgentLLMChatResponse.Choice.Message
+}
+
+extension AgentLLMChatting {
+    func chat(messages: [AgentLLMMessage], tools: [[String: Any]] = []) async throws -> AgentLLMChatResponse.Choice.Message {
+        try await chat(messages: messages, tools: tools, onEvent: { _ in })
+    }
+}
+
+/// Splits a streamed content channel into visible content and `<think>…</think>`
+/// reasoning, holding back partial tags that arrive split across chunks.
+struct ThinkTagStreamFilter {
+    private static let openTag = "<think>"
+    private static let closeTag = "</think>"
+
+    private var buffer = ""
+    private var inThink = false
+
+    mutating func feed(_ text: String) -> (content: String, reasoning: String) {
+        buffer += text
+        var content = ""
+        var reasoning = ""
+        while true {
+            let tag = inThink ? Self.closeTag : Self.openTag
+            if let range = buffer.range(of: tag) {
+                let before = String(buffer[..<range.lowerBound])
+                if inThink { reasoning += before } else { content += before }
+                buffer.removeSubrange(..<range.upperBound)
+                inThink.toggle()
+            } else {
+                let hold = Self.partialTagSuffixLength(of: buffer, tag: tag)
+                let emitEnd = buffer.index(buffer.endIndex, offsetBy: -hold)
+                let emitted = String(buffer[..<emitEnd])
+                if inThink { reasoning += emitted } else { content += emitted }
+                buffer = String(buffer[emitEnd...])
+                break
+            }
+        }
+        return (content, reasoning)
+    }
+
+    mutating func flush() -> (content: String, reasoning: String) {
+        let rest = buffer
+        buffer = ""
+        return inThink ? ("", rest) : (rest, "")
+    }
+
+    static func extract(from text: String) -> (content: String, reasoning: String) {
+        var filter = ThinkTagStreamFilter()
+        let fed = filter.feed(text)
+        let tail = filter.flush()
+        return (fed.content + tail.content, fed.reasoning + tail.reasoning)
+    }
+
+    private static func partialTagSuffixLength(of text: String, tag: String) -> Int {
+        let maxLength = min(text.count, tag.count - 1)
+        guard maxLength > 0 else { return 0 }
+        for length in stride(from: maxLength, through: 1, by: -1) where text.hasSuffix(String(tag.prefix(length))) {
+            return length
+        }
+        return 0
+    }
+}
+
+private struct AgentLLMStreamChunk: Decodable {
+    struct Choice: Decodable {
+        struct Delta: Decodable {
+            struct ToolCallDelta: Decodable {
+                struct FunctionDelta: Decodable {
+                    var name: String?
+                    var arguments: String?
+                }
+
+                var index: Int?
+                var id: String?
+                var type: String?
+                var function: FunctionDelta?
+            }
+
+            var role: String?
+            var content: String?
+            var reasoningContent: String?
+            var reasoning: String?
+            var toolCalls: [ToolCallDelta]?
+
+            enum CodingKeys: String, CodingKey {
+                case role
+                case content
+                case reasoning
+                case reasoningContent = "reasoning_content"
+                case toolCalls = "tool_calls"
+            }
+        }
+
+        var delta: Delta?
+        var finishReason: String?
+
+        enum CodingKeys: String, CodingKey {
+            case delta
+            case finishReason = "finish_reason"
+        }
+    }
+
+    var choices: [Choice]?
+}
+
+private struct StreamedToolCallAccumulator {
+    var id = ""
+    var type = "function"
+    var name = ""
+    var arguments = ""
+
+    func finalized(index: Int) -> AgentLLMChatResponse.Choice.Message.ToolCall? {
+        guard !name.isEmpty else { return nil }
+        return .init(
+            id: id.isEmpty ? "call_\(index)_\(name)" : id,
+            type: type.isEmpty ? "function" : type,
+            function: .init(name: name, arguments: arguments)
+        )
+    }
 }
 
 @MainActor
@@ -374,36 +504,163 @@ final class AgentLLMClient: AgentLLMChatting {
         self.session = session
     }
 
-    func chat(messages: [AgentLLMMessage], tools: [[String: Any]] = []) async throws -> AgentLLMChatResponse.Choice.Message {
+    func chat(
+        messages: [AgentLLMMessage],
+        tools: [[String: Any]],
+        onEvent: @escaping @MainActor (AgentLLMStreamEvent) -> Void
+    ) async throws -> AgentLLMChatResponse.Choice.Message {
         guard config.hasLLMKey else { throw ServiceError.missingAPIKey("AgentLLM") }
         let url = config.agentLLMBaseURL.appending(path: "/v1/chat/completions")
         var body: [String: Any] = [
             "model": config.agentLLMModel,
             "messages": try messages.map { try $0.jsonObject() },
             "temperature": 0.7,
-            "stream": false
+            "stream": true
         ]
+        if config.agentLLMMaxTokens > 0 {
+            body["max_tokens"] = config.agentLLMMaxTokens
+        }
         if !tools.isEmpty {
             body["tools"] = tools
             body["tool_choice"] = "auto"
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 30
+        request.timeoutInterval = 120
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(config.agentLLMAPIKey)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, response) = try await data(for: request)
-        try validate(response: response, data: data)
-        let decoded = try JSONDecoder().decode(AgentLLMChatResponse.self, from: data)
-        return decoded.choices.first?.message ?? .init(role: "assistant", content: "")
+        return try await streamChat(request: request, onEvent: onEvent)
     }
 
-    private func data(for request: URLRequest, attempts: Int = 2) async throws -> (Data, URLResponse) {
+    private func streamChat(
+        request: URLRequest,
+        onEvent: @escaping @MainActor (AgentLLMStreamEvent) -> Void
+    ) async throws -> AgentLLMChatResponse.Choice.Message {
+        let (bytes, response) = try await bytes(for: request)
+        guard let http = response as? HTTPURLResponse else { throw ServiceError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            var bodyData = Data()
+            for try await byte in bytes {
+                bodyData.append(byte)
+                if bodyData.count > 64_000 { break }
+            }
+            throw ServiceError.httpStatus(http.statusCode, String(data: bodyData, encoding: .utf8) ?? "")
+        }
+
+        var role: String?
+        var content = ""
+        var reasoning = ""
+        var thinkFilter = ThinkTagStreamFilter()
+        var toolCalls: [Int: StreamedToolCallAccumulator] = [:]
+        var nextImplicitToolIndex = 0
+        var sawStreamEvent = false
+        var rawFallback = ""
+
+        func emitReasoning(_ delta: String) {
+            guard !delta.isEmpty else { return }
+            reasoning += delta
+            onEvent(.reasoningDelta(delta))
+        }
+
+        func emitContent(_ delta: String) {
+            guard !delta.isEmpty else { return }
+            let split = thinkFilter.feed(delta)
+            if !split.reasoning.isEmpty {
+                reasoning += split.reasoning
+                onEvent(.reasoningDelta(split.reasoning))
+            }
+            if !split.content.isEmpty {
+                content += split.content
+                onEvent(.contentDelta(split.content))
+            }
+        }
+
+        for try await line in bytes.lines {
+            if line.hasPrefix("data:") {
+                sawStreamEvent = true
+                let payload = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                if payload == "[DONE]" { break }
+                guard let data = payload.data(using: .utf8),
+                      let chunk = try? JSONDecoder().decode(AgentLLMStreamChunk.self, from: data),
+                      let delta = chunk.choices?.first?.delta else { continue }
+                if let deltaRole = delta.role, !deltaRole.isEmpty {
+                    role = deltaRole
+                }
+                emitReasoning(delta.reasoningContent ?? delta.reasoning ?? "")
+                emitContent(delta.content ?? "")
+                for toolDelta in delta.toolCalls ?? [] {
+                    let index = toolDelta.index ?? nextImplicitToolIndex
+                    nextImplicitToolIndex = max(nextImplicitToolIndex, index + 1)
+                    var accumulator = toolCalls[index] ?? StreamedToolCallAccumulator()
+                    if let id = toolDelta.id, !id.isEmpty { accumulator.id = id }
+                    if let type = toolDelta.type, !type.isEmpty { accumulator.type = type }
+                    if let name = toolDelta.function?.name, !name.isEmpty { accumulator.name += name }
+                    if let arguments = toolDelta.function?.arguments { accumulator.arguments += arguments }
+                    toolCalls[index] = accumulator
+                }
+            } else if !sawStreamEvent {
+                rawFallback += line
+            }
+        }
+
+        if !sawStreamEvent {
+            return try nonStreamFallbackMessage(rawBody: rawFallback, onEvent: onEvent)
+        }
+
+        let tail = thinkFilter.flush()
+        if !tail.reasoning.isEmpty {
+            reasoning += tail.reasoning
+            onEvent(.reasoningDelta(tail.reasoning))
+        }
+        if !tail.content.isEmpty {
+            content += tail.content
+            onEvent(.contentDelta(tail.content))
+        }
+
+        let finalToolCalls = toolCalls
+            .sorted { $0.key < $1.key }
+            .compactMap { $0.value.finalized(index: $0.key) }
+        return .init(
+            role: role ?? "assistant",
+            content: content,
+            reasoningContent: reasoning.isEmpty ? nil : reasoning,
+            toolCalls: finalToolCalls.isEmpty ? nil : finalToolCalls
+        )
+    }
+
+    /// Some gateways ignore `stream: true` and answer with a plain JSON body.
+    private func nonStreamFallbackMessage(
+        rawBody: String,
+        onEvent: @escaping @MainActor (AgentLLMStreamEvent) -> Void
+    ) throws -> AgentLLMChatResponse.Choice.Message {
+        let trimmed = rawBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let data = trimmed.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode(AgentLLMChatResponse.self, from: data) else {
+            throw ServiceError.decoding("AgentLLM returned an unrecognized streaming response.")
+        }
+        var message = decoded.choices.first?.message ?? .init(role: "assistant", content: "")
+        let extracted = ThinkTagStreamFilter.extract(from: message.content ?? "")
+        message.content = extracted.content
+        if message.reasoningContent?.isEmpty != false, !extracted.reasoning.isEmpty {
+            message.reasoningContent = extracted.reasoning
+        }
+        if let reasoningContent = message.reasoningContent, !reasoningContent.isEmpty {
+            onEvent(.reasoningDelta(reasoningContent))
+        }
+        if let content = message.content, !content.isEmpty {
+            onEvent(.contentDelta(content))
+        }
+        return message
+    }
+
+    private func bytes(for request: URLRequest, attempts: Int = 2) async throws -> (URLSession.AsyncBytes, URLResponse) {
         var lastError: Error?
         for attempt in 1...attempts {
             do {
-                return try await session.data(for: request)
+                return try await session.bytes(for: request)
             } catch {
                 lastError = error
                 if attempt < attempts {

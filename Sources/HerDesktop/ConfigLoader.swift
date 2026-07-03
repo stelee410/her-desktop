@@ -15,6 +15,10 @@ enum ConfigLoader {
         )
         config.agentLLMAPIKey = envValue(env, "HER_AGENT_LLM_API_KEY", "AGENTLLM_API_KEY", "AGENT_LLM_API_KEY") ?? config.agentLLMAPIKey
         config.agentLLMModel = envValue(env, "HER_AGENT_LLM_MODEL", "AGENTLLM_MODEL", "AGENT_LLM_MODEL") ?? config.agentLLMModel
+        if let rawMaxTokens = envValue(env, "HER_AGENT_LLM_MAX_TOKENS", "AGENTLLM_MAX_TOKENS", "AGENT_LLM_MAX_TOKENS"),
+           let maxTokens = Int(rawMaxTokens), maxTokens > 0 {
+            config.agentLLMMaxTokens = maxTokens
+        }
         config.agentMemBaseURL = url(
             from: envValue(env, "HER_AGENT_MEM_BASE_URL", "AGENTMEM_BASE_URL", "AGENT_MEM_BASE_URL"),
             fallback: config.agentMemBaseURL

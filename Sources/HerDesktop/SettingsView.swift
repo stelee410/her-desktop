@@ -137,6 +137,7 @@ struct HerConfigurationFields: View {
                 TextField("AgentLLM base URL", text: $draft.agentLLMBaseURL)
                 SecureField("AgentLLM API key", text: $draft.agentLLMAPIKey)
                 TextField("AgentLLM model", text: $draft.agentLLMModel)
+                TextField("Max reply tokens (default \(HerAppConfig.defaultAgentLLMMaxTokens))", text: $draft.agentLLMMaxTokens)
             }
 
             fieldSection("Optional Memory", systemImage: "brain.head.profile") {

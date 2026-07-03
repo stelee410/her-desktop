@@ -25,6 +25,11 @@ struct ConversationView: View {
                                 .id(message.id)
                         }
 
+                        if model.isAwaitingAssistantReply {
+                            TypingIndicatorBubble()
+                                .id("typing-indicator")
+                        }
+
                         if let lastError = model.lastError {
                             Text(lastError)
                                 .font(.caption)
@@ -38,6 +43,16 @@ struct ConversationView: View {
                 .onChange(of: model.messages.count) { _, _ in
                     if let last = model.messages.last?.id {
                         withAnimation { proxy.scrollTo(last, anchor: .bottom) }
+                    }
+                }
+                .onChange(of: model.messages.last.map { $0.content.count + $0.reasoning.count }) { _, _ in
+                    if let last = model.messages.last?.id {
+                        proxy.scrollTo(last, anchor: .bottom)
+                    }
+                }
+                .onChange(of: model.isAwaitingAssistantReply) { _, isAwaiting in
+                    if isAwaiting {
+                        withAnimation { proxy.scrollTo("typing-indicator", anchor: .bottom) }
                     }
                 }
             }
@@ -254,10 +269,19 @@ private struct MessageBubble: View {
         HStack {
             if message.role == .user { Spacer(minLength: 70) }
             VStack(alignment: .leading, spacing: 8) {
+                if !message.reasoning.isEmpty {
+                    ReasoningSection(
+                        reasoning: message.reasoning,
+                        isThinking: message.content.isEmpty
+                    )
+                }
                 Text(message.content)
                     .font(.system(size: 14))
                     .foregroundStyle(AppTheme.ink)
                     .textSelection(.enabled)
+                if let approvalID = message.approvalID {
+                    ApprovalActionRow(approvalID: approvalID)
+                }
                 if !message.attachments.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(message.attachments) { attachment in
@@ -289,6 +313,127 @@ private struct MessageBubble: View {
                     .stroke(Color.black.opacity(0.05), lineWidth: 1)
             )
             if message.role != .user { Spacer(minLength: 70) }
+        }
+    }
+}
+
+private struct ApprovalActionRow: View {
+    @EnvironmentObject private var model: AppViewModel
+    var approvalID: UUID
+    @State private var isExecuting = false
+
+    private var approval: PendingApproval? {
+        model.pendingApprovals.first { $0.id == approvalID }
+    }
+
+    var body: some View {
+        if let approval {
+            HStack(spacing: 10) {
+                Button {
+                    isExecuting = true
+                    Task {
+                        await model.approve(approval)
+                        isExecuting = false
+                    }
+                } label: {
+                    Label("批准", systemImage: "checkmark.circle.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppTheme.coral)
+                .controlSize(.small)
+                .disabled(isExecuting)
+
+                Button {
+                    model.reject(approval)
+                } label: {
+                    Label("拒绝", systemImage: "xmark.circle")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(isExecuting)
+
+                if isExecuting {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+            .padding(.top, 2)
+        } else {
+            Label("已处理", systemImage: "checkmark.seal")
+                .font(.caption)
+                .foregroundStyle(AppTheme.muted)
+        }
+    }
+}
+
+private struct TypingIndicatorBubble: View {
+    @State private var activeDot = 0
+    private let timer = Timer.publish(every: 0.35, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        HStack {
+            HStack(spacing: 5) {
+                ForEach(0..<3, id: \.self) { index in
+                    Circle()
+                        .fill(AppTheme.coral.opacity(activeDot == index ? 0.85 : 0.28))
+                        .frame(width: 7, height: 7)
+                        .scaleEffect(activeDot == index ? 1.15 : 1)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(Color.white.opacity(0.54))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.black.opacity(0.05), lineWidth: 1)
+            )
+            Spacer(minLength: 70)
+        }
+        .onReceive(timer) { _ in
+            withAnimation(.easeInOut(duration: 0.25)) {
+                activeDot = (activeDot + 1) % 3
+            }
+        }
+        .accessibilityLabel("正在等待回复")
+    }
+}
+
+private struct ReasoningSection: View {
+    var reasoning: String
+    var isThinking: Bool
+    @State private var isExpanded = false
+
+    private var isShowingBody: Bool {
+        isExpanded || isThinking
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                withAnimation { isExpanded.toggle() }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "brain")
+                    Text(isThinking ? "正在思考…" : "思维链")
+                    Image(systemName: isShowingBody ? "chevron.down" : "chevron.right")
+                }
+                .font(.caption)
+                .foregroundStyle(AppTheme.muted)
+            }
+            .buttonStyle(.plain)
+            .help(isShowingBody ? "收起思维链" : "展开思维链")
+
+            if isShowingBody {
+                Text(reasoning)
+                    .font(.system(size: 12))
+                    .foregroundStyle(AppTheme.muted)
+                    .textSelection(.enabled)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.black.opacity(0.035))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
         }
     }
 }
@@ -380,8 +525,21 @@ private struct ComposerView: View {
 
                 TextField("Ask anything or give a command...", text: $model.draft, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .lineLimit(1...4)
+                    .lineLimit(1...6)
                     .font(.system(size: 15))
+                    .onKeyPress(.return, phases: .down) { press in
+                        // While an input method (e.g. Chinese pinyin) is still
+                        // composing, Return must commit the composition, not send.
+                        if focusedEditorIsComposingText() {
+                            return .ignored
+                        }
+                        if press.modifiers.contains(.shift) {
+                            insertLineBreakInFocusedEditor()
+                            return .handled
+                        }
+                        Task { await model.sendDraft() }
+                        return .handled
+                    }
 
                 Button {
                     model.toggleDictation()
@@ -434,6 +592,20 @@ private struct ComposerView: View {
         .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isDropTargeted) { providers in
             importDroppedFiles(providers)
         }
+    }
+
+    /// Inserts a newline at the cursor via the window's field editor, which is
+    /// what actually edits a focused SwiftUI TextField on macOS.
+    private func insertLineBreakInFocusedEditor() {
+        guard let editor = NSApp.keyWindow?.firstResponder as? NSTextView else { return }
+        editor.insertNewlineIgnoringFieldEditor(nil)
+    }
+
+    /// True while the focused field editor holds an uncommitted input-method
+    /// composition (e.g. pinyin candidates that Return should confirm).
+    private func focusedEditorIsComposingText() -> Bool {
+        guard let editor = NSApp.keyWindow?.firstResponder as? NSTextView else { return false }
+        return editor.hasMarkedText()
     }
 
     private func importDroppedFiles(_ providers: [NSItemProvider]) -> Bool {
