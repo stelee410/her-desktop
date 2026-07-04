@@ -876,6 +876,27 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.messages.first?.content.contains("新会话") == true)
     }
 
+    func testSuccessfulChatReplyMarksAgentLLMOnline() async {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-chat-evidence-\(UUID().uuidString)", isDirectory: true)
+        let fakeLLM = FakeLLM(responses: [.init(role: "assistant", content: "你好", reasoningContent: nil, toolCalls: nil)])
+        let model = AppViewModel(cwd: root.path, agentLLM: fakeLLM)
+        model.serviceHealth = model.serviceHealth.map { service in
+            var updated = service
+            if service.id == "agentllm" {
+                updated.state = .unknown
+                updated.summary = "Check was interrupted; run Check Services."
+            }
+            return updated
+        }
+
+        await model.send("在吗")
+
+        let llm = model.serviceHealth.first { $0.id == "agentllm" }
+        XCTAssertEqual(llm?.state, .online)
+        XCTAssertTrue(llm?.summary.contains("live reply") == true)
+    }
+
     func testWebAppCapabilitiesCreateListOpenAndRemove() async {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-webapp-\(UUID().uuidString)", isDirectory: true)

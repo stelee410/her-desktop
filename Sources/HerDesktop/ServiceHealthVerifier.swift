@@ -104,8 +104,10 @@ final class ServiceHealthVerifier {
                 name: "AgentLLM",
                 kind: "model",
                 baseURL: config.agentLLMBaseURL,
-                state: .offline,
-                summary: error.localizedDescription,
+                state: Self.isCancellation(error) ? .unknown : .offline,
+                summary: Self.isCancellation(error)
+                    ? "Check was interrupted; run Check Services."
+                    : error.localizedDescription,
                 checkedAt: Date()
             )
         }
@@ -177,11 +179,18 @@ final class ServiceHealthVerifier {
                 name: "AgentMem",
                 kind: "memory",
                 baseURL: config.agentMemBaseURL,
-                state: .offline,
-                summary: error.localizedDescription,
+                state: Self.isCancellation(error) ? .unknown : .offline,
+                summary: Self.isCancellation(error)
+                    ? "Check was interrupted; run Check Services."
+                    : error.localizedDescription,
                 checkedAt: Date()
             )
         }
+    }
+
+    private static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        return (error as? URLError)?.code == .cancelled
     }
 
     private func checkAgentMemQueryDataPlane() async throws -> String {
@@ -229,6 +238,9 @@ final class ServiceHealthVerifier {
             do {
                 return try await session.data(for: request)
             } catch {
+                if Self.isCancellation(error) {
+                    throw error
+                }
                 lastError = error
                 if attempt < attempts {
                     try? await Task.sleep(nanoseconds: UInt64(attempt) * 350_000_000)

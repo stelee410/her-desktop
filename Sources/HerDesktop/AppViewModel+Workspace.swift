@@ -36,6 +36,20 @@ extension AppViewModel {
         await runCapability(capabilityID: "product.exportDiagnostics", arguments: arguments)
     }
 
+    /// A real assistant reply is direct evidence that the AgentLLM data
+    /// plane works, regardless of what the launch health check reported.
+    func markAgentLLMVerifiedByChat() {
+        guard let index = serviceHealth.firstIndex(where: { $0.id == "agentllm" }),
+              serviceHealth[index].state != .online else {
+            return
+        }
+        serviceHealth[index].state = .online
+        serviceHealth[index].summary = "Chat OK (verified by live reply)"
+        serviceHealth[index].checkedAt = Date()
+        tools = Self.tools(from: serviceHealth, model: config.agentLLMModel)
+        rebuildRunningTasks()
+    }
+
     func refreshServiceHealth() async {
         serviceHealth = serviceHealthVerifier.checkingSnapshot(pluginCount: plugins.count)
         tools = Self.tools(from: serviceHealth, model: config.agentLLMModel)

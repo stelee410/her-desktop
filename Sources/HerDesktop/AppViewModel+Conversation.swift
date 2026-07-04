@@ -350,6 +350,7 @@ extension AppViewModel {
         } else {
             messages.append(ChatMessage(role: .assistant, content: final))
         }
+        markAgentLLMVerifiedByChat()
     }
 
     func discardEmptyStreamedAssistantMessage() {

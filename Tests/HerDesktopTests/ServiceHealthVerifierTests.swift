@@ -46,6 +46,25 @@ final class ServiceHealthVerifierTests: XCTestCase {
         XCTAssertEqual(snapshot.first { $0.id == "plugins" }?.summary, "3 installed")
     }
 
+    func testCancelledCheckReportsUnknownInsteadOfOffline() async {
+        var config = HerAppConfig.empty
+        config.agentLLMAPIKey = "llm-key"
+        config.agentMemAPIKey = "mem-key"
+        MockURLProtocol.requestHandler = { _ in
+            throw URLError(.cancelled)
+        }
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.protocolClasses = [MockURLProtocol.self]
+        let verifier = ServiceHealthVerifier(config: config, session: URLSession(configuration: sessionConfig))
+
+        let checked = await verifier.checkAll(pluginCount: 1)
+
+        let llm = checked.first { $0.id == "agentllm" }
+        XCTAssertEqual(llm?.state, .unknown)
+        XCTAssertTrue(llm?.summary.contains("interrupted") == true)
+        XCTAssertEqual(checked.first { $0.id == "agentmem" }?.state, .unknown)
+    }
+
     func testCheckAllWithMissingKeysDoesNotNeedNetwork() async {
         let verifier = ServiceHealthVerifier(config: .empty)
         let checked = await verifier.checkAll(pluginCount: 2)

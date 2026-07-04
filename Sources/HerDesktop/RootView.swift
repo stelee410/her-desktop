@@ -21,7 +21,7 @@ struct RootView: View {
         .background(AppTheme.windowBackground)
         .modifier(VibePluginComposerHost())
         .task {
-            await model.bootstrapRuntime()
+            model.startBootstrap()
         }
     }
 }

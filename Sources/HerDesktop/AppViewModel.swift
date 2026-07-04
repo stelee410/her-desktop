@@ -78,6 +78,7 @@ final class AppViewModel: ObservableObject {
     var dictationTask: Task<Void, Never>?
     var dictationBaseText = ""
     var didBootstrapRuntime = false
+    var bootstrapTask: Task<Void, Never>?
 
     init(
         config explicitConfig: HerAppConfig? = nil,
@@ -167,6 +168,15 @@ final class AppViewModel: ObservableObject {
     deinit {
         localInboxBridgeServer.stop()
         webAppServer.stop()
+    }
+
+    /// Launch bootstrap in a model-owned task. SwiftUI `.task` cancels its
+    /// child work when the view identity changes during window setup, which
+    /// used to abort the launch health check and strand readiness at
+    /// "cancelled"; owning the task here detaches it from view lifetime.
+    func startBootstrap() {
+        guard bootstrapTask == nil else { return }
+        bootstrapTask = Task { await bootstrapRuntime() }
     }
 
     func bootstrapRuntime() async {
