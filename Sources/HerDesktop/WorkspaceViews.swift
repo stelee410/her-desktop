@@ -459,6 +459,48 @@ private struct WebAppsWorkspaceView: View {
 
     private var appList: some View {
         WorkspacePage(title: "Apps", subtitle: "\(model.webApps.count) 个本地小应用 · 数据保存在本机 SQLite") {
+            let widgetApps = model.webApps.filter { $0.widget != nil }
+            if !widgetApps.isEmpty {
+                WorkspacePanel(title: "小组件", trailing: "\(widgetApps.count)") {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 280), spacing: 12)],
+                        alignment: .leading,
+                        spacing: 12
+                    ) {
+                        ForEach(widgetApps) { app in
+                            if let url = model.webAppWidgetURL(app.id) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack {
+                                        Text(app.name)
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(AppTheme.ink)
+                                        Spacer()
+                                        Button {
+                                            model.openWebApp(app.id)
+                                        } label: {
+                                            Image(systemName: "arrow.up.right.square")
+                                                .font(.caption)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .foregroundStyle(AppTheme.coral)
+                                        .help("打开完整应用")
+                                    }
+                                    WebAppWebView(url: url)
+                                        .frame(height: app.widget?.height ?? 160)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                                        )
+                                }
+                                .padding(10)
+                                .background(Color.white.opacity(0.5))
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                            }
+                        }
+                    }
+                }
+            }
             if model.webApps.isEmpty {
                 WorkspacePanel(title: "还没有应用", trailing: "Vibe") {
                     VStack(alignment: .leading, spacing: 12) {

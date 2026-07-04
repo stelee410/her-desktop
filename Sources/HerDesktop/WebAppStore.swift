@@ -7,6 +7,13 @@ struct WebAppRuntime: Codable, Equatable {
     var entry: String
 }
 
+struct WebAppWidget: Codable, Equatable {
+    /// `www`-relative entry page for the compact card view, e.g. "widget.html".
+    var entry: String
+    /// Preferred card height in points.
+    var height: Double?
+}
+
 struct WebAppManifest: Identifiable, Codable, Equatable {
     var id: String
     var name: String
@@ -15,6 +22,7 @@ struct WebAppManifest: Identifiable, Codable, Equatable {
     var createdAt: Date
     var updatedAt: Date
     var runtime: WebAppRuntime?
+    var widget: WebAppWidget?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -24,6 +32,7 @@ struct WebAppManifest: Identifiable, Codable, Equatable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case runtime
+        case widget
     }
 }
 
@@ -118,6 +127,8 @@ final class WebAppStore: @unchecked Sendable {
         html: String,
         backendType: String? = nil,
         backendCode: String? = nil,
+        widgetHTML: String? = nil,
+        widgetHeight: Double? = nil,
         idHint: String = "",
         now: Date = Date()
     ) throws -> WebAppManifest {
@@ -141,6 +152,7 @@ final class WebAppStore: @unchecked Sendable {
         try fileManager.createDirectory(at: wwwDirectory(id: id), withIntermediateDirectories: true)
         try Data(trimmedHTML.utf8).write(to: wwwDirectory(id: id).appendingPathComponent("index.html"), options: .atomic)
         manifest.runtime = try writeBackendIfRequested(id: id, type: backendType, code: backendCode)
+        manifest.widget = try writeWidgetIfRequested(id: id, html: widgetHTML, height: widgetHeight)
         try save(manifest)
         return manifest
     }
@@ -153,6 +165,8 @@ final class WebAppStore: @unchecked Sendable {
         description: String? = nil,
         backendType: String? = nil,
         backendCode: String? = nil,
+        widgetHTML: String? = nil,
+        widgetHeight: Double? = nil,
         now: Date = Date()
     ) throws -> WebAppManifest {
         guard var manifest = manifest(id: id) else { throw StoreError.appNotFound(id) }
@@ -173,9 +187,22 @@ final class WebAppStore: @unchecked Sendable {
         if let runtime = try writeBackendIfRequested(id: id, type: backendType, code: backendCode) {
             manifest.runtime = runtime
         }
+        if let widget = try writeWidgetIfRequested(id: id, html: widgetHTML, height: widgetHeight) {
+            manifest.widget = widget
+        }
         manifest.updatedAt = now
         try save(manifest)
         return manifest
+    }
+
+    private func writeWidgetIfRequested(id: String, html: String?, height: Double?) throws -> WebAppWidget? {
+        guard let html = html?.trimmingCharacters(in: .whitespacesAndNewlines), !html.isEmpty else {
+            return nil
+        }
+        try fileManager.createDirectory(at: wwwDirectory(id: id), withIntermediateDirectories: true)
+        try Data(html.utf8).write(to: wwwDirectory(id: id).appendingPathComponent("widget.html"), options: .atomic)
+        let clamped = height.map { min(max($0, 80), 480) }
+        return WebAppWidget(entry: "widget.html", height: clamped)
     }
 
     private func writeBackendIfRequested(id: String, type: String?, code: String?) throws -> WebAppRuntime? {

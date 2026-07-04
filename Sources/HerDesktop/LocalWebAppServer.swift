@@ -320,13 +320,13 @@ final class LocalWebAppServer: @unchecked Sendable {
         return token
     }
 
-    func url(for appID: String) -> URL? {
+    func url(for appID: String, page: String = "") -> URL? {
         guard let port else { return nil }
         var components = URLComponents()
         components.scheme = "http"
         components.host = "127.0.0.1"
         components.port = Int(port)
-        components.path = "/apps/\(appID)/"
+        components.path = "/apps/\(appID)/" + page
         components.queryItems = [URLQueryItem(name: "token", value: token(for: appID))]
         return components.url
     }

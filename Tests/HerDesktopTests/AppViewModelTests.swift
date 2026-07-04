@@ -947,6 +947,35 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.auditEvents.contains { $0.type == "webapp.created" })
     }
 
+    func testWebAppCreateWithWidgetAndConversationReferences() async {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-webapp-widget-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(cwd: root.path)
+
+        let created = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "call-1",
+            functionName: "webapp_create",
+            capabilityID: "webapp.create",
+            arguments: [
+                "name": "Mood Log",
+                "html": "<html><body>main</body></html>",
+                "widget_html": "<html><body>mini</body></html>",
+                "widget_height": 140
+            ]
+        ))
+        XCTAssertEqual(created.title, "Web App Created")
+        let app = model.webApps.first { $0.id == "mood-log" }
+        XCTAssertEqual(app?.widget?.entry, "widget.html")
+        XCTAssertEqual(app?.widget?.height, 140)
+        XCTAssertTrue(model.webAppWidgetURL("mood-log")?.absoluteString.contains("widget.html") == true)
+
+        let toolMessage = ChatMessage(role: .tool, content: created.title + "\n" + created.content)
+        XCTAssertEqual(model.webAppReferences(for: toolMessage).map(\.id), ["mood-log"])
+        XCTAssertTrue(model.webAppReferences(for: ChatMessage(role: .user, content: "app_id: mood-log")).isEmpty,
+                      "user messages should not attach widget cards")
+        XCTAssertTrue(model.webAppReferences(for: ChatMessage(role: .tool, content: "unrelated")).isEmpty)
+    }
+
     func testWebAppCreateAndRemoveRequireApprovalByManifest() {
         let model = AppViewModel(cwd: URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-webapp-approval-\(UUID().uuidString)", isDirectory: true).path)

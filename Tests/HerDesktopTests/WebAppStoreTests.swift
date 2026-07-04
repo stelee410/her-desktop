@@ -78,6 +78,39 @@ final class WebAppStoreTests: XCTestCase {
         XCTAssertNil(store.staticFileURL(appID: manifest.id, requestPath: "../../other-app/www/index.html"))
     }
 
+    func testCreateWithWidgetWritesWidgetFileAndManifest() throws {
+        let store = makeStore("widget")
+
+        let manifest = try store.create(
+            name: "Tracker",
+            description: "",
+            html: "<p>main</p>",
+            widgetHTML: "<p>compact</p>",
+            widgetHeight: 999
+        )
+
+        XCTAssertEqual(manifest.widget?.entry, "widget.html")
+        XCTAssertEqual(manifest.widget?.height, 480, "height should clamp to 480")
+        let widget = try String(
+            contentsOf: store.wwwDirectory(id: manifest.id).appendingPathComponent("widget.html"),
+            encoding: .utf8
+        )
+        XCTAssertTrue(widget.contains("compact"))
+        XCTAssertNotNil(store.staticFileURL(appID: manifest.id, requestPath: "widget.html"))
+    }
+
+    func testUpdateAddsWidgetToExistingApp() throws {
+        let store = makeStore("widget-update")
+        let created = try store.create(name: "Plain", description: "", html: "<p>x</p>")
+        XCTAssertNil(created.widget)
+
+        let updated = try store.update(id: created.id, widgetHTML: "<p>w</p>", widgetHeight: 120)
+
+        XCTAssertEqual(updated.widget?.entry, "widget.html")
+        XCTAssertEqual(updated.widget?.height, 120)
+        XCTAssertEqual(store.manifest(id: created.id)?.widget?.height, 120)
+    }
+
     func testSlugSanitizesNames() {
         XCTAssertEqual(WebAppStore.slug(from: "My Habit App"), "my-habit-app")
         XCTAssertEqual(WebAppStore.slug(from: "  Spaced__Out.. "), "spaced-out")

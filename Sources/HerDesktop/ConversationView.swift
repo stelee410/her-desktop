@@ -347,6 +347,14 @@ private struct MessageBubble: View {
                         }
                     }
                 }
+                let referencedApps = model.webAppReferences(for: message)
+                if !referencedApps.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(referencedApps) { app in
+                            WebAppMessageCard(app: app, live: model.isRecentMessage(message.id))
+                        }
+                    }
+                }
                 Text(message.createdAt, style: .time)
                     .font(.caption2)
                     .foregroundStyle(AppTheme.muted)
@@ -361,6 +369,57 @@ private struct MessageBubble: View {
             )
             if message.role != .user { Spacer(minLength: 70) }
         }
+    }
+}
+
+/// A local web app referenced in the transcript: header with an open
+/// action, plus a live embedded widget for recent messages when the app
+/// declares one.
+private struct WebAppMessageCard: View {
+    @EnvironmentObject private var model: AppViewModel
+    var app: WebAppManifest
+    var live: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "macwindow.on.rectangle")
+                    .foregroundStyle(AppTheme.coral)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(app.name)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.ink)
+                    if !app.description.isEmpty {
+                        Text(app.description)
+                            .font(.caption2)
+                            .foregroundStyle(AppTheme.muted)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 12)
+                Button {
+                    model.openWebApp(app.id)
+                } label: {
+                    Label("打开", systemImage: "arrow.up.right.square")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+            }
+            if live, app.widget != nil, let url = model.webAppWidgetURL(app.id) {
+                WebAppWebView(url: url)
+                    .frame(height: app.widget?.height ?? 160)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                    )
+            }
+        }
+        .padding(10)
+        .frame(minWidth: 320, alignment: .leading)
+        .background(Color.white.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
 

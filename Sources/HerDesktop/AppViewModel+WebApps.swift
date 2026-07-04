@@ -31,6 +31,32 @@ extension AppViewModel {
         return webAppServer.url(for: id)
     }
 
+    func webAppWidgetURL(_ id: String) -> URL? {
+        guard let app = webApps.first(where: { $0.id == id }), let widget = app.widget else {
+            return nil
+        }
+        startWebAppServerIfNeeded()
+        return webAppServer.url(for: id, page: widget.entry)
+    }
+
+    /// Installed apps a message refers to (via capability results or URLs),
+    /// used to attach live widget cards in the conversation.
+    func webAppReferences(for message: ChatMessage) -> [WebAppManifest] {
+        guard message.role == .tool || message.role == .assistant, !webApps.isEmpty else {
+            return []
+        }
+        return webApps.filter { app in
+            message.content.contains("app_id: \(app.id)")
+                || message.content.contains("apps/\(app.id)/")
+        }
+    }
+
+    /// Live widgets only render inside a recent window of the transcript
+    /// so long conversations don't accumulate web views.
+    func isRecentMessage(_ id: UUID) -> Bool {
+        messages.suffix(12).contains { $0.id == id }
+    }
+
     func openWebApp(_ id: String) {
         guard webApps.contains(where: { $0.id == id }) else { return }
         selectedWebAppID = id
@@ -69,13 +95,17 @@ extension AppViewModel {
         }
         let backendType = stringArgument(arguments, keys: ["backend_type", "backendType", "runtime"], fallback: "")
         let backendCode = stringArgument(arguments, keys: ["backend_code", "backendCode"], fallback: "")
+        let widgetHTML = stringArgument(arguments, keys: ["widget_html", "widgetHTML"], fallback: "")
+        let widgetHeight = integerArgument(arguments, keys: ["widget_height", "widgetHeight"], fallback: 0)
         do {
             let manifest = try webAppStore.create(
                 name: name,
                 description: description,
                 html: html,
                 backendType: backendType.isEmpty ? nil : backendType,
-                backendCode: backendCode.isEmpty ? nil : backendCode
+                backendCode: backendCode.isEmpty ? nil : backendCode,
+                widgetHTML: widgetHTML.isEmpty ? nil : widgetHTML,
+                widgetHeight: widgetHeight > 0 ? Double(widgetHeight) : nil
             )
             refreshWebApps()
             audit(
@@ -126,6 +156,8 @@ extension AppViewModel {
         let description = stringArgument(arguments, keys: ["description", "summary"], fallback: "")
         let backendType = stringArgument(arguments, keys: ["backend_type", "backendType", "runtime"], fallback: "")
         let backendCode = stringArgument(arguments, keys: ["backend_code", "backendCode"], fallback: "")
+        let widgetHTML = stringArgument(arguments, keys: ["widget_html", "widgetHTML"], fallback: "")
+        let widgetHeight = integerArgument(arguments, keys: ["widget_height", "widgetHeight"], fallback: 0)
         do {
             let manifest = try webAppStore.update(
                 id: appID,
@@ -133,7 +165,9 @@ extension AppViewModel {
                 name: name.isEmpty ? nil : name,
                 description: description.isEmpty ? nil : description,
                 backendType: backendType.isEmpty ? nil : backendType,
-                backendCode: backendCode.isEmpty ? nil : backendCode
+                backendCode: backendCode.isEmpty ? nil : backendCode,
+                widgetHTML: widgetHTML.isEmpty ? nil : widgetHTML,
+                widgetHeight: widgetHeight > 0 ? Double(widgetHeight) : nil
             )
             // Restart on next request so replaced backend code takes effect.
             webAppProcessManager.stop(appID: appID)

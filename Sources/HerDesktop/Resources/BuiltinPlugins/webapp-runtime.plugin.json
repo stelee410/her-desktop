@@ -28,6 +28,14 @@
           "name" : {
             "description" : "Human-readable app name shown in the Apps page.",
             "type" : "string"
+          },
+          "widget_height" : {
+            "description" : "Optional widget card height in points (80-480, default 160).",
+            "type" : "integer"
+          },
+          "widget_html" : {
+            "description" : "Optional compact self-contained HTML for a small card view, shown inside conversations and the Apps dashboard. Same api/query contract as the main page.",
+            "type" : "string"
           }
         },
         "required" : [
@@ -71,6 +79,14 @@
           },
           "name" : {
             "description" : "Optional new display name.",
+            "type" : "string"
+          },
+          "widget_height" : {
+            "description" : "Optional widget card height in points (80-480).",
+            "type" : "integer"
+          },
+          "widget_html" : {
+            "description" : "Optional compact card HTML to add or replace the app widget.",
             "type" : "string"
           }
         },
@@ -150,6 +166,6 @@
   "description" : "Vibe-code small local web apps: single-file HTML hosted on a loopback server with per-app SQLite storage, shown in the Apps page as embedded pages.",
   "id" : "builtin.webapp-runtime",
   "name" : "WebApp Runtime",
-  "systemPromptAddendum" : "Local web apps are self-contained single-file HTML documents served from a loopback-only server. Each app has its own SQLite database reachable from page JavaScript via POST api/query with the token from the page URL query string. Apps may optionally declare a node or python backend process (standard library only) that listens on 127.0.0.1 at env PORT; the page reaches it via fetch('backend/<route>?token=' + token) and HER_WEBAPP_DB gives the backend the SQLite path. Prefer the static + SQLite form; add a backend only when page JavaScript is not enough. Creating, updating, and removing apps requires user approval — mention clearly in your reply when an app will run a local backend process. After webapp.create succeeds, call webapp.open so the user sees the app immediately.",
+  "systemPromptAddendum" : "Local web apps are self-contained single-file HTML documents served from a loopback-only server. Each app has its own SQLite database reachable from page JavaScript via POST api/query with the token from the page URL query string. Apps may optionally declare a node or python backend process (standard library only) that listens on 127.0.0.1 at env PORT; the page reaches it via fetch('backend/<route>?token=' + token) and HER_WEBAPP_DB gives the backend the SQLite path. Prefer the static + SQLite form; add a backend only when page JavaScript is not enough. Apps can also ship widget_html: a compact card rendered live inside conversations and the Apps dashboard — include one for apps whose state is worth glancing at (trackers, counters, lists). Creating, updating, and removing apps requires user approval — mention clearly in your reply when an app will run a local backend process. After webapp.create succeeds, call webapp.open so the user sees the app immediately.",
   "version" : "0.1.0"
 }
