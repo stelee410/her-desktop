@@ -35,7 +35,7 @@ flowchart TB
         end
 
         subgraph state["Local State Boundary: .her/"]
-            session["session.json<br/>stable session id + transcript"]
+            session["conversations/<br/>per-conversation transcripts + index"]
             attachments["attachments/<br/>copied local inputs"]
             plugins["plugins/<br/>installed local extensions"]
             drafts["plugin-drafts/<br/>vibe-coded packages awaiting review"]
@@ -180,7 +180,7 @@ flowchart TB
     end
 
     subgraph L4["Layer 4 - Local Persistence"]
-        localSession[".her/session.json"]
+        localSession[".her/conversations/<br/>index.json + per-conversation transcripts"]
         localPlugins[".her/plugins + plugin-drafts"]
         localData[".her/attachments + dreams + work-plan + workspace artifacts"]
         localAudit[".her/logs + inbox events<br/>audit + plugin lifecycle"]
@@ -246,7 +246,7 @@ flowchart LR
         webservice2["WebService Adapter<br/>AgentLLM media or third-party APIs"]
         skill2["Skill Adapter<br/>bundled/local SKILL.md"]
         mcpAdapter["MCP Adapter<br/>local JSON-RPC tools/call"]
-        sessionStore["SessionStore<br/>stable session id + transcript"]
+        sessionStore["ConversationStore<br/>multi-conversation transcripts, pin state, compact-on-delete"]
         llmClient["AgentLLMClient<br/>chat/tool/media gateway"]
         memClient["AgentMemClient<br/>query/add/relationship"]
         artifactStore["Artifact Store<br/>local previews + response manifests"]
