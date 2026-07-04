@@ -120,11 +120,29 @@ private struct ToolbarView: View {
     var body: some View {
         let status = PresenceCopy.serviceStatus(model.serviceHealth)
         HStack(spacing: 20) {
-            Picker("Project", selection: .constant(model.config.agentCode)) {
-                Text(model.config.agentCode).tag(model.config.agentCode)
+            HStack(spacing: 8) {
+                Picker("Conversation", selection: Binding(
+                    get: { model.activeConversationID },
+                    set: { model.switchConversation(to: $0) }
+                )) {
+                    ForEach(model.sortedConversations) { conversation in
+                        Text(conversation.pinned ? "📌 \(conversation.title)" : conversation.title)
+                            .tag(conversation.id)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 180)
+                .help("切换对话")
+
+                Button {
+                    model.newLocalConversation()
+                } label: {
+                    Image(systemName: "plus.circle")
+                        .foregroundStyle(AppTheme.coral)
+                }
+                .buttonStyle(.plain)
+                .help("新建对话")
             }
-            .labelsHidden()
-            .frame(width: 180)
 
             Spacer()
 

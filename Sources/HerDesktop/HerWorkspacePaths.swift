@@ -32,6 +32,11 @@ enum HerWorkspacePaths {
             .appendingPathComponent("session.json")
     }
 
+    static func conversationsDirectory(cwd: String = FileManager.default.currentDirectoryPath) -> URL {
+        localAgentDirectory(cwd: cwd)
+            .appendingPathComponent("conversations", isDirectory: true)
+    }
+
     static func workspaceDirectory(cwd: String = FileManager.default.currentDirectoryPath) -> URL {
         localAgentDirectory(cwd: cwd)
             .appendingPathComponent("workspace", isDirectory: true)

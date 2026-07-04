@@ -2,6 +2,8 @@ import SwiftUI
 
 struct SidebarView: View {
     @EnvironmentObject private var model: AppViewModel
+    @State private var isConversationListExpanded = true
+    @State private var conversationPendingDeletion: ConversationSummary?
     private var memoryRows: [SidebarMemoryRowState] {
         SidebarStateBuilder().memoryRows(
             profile: model.agentProfile,
@@ -34,6 +36,10 @@ struct SidebarView: View {
                     }
                 }
             }
+
+            Divider().opacity(0.5)
+
+            conversationListSection
 
             Divider().opacity(0.5)
 
@@ -96,10 +102,129 @@ struct SidebarView: View {
         .background(.ultraThinMaterial)
     }
 
+    private var conversationListSection: some View {
+        DisclosureGroup(isExpanded: $isConversationListExpanded) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(model.sortedConversations) { conversation in
+                        ConversationListRow(
+                            conversation: conversation,
+                            selected: conversation.id == model.activeConversationID,
+                            onSelect: {
+                                model.switchConversation(to: conversation.id)
+                                model.selectedSection = .today
+                            },
+                            onTogglePin: {
+                                model.togglePinConversation(conversation.id)
+                            },
+                            onDelete: {
+                                conversationPendingDeletion = conversation
+                            }
+                        )
+                    }
+                }
+                .padding(.top, 4)
+            }
+            .frame(maxHeight: 190)
+        } label: {
+            HStack {
+                Text("对话")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.ink)
+                Spacer()
+                Button {
+                    model.newLocalConversation()
+                    model.selectedSection = .today
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.coral)
+                }
+                .buttonStyle(.plain)
+                .help("新建对话")
+            }
+        }
+        .tint(AppTheme.muted)
+        .confirmationDialog(
+            "删除对话",
+            isPresented: Binding(
+                get: { conversationPendingDeletion != nil },
+                set: { if !$0 { conversationPendingDeletion = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: conversationPendingDeletion
+        ) { conversation in
+            Button("Compact 并保存记忆后删除") {
+                Task { await model.deleteConversation(conversation.id, compactingIntoMemory: true) }
+            }
+            Button("直接删除", role: .destructive) {
+                Task { await model.deleteConversation(conversation.id, compactingIntoMemory: false) }
+            }
+            Button("取消", role: .cancel) {}
+        } message: { conversation in
+            Text("要删除「\(conversation.title)」吗？删除前可以先把这段对话 compact 成摘要写入长期记忆。")
+        }
+    }
+
     private func initials(_ name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let first = trimmed.first else { return "H" }
         return String(first).uppercased()
+    }
+}
+
+private struct ConversationListRow: View {
+    var conversation: ConversationSummary
+    var selected: Bool
+    var onSelect: () -> Void
+    var onTogglePin: () -> Void
+    var onDelete: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: 8) {
+                Image(systemName: conversation.pinned ? "pin.fill" : "bubble.left")
+                    .font(.caption)
+                    .frame(width: 14)
+                    .foregroundStyle(conversation.pinned ? AppTheme.coral : AppTheme.muted)
+                Text(conversation.title)
+                    .font(.system(size: 13, weight: selected ? .semibold : .regular))
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                if isHovering {
+                    Button(action: onTogglePin) {
+                        Image(systemName: conversation.pinned ? "pin.slash" : "pin")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.muted)
+                    }
+                    .buttonStyle(.plain)
+                    .help(conversation.pinned ? "取消置顶" : "置顶对话")
+
+                    Button(action: onDelete) {
+                        Image(systemName: "trash")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.muted)
+                    }
+                    .buttonStyle(.plain)
+                    .help("删除对话")
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(selected ? AppTheme.coral : AppTheme.ink)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(selected ? AppTheme.rose.opacity(0.75) : (isHovering ? AppTheme.rose.opacity(0.35) : Color.clear))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .onHover { hovering in
+            isHovering = hovering
+        }
+        .contextMenu {
+            Button(conversation.pinned ? "取消置顶" : "置顶对话", action: onTogglePin)
+            Button("删除对话…", role: .destructive, action: onDelete)
+        }
     }
 }
 

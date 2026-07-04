@@ -44,6 +44,8 @@ final class AppViewModel: ObservableObject {
     @Published var pendingCapabilityRunTarget: CapabilityRunTarget?
     @Published var isVibePluginComposerPresented: Bool
     @Published var pendingVibePluginComposerPreset: VibePluginComposerPreset?
+    @Published var conversations: [ConversationSummary]
+    @Published private(set) var activeConversationID: String
 
     @Published private(set) var streamingAssistantMessageID: UUID?
 
@@ -56,7 +58,7 @@ final class AppViewModel: ObservableObject {
     private var agentLLM: any AgentLLMChatting
     private var pluginRegistry: PluginRegistry
     private var capabilityExecutor: CapabilityExecutor
-    private var sessionStore: SessionStore
+    private var conversationStore: ConversationStore
     private var auditStore: AuditEventStore
     private var inboxEventStore: InboxEventStore
     private var pluginEventStore: PluginEventStore
@@ -73,7 +75,7 @@ final class AppViewModel: ObservableObject {
     private var serviceHealthVerifier: ServiceHealthVerifier
     private var conversationContextBuilder: ConversationContextBuilder
     private let runtimeCwd: String
-    private let sessionID: String
+    private var sessionID: String { activeConversationID }
     private var dictationTask: Task<Void, Never>?
     private var dictationBaseText = ""
     private var didBootstrapRuntime = false
@@ -103,8 +105,8 @@ final class AppViewModel: ObservableObject {
             speechSynthesizer: speechSynthesizer,
             urlSession: urlSession
         )
-        let sessionStore = SessionStore(cwd: cwd)
-        self.sessionStore = sessionStore
+        let conversationStore = ConversationStore(cwd: cwd)
+        self.conversationStore = conversationStore
         self.auditStore = AuditEventStore(cwd: cwd)
         self.inboxEventStore = InboxEventStore(cwd: cwd)
         self.pluginEventStore = PluginEventStore(cwd: cwd)
@@ -117,9 +119,11 @@ final class AppViewModel: ObservableObject {
         self.localInboxBridgeServer = LocalInboxBridgeServer()
         self.serviceHealthVerifier = ServiceHealthVerifier(config: loaded, session: urlSession)
         self.conversationContextBuilder = ConversationContextBuilder()
-        self.sessionID = sessionStore.loadOrCreateSessionID()
+        let conversationBootstrap = conversationStore.bootstrap()
+        self.conversations = conversationBootstrap.conversations
+        self.activeConversationID = conversationBootstrap.activeConversationID
         let loadedPlugins = pluginRegistry.loadPlugins()
-        let restoredMessages = (try? sessionStore.load()) ?? []
+        let restoredMessages = conversationBootstrap.messages
         let restoredDrafts = (try? pluginDraftStore.loadAll()) ?? []
         let initialHealth = serviceHealthVerifier.initialSnapshot(pluginCount: loadedPlugins.count)
         self.serviceHealth = initialHealth
@@ -199,8 +203,26 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    var sortedConversations: [ConversationSummary] {
+        conversations.sorted { lhs, rhs in
+            if lhs.pinned != rhs.pinned { return lhs.pinned }
+            return lhs.updatedAt > rhs.updatedAt
+        }
+    }
+
     func newLocalConversation() {
         stopDictation()
+        saveSessionSnapshot()
+        let now = Date()
+        let summary = ConversationSummary(
+            id: UUID().uuidString,
+            title: ConversationStore.defaultTitle,
+            pinned: false,
+            createdAt: now,
+            updatedAt: now
+        )
+        conversations.insert(summary, at: 0)
+        activeConversationID = summary.id
         recordInteractionEvent(interactionEventBus.event(
             surface: .mac,
             kind: .localSessionStarted,
@@ -208,6 +230,94 @@ final class AppViewModel: ObservableObject {
             payload: ["sessionID": sessionID]
         ))
         messages = [ChatMessage(role: .assistant, content: "新会话已经准备好。我们从哪里开始？")]
+        resetConversationScopedState()
+        audit(
+            type: "session.new_conversation",
+            summary: "Started a new local conversation transcript.",
+            metadata: ["sessionID": sessionID]
+        )
+        saveSessionSnapshot()
+    }
+
+    func switchConversation(to id: String) {
+        guard id != activeConversationID, conversations.contains(where: { $0.id == id }) else { return }
+        stopDictation()
+        saveSessionSnapshot()
+        let loaded: [ChatMessage]
+        do {
+            loaded = try conversationStore.loadMessages(id: id)
+        } catch {
+            lastError = "Could not open the conversation: \(error.localizedDescription)"
+            return
+        }
+        activeConversationID = id
+        messages = loaded.isEmpty
+            ? [ChatMessage(role: .assistant, content: "新会话已经准备好。我们从哪里开始？")]
+            : loaded
+        resetConversationScopedState()
+        audit(
+            type: "session.switch_conversation",
+            summary: "Switched to another local conversation.",
+            metadata: ["sessionID": id]
+        )
+        persistConversationIndex()
+    }
+
+    func togglePinConversation(_ id: String) {
+        guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
+        conversations[index].pinned.toggle()
+        audit(
+            type: conversations[index].pinned ? "session.pin_conversation" : "session.unpin_conversation",
+            summary: conversations[index].pinned
+                ? "Pinned a local conversation."
+                : "Unpinned a local conversation.",
+            metadata: ["sessionID": id]
+        )
+        persistConversationIndex()
+    }
+
+    func deleteConversation(_ id: String, compactingIntoMemory: Bool) async {
+        guard let summary = conversations.first(where: { $0.id == id }) else { return }
+        let transcript: [ChatMessage]
+        if id == activeConversationID {
+            transcript = messages
+        } else {
+            transcript = (try? conversationStore.loadMessages(id: id)) ?? []
+        }
+        if compactingIntoMemory {
+            await compactConversationIntoMemory(id: id, title: summary.title, transcript: transcript)
+        }
+        conversations.removeAll { $0.id == id }
+        do {
+            try conversationStore.deleteConversationFile(id: id)
+        } catch {
+            lastError = "Could not delete the conversation file: \(error.localizedDescription)"
+        }
+        audit(
+            type: "session.delete_conversation",
+            summary: compactingIntoMemory
+                ? "Deleted a local conversation after compacting it into memory."
+                : "Deleted a local conversation.",
+            metadata: ["sessionID": id, "compacted": String(compactingIntoMemory)]
+        )
+        if id == activeConversationID {
+            if let next = sortedConversations.first {
+                activeConversationID = next.id
+                let loaded = (try? conversationStore.loadMessages(id: next.id)) ?? []
+                messages = loaded.isEmpty
+                    ? [ChatMessage(role: .assistant, content: "新会话已经准备好。我们从哪里开始？")]
+                    : loaded
+                resetConversationScopedState()
+                persistConversationIndex()
+            } else {
+                newLocalConversation()
+            }
+        } else {
+            persistConversationIndex()
+        }
+    }
+
+    private func resetConversationScopedState() {
         pendingApprovals = []
         capabilityActivities = []
         pendingAttachments = []
@@ -216,12 +326,6 @@ final class AppViewModel: ObservableObject {
         lastError = nil
         connectionState = config.hasLLMKey ? .ready : .offline
         rebuildRunningTasks()
-        audit(
-            type: "session.new_conversation",
-            summary: "Started a new local conversation transcript.",
-            metadata: ["sessionID": sessionID]
-        )
-        saveSessionSnapshot()
     }
 
     func clearComposer() {
@@ -3643,11 +3747,136 @@ final class AppViewModel: ObservableObject {
     }
 
     private func saveSessionSnapshot() {
+        // A conversation being deleted is no longer in the index; skip the
+        // write so its transcript file is not recreated.
+        guard let index = conversations.firstIndex(where: { $0.id == activeConversationID }) else { return }
         do {
-            try sessionStore.save(messages: messages, sessionID: sessionID)
+            try conversationStore.saveMessages(messages, id: activeConversationID)
         } catch {
             lastError = "Could not save local session: \(error.localizedDescription)"
         }
+        conversations[index].updatedAt = Date()
+        if conversations[index].title == ConversationStore.defaultTitle || conversations[index].title.isEmpty,
+           let autoTitle = ConversationStore.autoTitle(from: messages) {
+            conversations[index].title = autoTitle
+        }
+        persistConversationIndex()
+    }
+
+    private func persistConversationIndex() {
+        do {
+            try conversationStore.saveIndex(
+                conversations: conversations,
+                activeConversationID: activeConversationID
+            )
+        } catch {
+            lastError = "Could not save the conversation index: \(error.localizedDescription)"
+        }
+    }
+
+    private func compactConversationIntoMemory(id: String, title: String, transcript: [ChatMessage]) async {
+        let visible = transcript.filter { $0.role == .user || $0.role == .assistant }
+        guard !visible.isEmpty else {
+            audit(
+                type: "memory.compact_skipped",
+                summary: "The conversation had no user or assistant messages to compact.",
+                metadata: ["sessionID": id]
+            )
+            return
+        }
+        var summary = fallbackCompactSummary(from: visible, title: title)
+        if config.hasLLMKey {
+            do {
+                let reply = try await agentLLM.chat(messages: [
+                    .system("""
+                    你负责把一段即将删除的对话压缩成长期记忆。请输出一段中文摘要（250字以内），\
+                    保留用户提到的持久事实、偏好、决定、未完成的事项和重要结论，忽略寒暄和一次性细节。\
+                    只输出摘要正文，不要任何前缀或解释。
+                    """),
+                    .user(compactTranscriptText(from: visible, title: title))
+                ])
+                let content = ThinkTagStreamFilter.extract(from: reply.content ?? "").content
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !content.isEmpty {
+                    summary = content
+                }
+            } catch {
+                audit(
+                    type: "memory.compact_llm_failed",
+                    summary: "LLM compaction failed; falling back to extracted summary. \(error.localizedDescription)",
+                    metadata: ["sessionID": id]
+                )
+            }
+        }
+        guard config.hasMemKey else {
+            audit(
+                type: "memory.compact_skipped",
+                summary: "AgentMem is not configured; the compacted summary was not persisted.",
+                metadata: ["sessionID": id]
+            )
+            return
+        }
+        do {
+            let response = try await agentMem.addSummary(
+                summary,
+                sessionID: id,
+                metadata: [
+                    "surface": "mac",
+                    "source": "her-desktop",
+                    "writeback_mode": "conversation_compact",
+                    "conversation_title": title
+                ]
+            )
+            audit(
+                type: "memory.compact_writeback_succeeded",
+                summary: "The conversation was compacted into AgentMem before deletion.",
+                metadata: [
+                    "sessionID": id,
+                    "status": response.status,
+                    "taskID": response.taskID
+                ]
+            )
+        } catch {
+            audit(
+                type: "memory.compact_writeback_failed",
+                summary: error.localizedDescription,
+                metadata: ["sessionID": id]
+            )
+        }
+    }
+
+    private func compactTranscriptText(from visible: [ChatMessage], title: String, maxMessages: Int = 60) -> String {
+        let lines = visible.suffix(maxMessages).map { message in
+            let content = message.content
+                .replacingOccurrences(of: "\n", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let speaker = message.role == .user ? "用户" : "助手"
+            return "\(speaker): \(String(content.prefix(600)))"
+        }
+        return """
+        对话标题: \(title)
+
+        \(lines.joined(separator: "\n"))
+        """
+    }
+
+    private func fallbackCompactSummary(from visible: [ChatMessage], title: String, maxMessages: Int = 12) -> String {
+        let recent = visible.suffix(maxMessages)
+        let userLines = recent.filter { $0.role == .user }.map { message in
+            "- \(String(message.content.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines).prefix(700)))"
+        }
+        let assistantLines = recent.filter { $0.role == .assistant }.map { message in
+            "- \(String(message.content.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines).prefix(500)))"
+        }
+        return """
+        Her Desktop conversation compact (deleted conversation "\(title)").
+
+        User-stated durable candidates:
+        \(userLines.joined(separator: "\n"))
+
+        Assistant context:
+        \(assistantLines.joined(separator: "\n"))
+        """
     }
 
     private func persistTurnMemory(userInput: String, agentResponse: String, attachments: [MessageAttachment] = []) async {

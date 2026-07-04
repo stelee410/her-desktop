@@ -135,7 +135,8 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertFalse(model.messages.contains { $0.content.contains(inlineKey) })
         XCTAssertFalse(model.interactionEvents.contains { $0.summary.contains(inlineKey) })
 
-        let sessionText = try String(contentsOf: HerWorkspacePaths.sessionPath(cwd: root.path), encoding: .utf8)
+        let transcriptURL = ConversationStore(cwd: root.path).conversationURL(id: model.activeConversationID)
+        let sessionText = try String(contentsOf: transcriptURL, encoding: .utf8)
         XCTAssertTrue(sessionText.contains("[redacted]"))
         XCTAssertFalse(sessionText.contains(inlineKey))
     }
@@ -788,6 +789,8 @@ final class AppViewModelTests: XCTestCase {
         ]
         model.draft = "draft"
 
+        let previousConversationID = model.activeConversationID
+
         model.newLocalConversation()
 
         XCTAssertEqual(model.messages.count, 1)
@@ -796,8 +799,81 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.pendingAttachments.isEmpty)
         XCTAssertTrue(model.capabilityActivities.isEmpty)
         XCTAssertEqual(model.draft, "")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(".her/session.json").path))
+        XCTAssertNotEqual(model.activeConversationID, previousConversationID)
+        XCTAssertEqual(model.conversations.count, 2)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(".her/conversations/index.json").path))
+        let previousTranscript = try ConversationStore(cwd: root.path).loadMessages(id: previousConversationID)
+        XCTAssertTrue(previousTranscript.contains { $0.content == "old turn" })
         XCTAssertTrue(model.auditEvents.contains { $0.type == "session.new_conversation" })
+    }
+
+    func testSwitchConversationRestoresStoredTranscript() {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-switch-conversation-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(cwd: root.path)
+        let firstID = model.activeConversationID
+        model.messages.append(ChatMessage(role: .user, content: "first conversation turn"))
+
+        model.newLocalConversation()
+        model.messages.append(ChatMessage(role: .user, content: "second conversation turn"))
+        model.switchConversation(to: firstID)
+
+        XCTAssertEqual(model.activeConversationID, firstID)
+        XCTAssertTrue(model.messages.contains { $0.content == "first conversation turn" })
+        XCTAssertFalse(model.messages.contains { $0.content == "second conversation turn" })
+        XCTAssertTrue(model.auditEvents.contains { $0.type == "session.switch_conversation" })
+    }
+
+    func testTogglePinConversationSortsPinnedFirst() {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-pin-conversation-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(cwd: root.path)
+        let firstID = model.activeConversationID
+        model.newLocalConversation()
+
+        XCTAssertEqual(model.sortedConversations.first?.id, model.activeConversationID)
+
+        model.togglePinConversation(firstID)
+
+        XCTAssertEqual(model.sortedConversations.first?.id, firstID)
+        XCTAssertTrue(model.conversations.first { $0.id == firstID }?.pinned == true)
+        XCTAssertTrue(model.auditEvents.contains { $0.type == "session.pin_conversation" })
+
+        model.togglePinConversation(firstID)
+        XCTAssertTrue(model.conversations.first { $0.id == firstID }?.pinned == false)
+    }
+
+    func testDeleteActiveConversationSwitchesToRemainingOne() async {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-delete-conversation-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(cwd: root.path)
+        let firstID = model.activeConversationID
+        model.messages.append(ChatMessage(role: .user, content: "keep me"))
+        model.newLocalConversation()
+        let secondID = model.activeConversationID
+
+        await model.deleteConversation(secondID, compactingIntoMemory: false)
+
+        XCTAssertEqual(model.conversations.count, 1)
+        XCTAssertEqual(model.activeConversationID, firstID)
+        XCTAssertTrue(model.messages.contains { $0.content == "keep me" })
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: ConversationStore(cwd: root.path).conversationURL(id: secondID).path
+        ))
+        XCTAssertTrue(model.auditEvents.contains { $0.type == "session.delete_conversation" })
+    }
+
+    func testDeleteLastConversationCreatesFreshOne() async {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-delete-last-conversation-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(cwd: root.path)
+        let onlyID = model.activeConversationID
+
+        await model.deleteConversation(onlyID, compactingIntoMemory: false)
+
+        XCTAssertEqual(model.conversations.count, 1)
+        XCTAssertNotEqual(model.activeConversationID, onlyID)
+        XCTAssertTrue(model.messages.first?.content.contains("新会话") == true)
     }
 
     func testClearComposerClearsDraftAttachmentsAndErrors() {
