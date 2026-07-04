@@ -15,6 +15,7 @@ enum WorkspaceSection: String, CaseIterable, Identifiable, Codable, Equatable {
     case today
     case memory
     case projects
+    case apps
     case tools
     case agents
 
@@ -25,6 +26,7 @@ enum WorkspaceSection: String, CaseIterable, Identifiable, Codable, Equatable {
         case .today: return "Today"
         case .memory: return "Memory"
         case .projects: return "Projects"
+        case .apps: return "Apps"
         case .tools: return "Tools"
         case .agents: return "Agents"
         }
@@ -35,6 +37,7 @@ enum WorkspaceSection: String, CaseIterable, Identifiable, Codable, Equatable {
         case .today: return "sun.max"
         case .memory: return "doc.text"
         case .projects: return "briefcase"
+        case .apps: return "macwindow.on.rectangle"
         case .tools: return "square.grid.2x2"
         case .agents: return "circle.hexagongrid"
         }

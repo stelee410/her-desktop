@@ -88,7 +88,7 @@ final class AppViewModelTests: XCTestCase {
         model.selectedSection = .tools
         XCTAssertEqual(model.selectedSection, .tools)
 
-        XCTAssertEqual(WorkspaceSection.allCases.map(\.title), ["Today", "Memory", "Projects", "Tools", "Agents"])
+        XCTAssertEqual(WorkspaceSection.allCases.map(\.title), ["Today", "Memory", "Projects", "Apps", "Tools", "Agents"])
     }
 
     func testMissingAgentLLMKeyUsesConversationSetupPrompt() async throws {
@@ -874,6 +874,67 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(model.conversations.count, 1)
         XCTAssertNotEqual(model.activeConversationID, onlyID)
         XCTAssertTrue(model.messages.first?.content.contains("新会话") == true)
+    }
+
+    func testWebAppCapabilitiesCreateListOpenAndRemove() async {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-webapp-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(cwd: root.path)
+
+        let created = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "call-1",
+            functionName: "webapp_create",
+            capabilityID: "webapp.create",
+            arguments: [
+                "name": "Habit Tracker",
+                "description": "check-ins",
+                "html": "<html><body>habits</body></html>"
+            ]
+        ))
+        XCTAssertEqual(created.title, "Web App Created")
+        XCTAssertTrue(created.content.contains("app_id: habit-tracker"))
+        XCTAssertTrue(created.content.contains("http://127.0.0.1:"))
+        XCTAssertEqual(model.webApps.map(\.id), ["habit-tracker"])
+
+        let listed = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "call-2",
+            functionName: "webapp_list",
+            capabilityID: "webapp.list",
+            arguments: [:]
+        ))
+        XCTAssertTrue(listed.content.contains("habit-tracker"))
+
+        let opened = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "call-3",
+            functionName: "webapp_open",
+            capabilityID: "webapp.open",
+            arguments: ["app_id": "habit-tracker"]
+        ))
+        XCTAssertEqual(opened.title, "Web App Opened")
+        XCTAssertEqual(model.selectedWebAppID, "habit-tracker")
+        XCTAssertEqual(model.selectedSection, .apps)
+
+        let removed = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "call-4",
+            functionName: "webapp_remove",
+            capabilityID: "webapp.remove",
+            arguments: ["app_id": "habit-tracker"]
+        ))
+        XCTAssertEqual(removed.title, "Web App Removed")
+        XCTAssertTrue(model.webApps.isEmpty)
+        XCTAssertNil(model.selectedWebAppID)
+        XCTAssertTrue(model.auditEvents.contains { $0.type == "webapp.created" })
+    }
+
+    func testWebAppCreateAndRemoveRequireApprovalByManifest() {
+        let model = AppViewModel(cwd: URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-webapp-approval-\(UUID().uuidString)", isDirectory: true).path)
+
+        XCTAssertTrue(model.requiresApproval(capabilityID: "webapp.create"))
+        XCTAssertTrue(model.requiresApproval(capabilityID: "webapp.update"))
+        XCTAssertTrue(model.requiresApproval(capabilityID: "webapp.remove"))
+        XCTAssertFalse(model.requiresApproval(capabilityID: "webapp.list"))
+        XCTAssertFalse(model.requiresApproval(capabilityID: "webapp.open"))
     }
 
     func testClearComposerClearsDraftAttachmentsAndErrors() {

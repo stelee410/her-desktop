@@ -1,0 +1,139 @@
+{
+  "author" : "Her",
+  "capabilities" : [
+    {
+      "adapter" : {
+        "type" : "native"
+      },
+      "description" : "Create a local mini web app from a complete single-file HTML document. The app is hosted on a loopback-only server with its own SQLite database. Inside the HTML, call the data API with: fetch('api/query?token=' + new URLSearchParams(location.search).get('token'), {method:'POST', body: JSON.stringify({sql:'...', params:[...]})}). The response is {ok, columns, rows, rows_changed, last_insert_row_id}. Keep everything inline (no external CDN scripts or styles).",
+      "id" : "webapp.create",
+      "inputSchema" : {
+        "properties" : {
+          "description" : {
+            "description" : "One-line summary of what the app does.",
+            "type" : "string"
+          },
+          "html" : {
+            "description" : "Complete self-contained HTML document (inline CSS/JS, no external resources).",
+            "type" : "string"
+          },
+          "name" : {
+            "description" : "Human-readable app name shown in the Apps page.",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "name",
+          "html"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "webapp.create",
+      "kind" : "native",
+      "requiresApproval" : true,
+      "title" : "Create local web app"
+    },
+    {
+      "adapter" : {
+        "type" : "native"
+      },
+      "description" : "Replace the HTML of an installed local web app, and optionally rename it. The app keeps its SQLite data.",
+      "id" : "webapp.update",
+      "inputSchema" : {
+        "properties" : {
+          "app_id" : {
+            "description" : "ID of the installed web app (see webapp.list).",
+            "type" : "string"
+          },
+          "description" : {
+            "description" : "Optional new one-line summary.",
+            "type" : "string"
+          },
+          "html" : {
+            "description" : "Complete replacement HTML document.",
+            "type" : "string"
+          },
+          "name" : {
+            "description" : "Optional new display name.",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "app_id",
+          "html"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "webapp.update",
+      "kind" : "native",
+      "requiresApproval" : true,
+      "title" : "Update local web app"
+    },
+    {
+      "adapter" : {
+        "type" : "native"
+      },
+      "description" : "List installed local web apps with their ids, names, and local URLs.",
+      "id" : "webapp.list",
+      "inputSchema" : {
+        "properties" : {},
+        "type" : "object"
+      },
+      "invocation" : "webapp.list",
+      "kind" : "native",
+      "requiresApproval" : false,
+      "title" : "List local web apps"
+    },
+    {
+      "adapter" : {
+        "type" : "native"
+      },
+      "description" : "Open an installed local web app in the Apps page so the user can see it.",
+      "id" : "webapp.open",
+      "inputSchema" : {
+        "properties" : {
+          "app_id" : {
+            "description" : "ID of the installed web app (see webapp.list).",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "app_id"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "webapp.open",
+      "kind" : "native",
+      "requiresApproval" : false,
+      "title" : "Open local web app"
+    },
+    {
+      "adapter" : {
+        "type" : "native"
+      },
+      "description" : "Delete an installed local web app, including its SQLite data.",
+      "id" : "webapp.remove",
+      "inputSchema" : {
+        "properties" : {
+          "app_id" : {
+            "description" : "ID of the installed web app (see webapp.list).",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "app_id"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "webapp.remove",
+      "kind" : "native",
+      "requiresApproval" : true,
+      "title" : "Remove local web app"
+    }
+  ],
+  "description" : "Vibe-code small local web apps: single-file HTML hosted on a loopback server with per-app SQLite storage, shown in the Apps page as embedded pages.",
+  "id" : "builtin.webapp-runtime",
+  "name" : "WebApp Runtime",
+  "systemPromptAddendum" : "Local web apps are self-contained single-file HTML documents served from a loopback-only server. Each app has its own SQLite database reachable from page JavaScript via POST api/query with the token from the page URL query string. Creating, updating, and removing apps requires user approval. After webapp.create succeeds, call webapp.open so the user sees the app immediately.",
+  "version" : "0.1.0"
+}

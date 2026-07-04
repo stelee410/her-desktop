@@ -36,6 +36,8 @@ final class AppViewModel: ObservableObject {
     @Published var conversations: [ConversationSummary]
     @Published var activeConversationID: String
     @Published var isInspectorPresented: Bool
+    @Published var webApps: [WebAppManifest]
+    @Published var selectedWebAppID: String?
 
     @Published var streamingAssistantMessageID: UUID?
 
@@ -54,6 +56,8 @@ final class AppViewModel: ObservableObject {
     var pluginRegistry: PluginRegistry
     var capabilityExecutor: CapabilityExecutor
     var conversationStore: ConversationStore
+    var webAppStore: WebAppStore
+    let webAppServer = LocalWebAppServer()
     var auditStore: AuditEventStore
     var inboxEventStore: InboxEventStore
     var pluginEventStore: PluginEventStore
@@ -102,6 +106,10 @@ final class AppViewModel: ObservableObject {
         )
         let conversationStore = ConversationStore(cwd: cwd)
         self.conversationStore = conversationStore
+        let webAppStore = WebAppStore(cwd: cwd)
+        self.webAppStore = webAppStore
+        self.webApps = webAppStore.loadAll()
+        self.selectedWebAppID = nil
         self.auditStore = AuditEventStore(cwd: cwd)
         self.inboxEventStore = InboxEventStore(cwd: cwd)
         self.pluginEventStore = PluginEventStore(cwd: cwd)
@@ -158,6 +166,7 @@ final class AppViewModel: ObservableObject {
 
     deinit {
         localInboxBridgeServer.stop()
+        webAppServer.stop()
     }
 
     func bootstrapRuntime() async {
@@ -167,6 +176,7 @@ final class AppViewModel: ObservableObject {
         refreshPluginEvents()
         refreshWebServiceArtifacts()
         refreshDreamContext()
+        startWebAppServerIfNeeded()
         await reloadPlugins()
         await refreshServiceHealth()
     }

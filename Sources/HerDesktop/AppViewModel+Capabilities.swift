@@ -233,6 +233,21 @@ extension AppViewModel {
         if invocation.capabilityID == "plugin.export" {
             return exportPluginCapability(arguments: invocation.arguments)
         }
+        if invocation.capabilityID == "webapp.create" {
+            return createWebAppCapability(arguments: invocation.arguments)
+        }
+        if invocation.capabilityID == "webapp.update" {
+            return updateWebAppCapability(arguments: invocation.arguments)
+        }
+        if invocation.capabilityID == "webapp.list" {
+            return listWebAppsCapability()
+        }
+        if invocation.capabilityID == "webapp.open" {
+            return openWebAppCapability(arguments: invocation.arguments)
+        }
+        if invocation.capabilityID == "webapp.remove" {
+            return removeWebAppCapability(arguments: invocation.arguments)
+        }
         return await capabilityExecutor.execute(invocation)
     }
 

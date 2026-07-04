@@ -37,6 +37,11 @@ enum HerWorkspacePaths {
             .appendingPathComponent("conversations", isDirectory: true)
     }
 
+    static func webAppsDirectory(cwd: String = FileManager.default.currentDirectoryPath) -> URL {
+        localAgentDirectory(cwd: cwd)
+            .appendingPathComponent("webapps", isDirectory: true)
+    }
+
     static func workspaceDirectory(cwd: String = FileManager.default.currentDirectoryPath) -> URL {
         localAgentDirectory(cwd: cwd)
             .appendingPathComponent("workspace", isDirectory: true)
