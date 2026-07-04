@@ -33,7 +33,15 @@ WebApp 运行时 → widget 化。
   服务状态收敛为单图标 + popover；移除重复 chips、侧边栏信号块与
   四张冗余 Inspector 卡片（净 -700 行 UI 代码）。
 
-## 下一步
+## 已完成（2026-07-05）
+
+- readiness 启动误报修复（#2）：bootstrap 改为 model 持有的任务；中断的
+  健康检查报告为 unknown；真实聊天回复直接确认 AgentLLM 在线。
+- WebApp Runtime Phase A（静态 + SQLite）、Phase B（node/python 后端
+  进程，#3）、Phase C（对话内 widget 卡片 + Apps Dashboard，#4）全部
+  落地，细节见对应 issue 与提交记录。
+
+## 历史方案记录
 
 ### Phase 3 — WebApp Runtime（Phase A，不需要 Node）
 
