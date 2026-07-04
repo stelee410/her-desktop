@@ -403,6 +403,15 @@ private struct ToolsWorkspaceView: View {
                 WorkspaceMetric(title: "Plugins", value: "\(model.plugins.count)", icon: "puzzlepiece.extension")
                 WorkspaceMetric(title: "Capabilities", value: "\(capabilityCount)", icon: "bolt")
                 WorkspaceMetric(title: "Drafts", value: "\(model.generatedPluginDrafts.count)", icon: "shippingbox")
+                Spacer()
+                Button {
+                    model.isVibePluginComposerPresented = true
+                } label: {
+                    Label("Vibe 新插件", systemImage: "wand.and.stars")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppTheme.coral)
+                .help("用 AI 生成一个新插件草稿")
             }
 
             WorkspacePanel(title: "Capability Library", trailing: "\(capabilityCount)") {

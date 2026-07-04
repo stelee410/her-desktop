@@ -10,11 +10,16 @@ struct RootView: View {
             Divider().opacity(0.45)
             CenterWorkspaceView()
                 .frame(minWidth: 560)
-            Divider().opacity(0.45)
-            InspectorView()
-                .frame(width: 330)
+            if model.isInspectorPresented {
+                Divider().opacity(0.45)
+                InspectorView()
+                    .frame(width: 330)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
         }
+        .animation(.snappy(duration: 0.22), value: model.isInspectorPresented)
         .background(AppTheme.windowBackground)
+        .modifier(VibePluginComposerHost())
         .task {
             await model.bootstrapRuntime()
         }

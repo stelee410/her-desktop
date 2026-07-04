@@ -37,6 +37,11 @@ struct HerDesktopApp: App {
                 }
                 .keyboardShortcut("i", modifiers: [.command, .shift])
 
+                Button(viewModel.isInspectorPresented ? "Hide Inspector" : "Show Inspector") {
+                    viewModel.isInspectorPresented.toggle()
+                }
+                .keyboardShortcut("i", modifiers: [.command, .option])
+
                 Divider()
 
                 Button(viewModel.connectionState == .listening ? "Stop Dictation" : "Start Dictation") {

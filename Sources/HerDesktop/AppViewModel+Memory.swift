@@ -60,7 +60,6 @@ extension AppViewModel {
         }
     }
 
-    @discardableResult
     func refreshAgentProfile() async {
         guard config.hasMemKey else {
             agentProfile = .empty(userID: config.userID)

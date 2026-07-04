@@ -4,6 +4,73 @@ import UniformTypeIdentifiers
 
 struct InspectorView: View {
     @EnvironmentObject private var model: AppViewModel
+    @State private var pane: Pane = .attention
+
+    private enum Pane: String, CaseIterable, Identifiable {
+        case attention
+        case system
+        case activity
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .attention: return "待办"
+            case .system: return "系统"
+            case .activity: return "活动"
+            }
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Picker("Inspector Pane", selection: $pane) {
+                ForEach(Pane.allCases) { pane in
+                    Text(pane.title).tag(pane)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    switch pane {
+                    case .attention:
+                        ApprovalQueueCard()
+                        GeneratedPluginDraftsCard()
+                        RunningTasksCard()
+                        CapabilityActivityCard()
+                        ActivePlanCard()
+                    case .system:
+                        ProductReadinessCard()
+                        ServiceHealthCard()
+                        ServiceConfigurationCard()
+                        ModelRoutingCard()
+                        ConnectedToolsCard()
+                        LocalInboxBridgeCard()
+                        StateCard()
+                    case .activity:
+                        AgentLoopCard()
+                        InteractionEventsCard()
+                        PluginLifecycleCard()
+                        WebServiceArtifactsCard()
+                        AuditTrailCard()
+                    }
+                }
+                .padding(14)
+            }
+        }
+        .background(Color.white.opacity(0.24))
+    }
+}
+
+/// Hosts the Vibe plugin composer sheet at the window root so conversational
+/// and Tools-driven plugin creation stay reachable while the inspector is
+/// hidden.
+struct VibePluginComposerHost: ViewModifier {
+    @EnvironmentObject private var model: AppViewModel
     @State private var pluginName = ""
     @State private var pluginDescription = ""
     @State private var pluginKind = "skill"
@@ -19,83 +86,31 @@ struct InspectorView: View {
     @State private var pluginUpdateTargetID = ""
     @State private var pluginExistingPackageContext = ""
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                PartnerCommandCenterCard(
-                    pluginName: $pluginName,
-                    pluginDescription: $pluginDescription,
-                    pluginKind: $pluginKind,
-                    pluginRequiresApproval: $pluginRequiresApproval,
-                    pluginURL: $pluginURL,
-                    pluginMethod: $pluginMethod,
-                    pluginMCPMethod: $pluginMCPMethod,
-                    pluginMCPToolName: $pluginMCPToolName,
-                    pluginMCPInputSchemaJSON: $pluginMCPInputSchemaJSON,
-                    pluginCommandPath: $pluginCommandPath,
-                    pluginCommandArguments: $pluginCommandArguments,
-                    pluginPackageJSON: $pluginPackageJSON
-                )
-                ProductReadinessCard()
-                ActivePlanCard()
-                ConnectedToolsCard()
-                ServiceHealthCard()
-                ServiceConfigurationCard()
-                ModelRoutingCard()
-                SmallCardsRow()
-                AgentLoopCard()
-                RunningTasksCard()
-                InteractionEventsCard()
-                LocalInboxBridgeCard()
-                ApprovalQueueCard()
-                CapabilityActivityCard()
-                WebServiceArtifactsCard()
-                GeneratedPluginDraftsCard()
-                PluginLifecycleCard()
-                AuditTrailCard()
-                StateCard()
-                PluginCreatorCard(
-                    pluginName: $pluginName,
-                    pluginDescription: $pluginDescription,
-                    pluginKind: $pluginKind,
-                    pluginRequiresApproval: $pluginRequiresApproval,
-                    pluginURL: $pluginURL,
-                    pluginMethod: $pluginMethod,
-                    pluginMCPMethod: $pluginMCPMethod,
-                    pluginMCPToolName: $pluginMCPToolName,
-                    pluginMCPInputSchemaJSON: $pluginMCPInputSchemaJSON,
-                    pluginCommandPath: $pluginCommandPath,
-                    pluginCommandArguments: $pluginCommandArguments,
-                    pluginPackageJSON: $pluginPackageJSON
-                )
-                PluginLibraryCard()
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: model.pendingVibePluginComposerPreset?.id) { _, _ in
+                applyPendingComposerPreset()
             }
-            .padding(18)
-        }
-        .background(Color.white.opacity(0.24))
-        .onChange(of: model.pendingVibePluginComposerPreset?.id) { _, _ in
-            applyPendingComposerPreset()
-        }
-        .sheet(isPresented: $model.isVibePluginComposerPresented) {
-            VibePluginComposerSheet(
-                isPresented: $model.isVibePluginComposerPresented,
-                pluginName: $pluginName,
-                pluginDescription: $pluginDescription,
-                pluginKind: $pluginKind,
-                pluginRequiresApproval: $pluginRequiresApproval,
-                pluginURL: $pluginURL,
-                pluginMethod: $pluginMethod,
-                pluginMCPMethod: $pluginMCPMethod,
-                pluginMCPToolName: $pluginMCPToolName,
-                pluginMCPInputSchemaJSON: $pluginMCPInputSchemaJSON,
-                pluginCommandPath: $pluginCommandPath,
-                pluginCommandArguments: $pluginCommandArguments,
-                pluginPackageJSON: $pluginPackageJSON,
-                pluginUpdateTargetID: $pluginUpdateTargetID,
-                pluginExistingPackageContext: $pluginExistingPackageContext
-            )
-            .environmentObject(model)
-        }
+            .sheet(isPresented: $model.isVibePluginComposerPresented) {
+                VibePluginComposerSheet(
+                    isPresented: $model.isVibePluginComposerPresented,
+                    pluginName: $pluginName,
+                    pluginDescription: $pluginDescription,
+                    pluginKind: $pluginKind,
+                    pluginRequiresApproval: $pluginRequiresApproval,
+                    pluginURL: $pluginURL,
+                    pluginMethod: $pluginMethod,
+                    pluginMCPMethod: $pluginMCPMethod,
+                    pluginMCPToolName: $pluginMCPToolName,
+                    pluginMCPInputSchemaJSON: $pluginMCPInputSchemaJSON,
+                    pluginCommandPath: $pluginCommandPath,
+                    pluginCommandArguments: $pluginCommandArguments,
+                    pluginPackageJSON: $pluginPackageJSON,
+                    pluginUpdateTargetID: $pluginUpdateTargetID,
+                    pluginExistingPackageContext: $pluginExistingPackageContext
+                )
+                .environmentObject(model)
+            }
     }
 
     private func applyPendingComposerPreset() {
@@ -235,272 +250,6 @@ private struct ProductReadinessCard: View {
         case .attention: return AppTheme.coral
         case .optional: return AppTheme.muted
         }
-    }
-}
-
-private struct PartnerCommandCenterCard: View {
-    @EnvironmentObject private var model: AppViewModel
-    @Binding var pluginName: String
-    @Binding var pluginDescription: String
-    @Binding var pluginKind: String
-    @Binding var pluginRequiresApproval: Bool
-    @Binding var pluginURL: String
-    @Binding var pluginMethod: String
-    @Binding var pluginMCPMethod: String
-    @Binding var pluginMCPToolName: String
-    @Binding var pluginMCPInputSchemaJSON: String
-    @Binding var pluginCommandPath: String
-    @Binding var pluginCommandArguments: String
-    @Binding var pluginPackageJSON: String
-
-    private let columns = [
-        GridItem(.flexible(), spacing: 8),
-        GridItem(.flexible(), spacing: 8)
-    ]
-
-    var body: some View {
-        let status = PresenceCopy.serviceStatus(model.serviceHealth)
-        Panel(title: "Command Center", trailing: status.title) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top, spacing: 10) {
-                    ZStack {
-                        Circle()
-                            .fill(AppTheme.coral.opacity(0.16))
-                        Text("∞")
-                            .font(.system(size: 25, weight: .light))
-                            .foregroundStyle(AppTheme.coral)
-                    }
-                    .frame(width: 44, height: 44)
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Her Digital Partner")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(AppTheme.ink)
-                            .lineLimit(1)
-                        Text(partnerLine)
-                            .font(.caption)
-                            .foregroundStyle(AppTheme.muted)
-                            .lineLimit(2)
-                    }
-
-                    Spacer(minLength: 0)
-
-                    Image(systemName: status.systemImage)
-                        .foregroundStyle(color(for: status.tone))
-                }
-
-                LazyVGrid(columns: columns, spacing: 8) {
-                    CommandMetricTile(
-                        title: "Services",
-                        value: serviceValue,
-                        detail: serviceDetail,
-                        icon: "antenna.radiowaves.left.and.right"
-                    )
-                    CommandMetricTile(
-                        title: "Capabilities",
-                        value: "\(capabilityCount)",
-                        detail: "\(model.plugins.count) plugins",
-                        icon: "puzzlepiece.extension"
-                    )
-                    CommandMetricTile(
-                        title: "Review",
-                        value: "\(reviewCount)",
-                        detail: reviewDetail,
-                        icon: reviewCount == 0 ? "checkmark.shield" : "hand.raised"
-                    )
-                    CommandMetricTile(
-                        title: "Inbox",
-                        value: model.localInboxBridgeState.status.rawValue.capitalized,
-                        detail: model.localInboxBridgeState.endpoint,
-                        icon: "tray.and.arrow.down"
-                    )
-                }
-
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: signalIcon)
-                        .foregroundStyle(signalColor)
-                        .frame(width: 18)
-                    Text(signalLine)
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.muted)
-                        .lineLimit(3)
-                        .textSelection(.enabled)
-                }
-                .padding(9)
-                .background(Color.white.opacity(0.40))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                LazyVGrid(columns: columns, spacing: 8) {
-                    Button {
-                        Task { await model.refreshServiceHealth() }
-                    } label: {
-                        Label("Check", systemImage: "arrow.clockwise")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button {
-                        model.isVibePluginComposerPresented = true
-                    } label: {
-                        Label("Vibe", systemImage: "wand.and.sparkles")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(AppTheme.coral)
-
-                    Button {
-                        model.openPluginDirectory()
-                    } label: {
-                        Label("Plugins", systemImage: "folder")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button {
-                        toggleInboxBridge()
-                    } label: {
-                        Label(inboxButtonTitle, systemImage: inboxButtonIcon)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(model.localInboxBridgeState.status == .starting)
-                }
-                .controlSize(.small)
-            }
-        }
-    }
-
-    private var partnerLine: String {
-        "\(model.config.agentLLMModel) · \(model.agentProfile.relationship)"
-    }
-
-    private var serviceValue: String {
-        let remote = remoteServices
-        let online = remote.filter { $0.state == .online }.count
-        return "\(online)/\(max(remote.count, 2))"
-    }
-
-    private var serviceDetail: String {
-        if model.serviceHealth.contains(where: { $0.state == .checking }) {
-            return "Checking"
-        }
-        return model.connectionState.rawValue.capitalized
-    }
-
-    private var remoteServices: [ServiceHealth] {
-        model.serviceHealth.filter { $0.id == "agentllm" || $0.id == "agentmem" }
-    }
-
-    private var capabilityCount: Int {
-        model.plugins.flatMap(\.capabilities).count
-    }
-
-    private var reviewCount: Int {
-        model.pendingApprovals.count + model.generatedPluginDrafts.count
-    }
-
-    private var reviewDetail: String {
-        if reviewCount == 0 { return "Clear" }
-        let approvals = model.pendingApprovals.count
-        let drafts = model.generatedPluginDrafts.count
-        return "\(approvals) approvals · \(drafts) drafts"
-    }
-
-    private var signalLine: String {
-        if let approval = model.pendingApprovals.first {
-            return "Needs approval: \(approval.title)"
-        }
-        if let draft = model.generatedPluginDrafts.first {
-            return "Draft ready: \(draft.manifest.name)"
-        }
-        if let activity = model.capabilityActivities.first {
-            return "\(activity.status.rawValue.capitalized): \(activity.title)"
-        }
-        if let event = model.interactionEvents.first {
-            return event.summary
-        }
-        return "Ready for conversation, tools, memory, and new plugin work."
-    }
-
-    private var signalIcon: String {
-        if !model.pendingApprovals.isEmpty { return "hand.raised.fill" }
-        if !model.generatedPluginDrafts.isEmpty { return "shippingbox.fill" }
-        if !model.capabilityActivities.isEmpty { return "bolt.fill" }
-        return "sparkles"
-    }
-
-    private var signalColor: Color {
-        if !model.pendingApprovals.isEmpty { return AppTheme.coral }
-        if !model.generatedPluginDrafts.isEmpty { return AppTheme.coral }
-        if let activity = model.capabilityActivities.first {
-            switch activity.status {
-            case .done: return .green
-            case .failed: return .red
-            case .denied: return AppTheme.muted
-            case .pending, .running: return AppTheme.coral
-            }
-        }
-        return AppTheme.muted
-    }
-
-    private var inboxButtonTitle: String {
-        model.localInboxBridgeState.status == .running ? "Stop" : "Inbox"
-    }
-
-    private var inboxButtonIcon: String {
-        model.localInboxBridgeState.status == .running ? "stop.circle" : "play.circle"
-    }
-
-    private func toggleInboxBridge() {
-        if model.localInboxBridgeState.status == .running {
-            model.stopLocalInboxBridge()
-        } else {
-            model.startLocalInboxBridge()
-        }
-    }
-
-    private func color(for tone: PresenceStatus.Tone) -> Color {
-        switch tone {
-        case .healthy: return .green
-        case .warning: return .orange
-        case .muted: return AppTheme.muted
-        case .active: return AppTheme.coral
-        }
-    }
-}
-
-private struct CommandMetricTile: View {
-    var title: String
-    var value: String
-    var detail: String
-    var icon: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .foregroundStyle(AppTheme.coral)
-                    .frame(width: 16)
-                Text(title)
-                    .font(.caption2)
-                    .foregroundStyle(AppTheme.muted)
-                    .lineLimit(1)
-            }
-            Text(value)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(AppTheme.ink)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-            Text(detail)
-                .font(.caption2)
-                .foregroundStyle(AppTheme.muted)
-                .lineLimit(1)
-                .truncationMode(.middle)
-        }
-        .padding(9)
-        .frame(maxWidth: .infinity, minHeight: 82, alignment: .leading)
-        .background(Color.white.opacity(0.44))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -1926,43 +1675,6 @@ private struct ModelRoutingCard: View {
     }
 }
 
-private struct SmallCardsRow: View {
-    @EnvironmentObject private var model: AppViewModel
-
-    var body: some View {
-        HStack(spacing: 8) {
-            MiniCard(title: "Services", value: serviceValue, detail: serviceDetail)
-            MiniCard(title: "Plugins", value: "\(model.plugins.count)", detail: "\(capabilityCount) capabilities")
-            MiniCard(title: "Queue", value: "\(queueCount)", detail: queueDetail)
-        }
-    }
-
-    private var serviceValue: String {
-        let remote = model.serviceHealth.filter { $0.id == "agentllm" || $0.id == "agentmem" }
-        let online = remote.filter { $0.state == .online }.count
-        return "\(online)/\(remote.count)"
-    }
-
-    private var serviceDetail: String {
-        if model.serviceHealth.contains(where: { $0.state == .checking }) {
-            return "Checking"
-        }
-        return model.connectionState.rawValue.capitalized
-    }
-
-    private var capabilityCount: Int {
-        model.plugins.flatMap(\.capabilities).count
-    }
-
-    private var queueCount: Int {
-        model.pendingApprovals.count + model.generatedPluginDrafts.count
-    }
-
-    private var queueDetail: String {
-        queueCount == 0 ? "Clear" : "Needs review"
-    }
-}
-
 private struct RunningTasksCard: View {
     @EnvironmentObject private var model: AppViewModel
 
@@ -2038,55 +1750,6 @@ private struct StateCard: View {
                 }
                 .background(Color.white.opacity(0.48))
                 .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-        }
-    }
-}
-
-private struct PluginCreatorCard: View {
-    @EnvironmentObject private var model: AppViewModel
-    @Binding var pluginName: String
-    @Binding var pluginDescription: String
-    @Binding var pluginKind: String
-    @Binding var pluginRequiresApproval: Bool
-    @Binding var pluginURL: String
-    @Binding var pluginMethod: String
-    @Binding var pluginMCPMethod: String
-    @Binding var pluginMCPToolName: String
-    @Binding var pluginMCPInputSchemaJSON: String
-    @Binding var pluginCommandPath: String
-    @Binding var pluginCommandArguments: String
-    @Binding var pluginPackageJSON: String
-
-    var body: some View {
-        Panel(title: "Vibe Plugin", trailing: "\(model.plugins.count) installed") {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
-                    Image(systemName: "wand.and.sparkles")
-                        .font(.title3)
-                        .foregroundStyle(AppTheme.coral)
-                        .frame(width: 28)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Composer")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(AppTheme.ink)
-                        Text("\(model.generatedPluginDrafts.count) draft(s) waiting")
-                            .font(.caption2)
-                            .foregroundStyle(AppTheme.muted)
-                    }
-                    Spacer()
-                }
-                .padding(10)
-                .background(Color.white.opacity(0.48))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                Button {
-                    model.isVibePluginComposerPresented = true
-                } label: {
-                    Label("Open Composer", systemImage: "square.and.pencil")
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(AppTheme.coral)
             }
         }
     }
@@ -2594,156 +2257,6 @@ private struct VibePluginComposerSheet: View {
     }
 }
 
-private struct PluginLibraryCard: View {
-    @EnvironmentObject private var model: AppViewModel
-    @State private var runTarget: CapabilityRunTarget?
-    @State private var removalCandidate: PluginManifest?
-
-    var body: some View {
-        Panel(title: "Plugin Library", trailing: "\(capabilityCount) caps") {
-            VStack(spacing: 10) {
-                ForEach(model.plugins) { plugin in
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 8) {
-                            Image(systemName: plugin.id.hasPrefix("builtin.") ? "seal" : "puzzlepiece.extension")
-                                .foregroundStyle(AppTheme.coral)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(plugin.name)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(AppTheme.ink)
-                                Text(plugin.description)
-                                    .font(.caption2)
-                                    .foregroundStyle(AppTheme.muted)
-                                    .lineLimit(2)
-                            }
-                            Spacer()
-                            Text(plugin.version)
-                                .font(.caption2)
-                                .foregroundStyle(AppTheme.muted)
-                            if !plugin.id.hasPrefix("builtin.") {
-                                Button {
-                                    prepareAIUpdate(for: plugin)
-                                } label: {
-                                    Image(systemName: "arrow.triangle.2.circlepath")
-                                }
-                                .buttonStyle(.borderless)
-                                .foregroundStyle(AppTheme.muted)
-                                .help("Update plugin with AI")
-
-                                Button {
-                                    model.exportPlugin(plugin)
-                                } label: {
-                                    Image(systemName: "square.and.arrow.up")
-                                }
-                                .buttonStyle(.borderless)
-                                .foregroundStyle(AppTheme.muted)
-                                .help("Export plugin package")
-
-                                Button {
-                                    removalCandidate = plugin
-                                } label: {
-                                    Image(systemName: "trash")
-                                }
-                                .buttonStyle(.borderless)
-                                .foregroundStyle(AppTheme.muted)
-                                .help("Remove plugin")
-                            }
-                        }
-                        VStack(spacing: 6) {
-                            ForEach(plugin.capabilities) { capability in
-                                let summary = PluginCapabilityDisplaySummary(plugin: plugin, capability: capability)
-                                HStack(spacing: 7) {
-                                    Image(systemName: icon(for: capability.kind))
-                                        .frame(width: 18)
-                                        .foregroundStyle(AppTheme.muted)
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(capability.title)
-                                            .font(.caption2.weight(.semibold))
-                                            .foregroundStyle(AppTheme.ink)
-                                        Text(summary.detailLine)
-                                            .font(.caption2)
-                                            .foregroundStyle(AppTheme.muted)
-                                            .lineLimit(1)
-                                        HStack(spacing: 5) {
-                                            PluginCapabilityChip(text: summary.sourceLabel, icon: plugin.id.hasPrefix("builtin.") ? "seal" : "folder")
-                                            PluginCapabilityChip(text: summary.approvalLabel, icon: capability.requiresApproval ? "hand.raised" : "bolt")
-                                            PluginCapabilityChip(text: summary.inputLabel, icon: "text.badge.checkmark")
-                                        }
-                                    }
-                                    Spacer()
-                                    Button {
-                                        runTarget = CapabilityRunTarget(pluginName: plugin.name, capability: capability)
-                                    } label: {
-                                        Image(systemName: "play.circle")
-                                    }
-                                    .buttonStyle(.borderless)
-                                    .help("Run capability")
-                                    Image(systemName: capability.requiresApproval ? "hand.raised.fill" : "bolt.fill")
-                                        .font(.caption2)
-                                        .foregroundStyle(capability.requiresApproval ? AppTheme.coral : .green)
-                                }
-                                .padding(8)
-                                .background(Color.white.opacity(0.42))
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                            }
-                        }
-                    }
-                    .padding(10)
-                    .background(Color.white.opacity(0.36))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-            }
-        }
-        .sheet(item: $runTarget) { target in
-            CapabilityRunSheet(target: target)
-                .environmentObject(model)
-        }
-        .alert("Remove Plugin?", isPresented: removalBinding) {
-            Button("Cancel", role: .cancel) {
-                removalCandidate = nil
-            }
-            Button("Remove", role: .destructive) {
-                if let plugin = removalCandidate {
-                    Task { await model.removePlugin(plugin) }
-                }
-                removalCandidate = nil
-            }
-        } message: {
-            Text(removalCandidate.map { "Remove \($0.name) from the local plugin directory. Built-in plugins are kept read-only." } ?? "")
-        }
-    }
-
-    private var capabilityCount: Int {
-        model.plugins.reduce(0) { $0 + $1.capabilities.count }
-    }
-
-    private var removalBinding: Binding<Bool> {
-        Binding(
-            get: { removalCandidate != nil },
-            set: { visible in
-                if !visible {
-                    removalCandidate = nil
-                }
-            }
-        )
-    }
-
-    private func icon(for kind: String) -> String {
-        switch kind {
-        case "skill": return "sparkles"
-        case "webservice": return "globe"
-        case "mcp": return "shippingbox"
-        case "command": return "terminal"
-        case "native": return "macwindow"
-        default: return "puzzlepiece.extension"
-        }
-    }
-
-    private func prepareAIUpdate(for plugin: PluginManifest) {
-        model.prepareVibePluginUpdate(for: plugin)
-    }
-}
-
 private struct Panel<Content: View>: View {
     var title: String
     var trailing: String
@@ -2828,30 +2341,6 @@ private struct WorkPlanStepLine: View {
         case .done: return .green
         case .blocked: return .orange
         }
-    }
-}
-
-private struct MiniCard: View {
-    var title: String
-    var value: String
-    var detail: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(AppTheme.muted)
-            Text(value)
-                .font(.subheadline.weight(.semibold))
-            Text(detail)
-                .font(.caption2)
-                .foregroundStyle(AppTheme.muted)
-                .lineLimit(1)
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, minHeight: 82)
-        .background(AppTheme.panel)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

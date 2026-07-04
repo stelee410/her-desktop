@@ -35,12 +35,18 @@ final class AppViewModel: ObservableObject {
     @Published var pendingVibePluginComposerPreset: VibePluginComposerPreset?
     @Published var conversations: [ConversationSummary]
     @Published var activeConversationID: String
+    @Published var isInspectorPresented: Bool
 
     @Published var streamingAssistantMessageID: UUID?
 
     /// True while a reply is pending but no streamed bubble has appeared yet.
     var isAwaitingAssistantReply: Bool {
         connectionState == .thinking && streamingAssistantMessageID == nil
+    }
+
+    /// Items waiting on the user: capability approvals and plugin drafts.
+    var pendingActionCount: Int {
+        pendingApprovals.count + generatedPluginDrafts.count
     }
 
     var agentMem: AgentMemClient
@@ -146,6 +152,7 @@ final class AppViewModel: ObservableObject {
         self.pendingCapabilityRunTarget = nil
         self.isVibePluginComposerPresented = false
         self.pendingVibePluginComposerPreset = nil
+        self.isInspectorPresented = false
         rebuildRunningTasks()
     }
 

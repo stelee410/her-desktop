@@ -4,14 +4,6 @@ struct SidebarView: View {
     @EnvironmentObject private var model: AppViewModel
     @State private var isConversationListExpanded = true
     @State private var conversationPendingDeletion: ConversationSummary?
-    private var memoryRows: [SidebarMemoryRowState] {
-        SidebarStateBuilder().memoryRows(
-            profile: model.agentProfile,
-            signal: model.memorySignal,
-            dreamContext: model.dreamContext,
-            auditEvents: model.auditEvents
-        )
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -41,43 +33,6 @@ struct SidebarView: View {
 
             conversationListSection
 
-            Divider().opacity(0.5)
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Our Connection")
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.ink)
-                HStack {
-                    Image(systemName: "heart")
-                        .foregroundStyle(AppTheme.coral)
-                    Text(model.memorySignal.relationshipSummary)
-                        .font(.subheadline)
-                        .foregroundStyle(AppTheme.coral)
-                }
-                ProgressView(value: model.memorySignal.trust)
-                    .tint(AppTheme.coral)
-                Text("Mood: \(model.memorySignal.moodLabel)")
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.muted)
-            }
-
-            Divider().opacity(0.5)
-
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("Memory Signals")
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.ink)
-                    Spacer()
-                    Image(systemName: model.agentProfile.known ? "checkmark.seal" : "brain.head.profile")
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.muted)
-                }
-                ForEach(memoryRows) { row in
-                    MemoryRow(row: row)
-                }
-            }
-
             Spacer()
 
             HStack(spacing: 10) {
@@ -93,8 +48,12 @@ struct SidebarView: View {
                         .foregroundStyle(model.connectionState == .error ? .red : .green)
                 }
                 Spacer()
-                Image(systemName: "gearshape")
-                    .foregroundStyle(AppTheme.muted)
+                SettingsLink {
+                    Image(systemName: "gearshape")
+                        .foregroundStyle(AppTheme.muted)
+                }
+                .buttonStyle(.plain)
+                .help("打开设置")
             }
             .padding(.bottom, 18)
         }
@@ -125,7 +84,7 @@ struct SidebarView: View {
                 }
                 .padding(.top, 4)
             }
-            .frame(maxHeight: 190)
+            .frame(maxHeight: 340)
         } label: {
             HStack {
                 Text("对话")
@@ -254,25 +213,3 @@ private struct NavItem: View {
     }
 }
 
-private struct MemoryRow: View {
-    var row: SidebarMemoryRowState
-
-    var body: some View {
-        HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 6)
-                .fill(AppTheme.rose.opacity(0.75))
-                .frame(width: 32, height: 32)
-                .overlay(Image(systemName: row.systemImage).font(.caption).foregroundStyle(AppTheme.coral))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(row.title)
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.ink)
-                    .lineLimit(1)
-                Text(row.subtitle)
-                    .font(.caption2)
-                    .foregroundStyle(AppTheme.muted)
-                    .lineLimit(1)
-            }
-        }
-    }
-}

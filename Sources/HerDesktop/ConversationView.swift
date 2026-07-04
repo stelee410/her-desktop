@@ -8,9 +8,11 @@ struct ConversationView: View {
     var body: some View {
         VStack(spacing: 0) {
             ToolbarView()
-            LaunchReadinessStrip()
-                .padding(.horizontal, 54)
-                .padding(.top, 12)
+            if !model.productReadinessSummary.isReadyForCoreWork {
+                LaunchReadinessStrip()
+                    .padding(.horizontal, 54)
+                    .padding(.top, 12)
+            }
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 22) {
@@ -116,10 +118,11 @@ private struct LaunchReadinessStrip: View {
 
 private struct ToolbarView: View {
     @EnvironmentObject private var model: AppViewModel
+    @State private var isStatusPopoverPresented = false
 
     var body: some View {
         let status = PresenceCopy.serviceStatus(model.serviceHealth)
-        HStack(spacing: 20) {
+        HStack(spacing: 14) {
             HStack(spacing: 8) {
                 Picker("Conversation", selection: Binding(
                     get: { model.activeConversationID },
@@ -146,33 +149,6 @@ private struct ToolbarView: View {
 
             Spacer()
 
-            ToolbarChip(
-                icon: "waveform",
-                title: model.connectionState == .listening ? "Listening" : "Voice",
-                active: model.connectionState == .listening || model.connectionState == .speaking,
-                help: "Start or stop voice input"
-            ) {
-                model.toggleDictation()
-            }
-            ToolbarChip(
-                icon: "scope",
-                title: "Focus",
-                active: model.selectedSection == .projects,
-                help: "Open projects and focus"
-            ) {
-                model.selectedSection = .projects
-            }
-            ToolbarChip(
-                icon: "shippingbox",
-                title: "Tools",
-                active: model.selectedSection == .tools,
-                help: "Open tools and plugins"
-            ) {
-                model.selectedSection = .tools
-            }
-
-            Spacer()
-
             Button {
                 model.setSpeakAssistantReplies(!model.config.speakAssistantReplies)
             } label: {
@@ -182,11 +158,39 @@ private struct ToolbarView: View {
             .buttonStyle(.plain)
             .help(model.config.speakAssistantReplies ? "Disable spoken replies" : "Enable spoken replies")
 
-            Label(status.title, systemImage: status.systemImage)
-                .font(.caption)
-                .foregroundStyle(color(for: status.tone))
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(AppTheme.muted)
+            Button {
+                isStatusPopoverPresented.toggle()
+            } label: {
+                Image(systemName: status.systemImage)
+                    .foregroundStyle(color(for: status.tone))
+            }
+            .buttonStyle(.plain)
+            .help(status.title)
+            .popover(isPresented: $isStatusPopoverPresented, arrowEdge: .bottom) {
+                ServiceStatusPopover()
+                    .environmentObject(model)
+            }
+
+            Button {
+                model.isInspectorPresented.toggle()
+            } label: {
+                Image(systemName: "sidebar.trailing")
+                    .foregroundStyle(model.isInspectorPresented ? AppTheme.coral : AppTheme.muted)
+                    .overlay(alignment: .topTrailing) {
+                        if model.pendingActionCount > 0 {
+                            Text("\(model.pendingActionCount)")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(AppTheme.coral)
+                                .clipShape(Capsule())
+                                .offset(x: 9, y: -7)
+                        }
+                    }
+            }
+            .buttonStyle(.plain)
+            .help(model.pendingActionCount > 0 ? "\(model.pendingActionCount) 项待处理" : "显示详情面板")
         }
         .padding(.horizontal, 24)
         .frame(height: 56)
@@ -203,28 +207,49 @@ private struct ToolbarView: View {
     }
 }
 
-private struct ToolbarChip: View {
-    var icon: String
-    var title: String
-    var active: Bool = false
-    var help: String
-    var action: () -> Void
+private struct ServiceStatusPopover: View {
+    @EnvironmentObject private var model: AppViewModel
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 7) {
-                Image(systemName: icon)
-                Text(title)
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(model.serviceHealth) { service in
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(color(for: service.state))
+                        .frame(width: 7, height: 7)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(service.name)
+                            .font(.caption.weight(.semibold))
+                        if !service.summary.isEmpty {
+                            Text(service.summary)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    Spacer(minLength: 12)
+                }
             }
-            .font(.subheadline)
-            .foregroundStyle(active ? AppTheme.coral : AppTheme.ink)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(active ? AppTheme.coral.opacity(0.10) : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            Divider()
+            Button {
+                Task { await model.refreshServiceHealth() }
+            } label: {
+                Label("重新检查", systemImage: "arrow.clockwise")
+                    .font(.caption)
+            }
+            .controlSize(.small)
         }
-        .buttonStyle(.plain)
-        .help(help)
+        .padding(14)
+        .frame(width: 260, alignment: .leading)
+    }
+
+    private func color(for state: ServiceHealthState) -> Color {
+        switch state {
+        case .online: return .green
+        case .checking: return .orange
+        case .offline: return .red
+        case .unknown: return .gray
+        }
     }
 }
 
