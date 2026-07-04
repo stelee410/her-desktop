@@ -98,25 +98,34 @@ struct WebAppHTTPResponse: Equatable {
 }
 
 /// Routes web app HTTP requests: static files from each app's `www/`
-/// directory and a token-protected SQLite query API. Runs off the main
-/// actor on the server queue.
+/// directory, a token-protected SQLite query API, and a token-protected
+/// reverse proxy to the app's backend process. Runs off the main actor
+/// on the server queue.
 struct LocalWebAppRouter {
     var store: WebAppStore
     var tokenForApp: (String) -> String?
+    var processManager: WebAppProcessManager?
 
-    func route(_ request: WebAppHTTPRequest) -> WebAppHTTPResponse {
+    func route(_ request: WebAppHTTPRequest) async -> WebAppHTTPResponse {
         let segments = request.path.split(separator: "/").map(String.init)
         guard segments.count >= 2, segments[0] == "apps" else {
             return .jsonError(404, "Unknown path.")
         }
         let appID = segments[1]
-        guard store.manifest(id: appID) != nil else {
+        guard let manifest = store.manifest(id: appID) else {
             return .jsonError(404, "Unknown web app: \(appID)")
         }
         let remainder = segments.dropFirst(2).joined(separator: "/")
 
         if remainder == "api/query" {
             return queryAPI(request: request, appID: appID)
+        }
+        if remainder == "backend" || remainder.hasPrefix("backend/") {
+            return await proxyBackend(
+                request: request,
+                manifest: manifest,
+                backendPath: String(remainder.dropFirst("backend".count).drop(while: { $0 == "/" }))
+            )
         }
         guard request.method == "GET" else {
             return .jsonError(405, "Only GET is supported for static files.")
@@ -132,12 +141,78 @@ struct LocalWebAppRouter {
         )
     }
 
+    private func validToken(_ request: WebAppHTTPRequest, appID: String) -> Bool {
+        let provided = request.headers["x-webapp-token"] ?? request.query["token"] ?? ""
+        guard let expected = tokenForApp(appID), !expected.isEmpty else { return false }
+        return provided == expected
+    }
+
+    private func proxyBackend(
+        request: WebAppHTTPRequest,
+        manifest: WebAppManifest,
+        backendPath: String
+    ) async -> WebAppHTTPResponse {
+        guard validToken(request, appID: manifest.id) else {
+            return .jsonError(401, "Missing or invalid web app token.")
+        }
+        guard let processManager, manifest.runtime != nil else {
+            return .jsonError(404, "This web app has no backend runtime.")
+        }
+        let port: UInt16
+        do {
+            let store = self.store
+            port = try await withCheckedThrowingContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do {
+                        continuation.resume(returning: try processManager.ensureRunning(app: manifest, store: store))
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+        } catch {
+            return .jsonError(502, error.localizedDescription)
+        }
+
+        var components = URLComponents()
+        components.scheme = "http"
+        components.host = "127.0.0.1"
+        components.port = Int(port)
+        components.path = "/" + backendPath
+        let passthroughQuery = request.query.filter { $0.key != "token" }
+        if !passthroughQuery.isEmpty {
+            components.queryItems = passthroughQuery.map { URLQueryItem(name: $0.key, value: $0.value) }
+        }
+        guard let url = components.url else {
+            return .jsonError(400, "Invalid backend path.")
+        }
+        var forward = URLRequest(url: url)
+        forward.httpMethod = request.method
+        forward.timeoutInterval = 30
+        if !request.body.isEmpty {
+            forward.httpBody = request.body
+        }
+        if let contentType = request.headers["content-type"] {
+            forward.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        }
+        do {
+            let (data, response) = try await URLSession.shared.data(for: forward)
+            let http = response as? HTTPURLResponse
+            return WebAppHTTPResponse(
+                status: http?.statusCode ?? 200,
+                contentType: http?.value(forHTTPHeaderField: "Content-Type") ?? "application/octet-stream",
+                body: data
+            )
+        } catch {
+            return .jsonError(502, "Backend request failed: \(error.localizedDescription)")
+        }
+    }
+
     private func queryAPI(request: WebAppHTTPRequest, appID: String) -> WebAppHTTPResponse {
         guard request.method == "POST" else {
             return .jsonError(405, "Use POST for /api/query.")
         }
-        let provided = request.headers["x-webapp-token"] ?? request.query["token"] ?? ""
-        guard let expected = tokenForApp(appID), !expected.isEmpty, provided == expected else {
+        guard validToken(request, appID: appID) else {
             return .jsonError(401, "Missing or invalid web app token.")
         }
         guard let payload = try? JSONDecoder().decode([String: JSONValue].self, from: request.body),
@@ -199,14 +274,18 @@ final class LocalWebAppServer: @unchecked Sendable {
         listener != nil
     }
 
-    func start(store: WebAppStore) throws {
+    func start(store: WebAppStore, processManager: WebAppProcessManager? = nil) throws {
         stop()
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = NWEndpoint.hostPort(host: .ipv4(.loopback), port: .any)
         let listener = try NWListener(using: parameters)
-        let router = LocalWebAppRouter(store: store, tokenForApp: { [weak self] appID in
-            self?.token(for: appID)
-        })
+        let router = LocalWebAppRouter(
+            store: store,
+            tokenForApp: { [weak self] appID in
+                self?.token(for: appID)
+            },
+            processManager: processManager
+        )
         self.router = router
         listener.newConnectionHandler = { [weak self] connection in
             self?.handle(connection: connection)
@@ -280,14 +359,18 @@ final class LocalWebAppServer: @unchecked Sendable {
     }
 
     private func respond(to data: Data, on connection: NWConnection) {
-        let response: WebAppHTTPResponse
-        if let request = WebAppHTTPRequest.parse(data), let router {
-            response = router.route(request)
-        } else {
-            response = .jsonError(400, "Invalid HTTP request.")
+        guard let request = WebAppHTTPRequest.parse(data), let router else {
+            let response = WebAppHTTPResponse.jsonError(400, "Invalid HTTP request.")
+            connection.send(content: response.serialized, completion: .contentProcessed { _ in
+                connection.cancel()
+            })
+            return
         }
-        connection.send(content: response.serialized, completion: .contentProcessed { _ in
-            connection.cancel()
-        })
+        Task {
+            let response = await router.route(request)
+            connection.send(content: response.serialized, completion: .contentProcessed { _ in
+                connection.cancel()
+            })
+        }
     }
 }

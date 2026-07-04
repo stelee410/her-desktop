@@ -8,7 +8,7 @@ extension AppViewModel {
     func startWebAppServerIfNeeded() {
         guard !webAppServer.isRunning else { return }
         do {
-            try webAppServer.start(store: webAppStore)
+            try webAppServer.start(store: webAppStore, processManager: webAppProcessManager)
             audit(
                 type: "webapp.server_started",
                 summary: "Local web app server is listening on loopback.",
@@ -45,6 +45,7 @@ extension AppViewModel {
 
     func removeWebApp(_ id: String) {
         do {
+            webAppProcessManager.stop(appID: id)
             try webAppStore.remove(id: id)
             refreshWebApps()
             audit(type: "webapp.removed", summary: "Removed local web app.", metadata: ["appID": id])
@@ -66,15 +67,30 @@ extension AppViewModel {
                 requiresUserApproval: false
             )
         }
+        let backendType = stringArgument(arguments, keys: ["backend_type", "backendType", "runtime"], fallback: "")
+        let backendCode = stringArgument(arguments, keys: ["backend_code", "backendCode"], fallback: "")
         do {
-            let manifest = try webAppStore.create(name: name, description: description, html: html)
+            let manifest = try webAppStore.create(
+                name: name,
+                description: description,
+                html: html,
+                backendType: backendType.isEmpty ? nil : backendType,
+                backendCode: backendCode.isEmpty ? nil : backendCode
+            )
             refreshWebApps()
             audit(
                 type: "webapp.created",
                 summary: "Created local web app \(manifest.name).",
-                metadata: ["appID": manifest.id, "htmlBytes": String(html.utf8.count)]
+                metadata: [
+                    "appID": manifest.id,
+                    "htmlBytes": String(html.utf8.count),
+                    "runtime": manifest.runtime?.type ?? "static"
+                ]
             )
             let url = webAppURL(manifest.id)?.absoluteString ?? "unavailable"
+            let backendLine = manifest.runtime.map {
+                "backend: \($0.type) process (\($0.entry)); the page reaches it via fetch('backend/...?token=' + token)."
+            } ?? "backend: none (static + SQLite API)."
             return CapabilityResult(
                 title: "Web App Created",
                 content: """
@@ -82,6 +98,7 @@ extension AppViewModel {
                 app_id: \(manifest.id)
                 local_url: \(url)
                 storage: \(webAppStore.appDirectory(id: manifest.id).path)
+                \(backendLine)
                 Call webapp.open with app_id \(manifest.id) to show it to the user.
                 """,
                 requiresUserApproval: false
@@ -107,13 +124,19 @@ extension AppViewModel {
         }
         let name = stringArgument(arguments, keys: ["name", "title"], fallback: "")
         let description = stringArgument(arguments, keys: ["description", "summary"], fallback: "")
+        let backendType = stringArgument(arguments, keys: ["backend_type", "backendType", "runtime"], fallback: "")
+        let backendCode = stringArgument(arguments, keys: ["backend_code", "backendCode"], fallback: "")
         do {
             let manifest = try webAppStore.update(
                 id: appID,
                 html: html,
                 name: name.isEmpty ? nil : name,
-                description: description.isEmpty ? nil : description
+                description: description.isEmpty ? nil : description,
+                backendType: backendType.isEmpty ? nil : backendType,
+                backendCode: backendCode.isEmpty ? nil : backendCode
             )
+            // Restart on next request so replaced backend code takes effect.
+            webAppProcessManager.stop(appID: appID)
             refreshWebApps()
             audit(
                 type: "webapp.updated",
@@ -175,6 +198,7 @@ extension AppViewModel {
     func removeWebAppCapability(arguments: [String: Any]) -> CapabilityResult {
         let appID = stringArgument(arguments, keys: ["app_id", "appID", "id"], fallback: "")
         do {
+            webAppProcessManager.stop(appID: appID)
             try webAppStore.remove(id: appID)
             refreshWebApps()
             audit(type: "webapp.removed", summary: "Removed local web app.", metadata: ["appID": appID])

@@ -58,6 +58,7 @@ final class AppViewModel: ObservableObject {
     var conversationStore: ConversationStore
     var webAppStore: WebAppStore
     let webAppServer = LocalWebAppServer()
+    let webAppProcessManager: WebAppProcessManager
     var auditStore: AuditEventStore
     var inboxEventStore: InboxEventStore
     var pluginEventStore: PluginEventStore
@@ -109,6 +110,7 @@ final class AppViewModel: ObservableObject {
         self.conversationStore = conversationStore
         let webAppStore = WebAppStore(cwd: cwd)
         self.webAppStore = webAppStore
+        self.webAppProcessManager = WebAppProcessManager(cwd: cwd)
         self.webApps = webAppStore.loadAll()
         self.selectedWebAppID = nil
         self.auditStore = AuditEventStore(cwd: cwd)
@@ -168,6 +170,7 @@ final class AppViewModel: ObservableObject {
     deinit {
         localInboxBridgeServer.stop()
         webAppServer.stop()
+        webAppProcessManager.stopAll()
     }
 
     /// Launch bootstrap in a model-owned task. SwiftUI `.task` cancels its

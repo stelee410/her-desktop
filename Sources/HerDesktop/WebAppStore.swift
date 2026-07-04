@@ -1,5 +1,12 @@
 import Foundation
 
+struct WebAppRuntime: Codable, Equatable {
+    /// "node" or "python"
+    var type: String
+    /// App-directory-relative entry script, e.g. "backend/server.py".
+    var entry: String
+}
+
 struct WebAppManifest: Identifiable, Codable, Equatable {
     var id: String
     var name: String
@@ -7,6 +14,7 @@ struct WebAppManifest: Identifiable, Codable, Equatable {
     var entry: String
     var createdAt: Date
     var updatedAt: Date
+    var runtime: WebAppRuntime?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -15,6 +23,7 @@ struct WebAppManifest: Identifiable, Codable, Equatable {
         case entry
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case runtime
     }
 }
 
@@ -22,11 +31,15 @@ struct WebAppManifest: Identifiable, Codable, Equatable {
 /// Each app owns its directory: `webapp.json` manifest, `www/` static
 /// files, and `data.db` SQLite database. IDs are file-safe slugs so the
 /// HTTP layer can never escape the webapps directory.
-final class WebAppStore {
+/// Holds only immutable configuration; FileManager is thread-safe for
+/// these path-scoped operations, so the store is safe to share with the
+/// server queue.
+final class WebAppStore: @unchecked Sendable {
     enum StoreError: LocalizedError {
         case invalidAppID(String)
         case appNotFound(String)
         case emptyHTML
+        case unsupportedRuntime(String)
 
         var errorDescription: String? {
             switch self {
@@ -36,9 +49,13 @@ final class WebAppStore {
                 return "Web app not found: \(id)"
             case .emptyHTML:
                 return "The web app HTML content is empty."
+            case .unsupportedRuntime(let type):
+                return "Unsupported backend runtime: \(type). Use node or python."
             }
         }
     }
+
+    static let supportedRuntimes: Set<String> = ["node", "python"]
 
     private let cwd: String
     private let fileManager: FileManager
@@ -62,6 +79,10 @@ final class WebAppStore {
 
     func databaseURL(id: String) -> URL {
         appDirectory(id: id).appendingPathComponent("data.db")
+    }
+
+    func backendDirectory(id: String) -> URL {
+        appDirectory(id: id).appendingPathComponent("backend", isDirectory: true)
     }
 
     private func manifestURL(id: String) -> URL {
@@ -95,6 +116,8 @@ final class WebAppStore {
         name: String,
         description: String,
         html: String,
+        backendType: String? = nil,
+        backendCode: String? = nil,
         idHint: String = "",
         now: Date = Date()
     ) throws -> WebAppManifest {
@@ -107,7 +130,7 @@ final class WebAppStore {
             id = "\(base)-\(suffix)"
             suffix += 1
         }
-        let manifest = WebAppManifest(
+        var manifest = WebAppManifest(
             id: id,
             name: name.trimmingCharacters(in: .whitespacesAndNewlines).ifEmpty(id),
             description: description.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -117,6 +140,7 @@ final class WebAppStore {
         )
         try fileManager.createDirectory(at: wwwDirectory(id: id), withIntermediateDirectories: true)
         try Data(trimmedHTML.utf8).write(to: wwwDirectory(id: id).appendingPathComponent("index.html"), options: .atomic)
+        manifest.runtime = try writeBackendIfRequested(id: id, type: backendType, code: backendCode)
         try save(manifest)
         return manifest
     }
@@ -127,6 +151,8 @@ final class WebAppStore {
         html: String? = nil,
         name: String? = nil,
         description: String? = nil,
+        backendType: String? = nil,
+        backendCode: String? = nil,
         now: Date = Date()
     ) throws -> WebAppManifest {
         guard var manifest = manifest(id: id) else { throw StoreError.appNotFound(id) }
@@ -144,9 +170,28 @@ final class WebAppStore {
         if let description {
             manifest.description = description.trimmingCharacters(in: .whitespacesAndNewlines)
         }
+        if let runtime = try writeBackendIfRequested(id: id, type: backendType, code: backendCode) {
+            manifest.runtime = runtime
+        }
         manifest.updatedAt = now
         try save(manifest)
         return manifest
+    }
+
+    private func writeBackendIfRequested(id: String, type: String?, code: String?) throws -> WebAppRuntime? {
+        guard let type = type?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !type.isEmpty,
+              let code = code?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !code.isEmpty else {
+            return nil
+        }
+        guard Self.supportedRuntimes.contains(type) else {
+            throw StoreError.unsupportedRuntime(type)
+        }
+        let fileName = type == "node" ? "server.js" : "server.py"
+        try fileManager.createDirectory(at: backendDirectory(id: id), withIntermediateDirectories: true)
+        try Data(code.utf8).write(to: backendDirectory(id: id).appendingPathComponent(fileName), options: .atomic)
+        return WebAppRuntime(type: type, entry: "backend/\(fileName)")
     }
 
     func remove(id: String) throws {

@@ -5,10 +5,18 @@
       "adapter" : {
         "type" : "native"
       },
-      "description" : "Create a local mini web app from a complete single-file HTML document. The app is hosted on a loopback-only server with its own SQLite database. Inside the HTML, call the data API with: fetch('api/query?token=' + new URLSearchParams(location.search).get('token'), {method:'POST', body: JSON.stringify({sql:'...', params:[...]})}). The response is {ok, columns, rows, rows_changed, last_insert_row_id}. Keep everything inline (no external CDN scripts or styles).",
+      "description" : "Create a local mini web app from a complete single-file HTML document. The app is hosted on a loopback-only server with its own SQLite database. Inside the HTML, call the data API with: fetch('api/query?token=' + new URLSearchParams(location.search).get('token'), {method:'POST', body: JSON.stringify({sql:'...', params:[...]})}). The response is {ok, columns, rows, rows_changed, last_insert_row_id}. Optionally pass backend_type (node|python) plus backend_code to add a backend process: the script must start an HTTP server on 127.0.0.1 at the PORT environment variable (HER_WEBAPP_DB has the SQLite path, standard library only, no npm/pip installs). The page reaches it via fetch('backend/<route>?token=' + token). Keep everything inline (no external CDN scripts or styles).",
       "id" : "webapp.create",
       "inputSchema" : {
         "properties" : {
+          "backend_code" : {
+            "description" : "Optional backend script source. Must listen on 127.0.0.1 at env PORT using only the standard library.",
+            "type" : "string"
+          },
+          "backend_type" : {
+            "description" : "Optional backend runtime: node or python.",
+            "type" : "string"
+          },
           "description" : {
             "description" : "One-line summary of what the app does.",
             "type" : "string"
@@ -37,12 +45,20 @@
       "adapter" : {
         "type" : "native"
       },
-      "description" : "Replace the HTML of an installed local web app, and optionally rename it. The app keeps its SQLite data.",
+      "description" : "Replace the HTML of an installed local web app, and optionally rename it or replace its backend script. The app keeps its SQLite data; a replaced backend restarts on the next request.",
       "id" : "webapp.update",
       "inputSchema" : {
         "properties" : {
           "app_id" : {
             "description" : "ID of the installed web app (see webapp.list).",
+            "type" : "string"
+          },
+          "backend_code" : {
+            "description" : "Optional replacement backend script (see webapp.create for the contract).",
+            "type" : "string"
+          },
+          "backend_type" : {
+            "description" : "Optional backend runtime when replacing backend_code: node or python.",
             "type" : "string"
           },
           "description" : {
@@ -134,6 +150,6 @@
   "description" : "Vibe-code small local web apps: single-file HTML hosted on a loopback server with per-app SQLite storage, shown in the Apps page as embedded pages.",
   "id" : "builtin.webapp-runtime",
   "name" : "WebApp Runtime",
-  "systemPromptAddendum" : "Local web apps are self-contained single-file HTML documents served from a loopback-only server. Each app has its own SQLite database reachable from page JavaScript via POST api/query with the token from the page URL query string. Creating, updating, and removing apps requires user approval. After webapp.create succeeds, call webapp.open so the user sees the app immediately.",
+  "systemPromptAddendum" : "Local web apps are self-contained single-file HTML documents served from a loopback-only server. Each app has its own SQLite database reachable from page JavaScript via POST api/query with the token from the page URL query string. Apps may optionally declare a node or python backend process (standard library only) that listens on 127.0.0.1 at env PORT; the page reaches it via fetch('backend/<route>?token=' + token) and HER_WEBAPP_DB gives the backend the SQLite path. Prefer the static + SQLite form; add a backend only when page JavaScript is not enough. Creating, updating, and removing apps requires user approval — mention clearly in your reply when an app will run a local backend process. After webapp.create succeeds, call webapp.open so the user sees the app immediately.",
   "version" : "0.1.0"
 }
