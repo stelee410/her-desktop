@@ -1,171 +1,302 @@
 {
-  "author" : "Her",
-  "capabilities" : [
+  "author": "Her",
+  "capabilities": [
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Create a local mini web app from a complete single-file HTML document. The app is hosted on a loopback-only server with its own SQLite database. Inside the HTML, call the data API with: fetch('api/query?token=' + new URLSearchParams(location.search).get('token'), {method:'POST', body: JSON.stringify({sql:'...', params:[...]})}). The response is {ok, columns, rows, rows_changed, last_insert_row_id}. Optionally pass backend_type (node|python) plus backend_code to add a backend process: the script must start an HTTP server on 127.0.0.1 at the PORT environment variable (HER_WEBAPP_DB has the SQLite path, standard library only, no npm/pip installs). The page reaches it via fetch('backend/<route>?token=' + token). Keep everything inline (no external CDN scripts or styles).",
-      "id" : "webapp.create",
-      "inputSchema" : {
-        "properties" : {
-          "backend_code" : {
-            "description" : "Optional backend script source. Must listen on 127.0.0.1 at env PORT using only the standard library.",
-            "type" : "string"
+      "description": "Create a local mini web app from a complete single-file HTML document. The app is hosted on a loopback-only server with its own SQLite database. Inside the HTML, call the data API with: fetch('api/query?token=' + new URLSearchParams(location.search).get('token'), {method:'POST', body: JSON.stringify({sql:'...', params:[...]})}). The response is {ok, columns, rows, rows_changed, last_insert_row_id}. Optionally pass backend_type (node|python) plus backend_code to add a backend process: the script must start an HTTP server on 127.0.0.1 at the PORT environment variable (HER_WEBAPP_DB has the SQLite path, standard library only, no npm/pip installs). The page reaches it via fetch('backend/<route>?token=' + token). Keep everything inline (no external CDN scripts or styles).",
+      "id": "webapp.create",
+      "inputSchema": {
+        "properties": {
+          "backend_code": {
+            "description": "Optional backend script source. Must listen on 127.0.0.1 at env PORT using only the standard library.",
+            "type": "string"
           },
-          "backend_type" : {
-            "description" : "Optional backend runtime: node or python.",
-            "type" : "string"
+          "backend_type": {
+            "description": "Optional backend runtime: node or python.",
+            "type": "string"
           },
-          "description" : {
-            "description" : "One-line summary of what the app does.",
-            "type" : "string"
+          "description": {
+            "description": "One-line summary of what the app does.",
+            "type": "string"
           },
-          "html" : {
-            "description" : "Complete self-contained HTML document (inline CSS/JS, no external resources).",
-            "type" : "string"
+          "html": {
+            "description": "Complete self-contained HTML document (inline CSS/JS, no external resources).",
+            "type": "string"
           },
-          "name" : {
-            "description" : "Human-readable app name shown in the Apps page.",
-            "type" : "string"
+          "llms_txt": {
+            "description": "LLM-facing contract for this app: what it stores, table schemas, meaningful example queries, and backend routes. Strongly recommended — it lets future conversations answer questions from the app's data via webapp.query.",
+            "type": "string"
           },
-          "widget_height" : {
-            "description" : "Optional widget card height in points (80-480, default 160).",
-            "type" : "integer"
+          "name": {
+            "description": "Human-readable app name shown in the Apps page.",
+            "type": "string"
           },
-          "widget_html" : {
-            "description" : "Optional compact self-contained HTML for a small card view, shown inside conversations and the Apps dashboard. Same api/query contract as the main page.",
-            "type" : "string"
+          "widget_height": {
+            "description": "Optional widget card height in points (80-480, default 160).",
+            "type": "integer"
+          },
+          "widget_html": {
+            "description": "Optional compact self-contained HTML for a small card view, shown inside conversations and the Apps dashboard. Same api/query contract as the main page.",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "name",
           "html"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "webapp.create",
-      "kind" : "native",
-      "requiresApproval" : true,
-      "title" : "Create local web app"
+      "invocation": "webapp.create",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Create local web app"
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Replace the HTML of an installed local web app, and optionally rename it or replace its backend script. The app keeps its SQLite data; a replaced backend restarts on the next request.",
-      "id" : "webapp.update",
-      "inputSchema" : {
-        "properties" : {
-          "app_id" : {
-            "description" : "ID of the installed web app (see webapp.list).",
-            "type" : "string"
+      "description": "Replace the HTML of an installed local web app, and optionally rename it or replace its backend script. The app keeps its SQLite data; a replaced backend restarts on the next request.",
+      "id": "webapp.update",
+      "inputSchema": {
+        "properties": {
+          "app_id": {
+            "description": "ID of the installed web app (see webapp.list).",
+            "type": "string"
           },
-          "backend_code" : {
-            "description" : "Optional replacement backend script (see webapp.create for the contract).",
-            "type" : "string"
+          "backend_code": {
+            "description": "Optional replacement backend script (see webapp.create for the contract).",
+            "type": "string"
           },
-          "backend_type" : {
-            "description" : "Optional backend runtime when replacing backend_code: node or python.",
-            "type" : "string"
+          "backend_type": {
+            "description": "Optional backend runtime when replacing backend_code: node or python.",
+            "type": "string"
           },
-          "description" : {
-            "description" : "Optional new one-line summary.",
-            "type" : "string"
+          "description": {
+            "description": "Optional new one-line summary.",
+            "type": "string"
           },
-          "html" : {
-            "description" : "Complete replacement HTML document.",
-            "type" : "string"
+          "html": {
+            "description": "Complete replacement HTML document.",
+            "type": "string"
           },
-          "name" : {
-            "description" : "Optional new display name.",
-            "type" : "string"
+          "llms_txt": {
+            "description": "LLM-facing contract for this app: what it stores, table schemas, meaningful example queries, and backend routes. Strongly recommended — it lets future conversations answer questions from the app's data via webapp.query.",
+            "type": "string"
           },
-          "widget_height" : {
-            "description" : "Optional widget card height in points (80-480).",
-            "type" : "integer"
+          "name": {
+            "description": "Optional new display name.",
+            "type": "string"
           },
-          "widget_html" : {
-            "description" : "Optional compact card HTML to add or replace the app widget.",
-            "type" : "string"
+          "widget_height": {
+            "description": "Optional widget card height in points (80-480).",
+            "type": "integer"
+          },
+          "widget_html": {
+            "description": "Optional compact card HTML to add or replace the app widget.",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "app_id",
           "html"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "webapp.update",
-      "kind" : "native",
-      "requiresApproval" : true,
-      "title" : "Update local web app"
+      "invocation": "webapp.update",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Update local web app"
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "List installed local web apps with their ids, names, and local URLs.",
-      "id" : "webapp.list",
-      "inputSchema" : {
-        "properties" : {},
-        "type" : "object"
+      "description": "List installed local web apps with their ids, names, and local URLs.",
+      "id": "webapp.list",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
       },
-      "invocation" : "webapp.list",
-      "kind" : "native",
-      "requiresApproval" : false,
-      "title" : "List local web apps"
+      "invocation": "webapp.list",
+      "kind": "native",
+      "requiresApproval": false,
+      "title": "List local web apps"
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Open an installed local web app in the Apps page so the user can see it.",
-      "id" : "webapp.open",
-      "inputSchema" : {
-        "properties" : {
-          "app_id" : {
-            "description" : "ID of the installed web app (see webapp.list).",
-            "type" : "string"
+      "description": "Open an installed local web app in the Apps page so the user can see it.",
+      "id": "webapp.open",
+      "inputSchema": {
+        "properties": {
+          "app_id": {
+            "description": "ID of the installed web app (see webapp.list).",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "app_id"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "webapp.open",
-      "kind" : "native",
-      "requiresApproval" : false,
-      "title" : "Open local web app"
+      "invocation": "webapp.open",
+      "kind": "native",
+      "requiresApproval": false,
+      "title": "Open local web app"
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Delete an installed local web app, including its SQLite data.",
-      "id" : "webapp.remove",
-      "inputSchema" : {
-        "properties" : {
-          "app_id" : {
-            "description" : "ID of the installed web app (see webapp.list).",
-            "type" : "string"
+      "description": "Delete an installed local web app, including its SQLite data.",
+      "id": "webapp.remove",
+      "inputSchema": {
+        "properties": {
+          "app_id": {
+            "description": "ID of the installed web app (see webapp.list).",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "app_id"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "webapp.remove",
-      "kind" : "native",
-      "requiresApproval" : true,
-      "title" : "Remove local web app"
+      "invocation": "webapp.remove",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Remove local web app"
+    },
+    {
+      "adapter": {
+        "type": "native"
+      },
+      "description": "Read a web app's data contract before touching its data: llms.txt (purpose, tables, meaningful queries, backend routes) plus the live SQLite schema.",
+      "id": "webapp.inspect",
+      "inputSchema": {
+        "properties": {
+          "app_id": {
+            "description": "ID of the installed web app (see webapp.list).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "app_id"
+        ],
+        "type": "object"
+      },
+      "invocation": "webapp.inspect",
+      "kind": "native",
+      "requiresApproval": false,
+      "title": "Inspect web app contract"
+    },
+    {
+      "adapter": {
+        "type": "native"
+      },
+      "description": "Run a READ-ONLY SQL statement against an installed web app's SQLite database to answer the user from live app data. Write statements are rejected — use webapp.execute for mutations. Call webapp.inspect first to learn the schema.",
+      "id": "webapp.query",
+      "inputSchema": {
+        "properties": {
+          "app_id": {
+            "description": "ID of the installed web app (see webapp.list).",
+            "type": "string"
+          },
+          "params": {
+            "description": "Positional parameters bound to the ? placeholders.",
+            "type": "array"
+          },
+          "sql": {
+            "description": "A single SQL statement. Use ? placeholders with params.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "app_id",
+          "sql"
+        ],
+        "type": "object"
+      },
+      "invocation": "webapp.query",
+      "kind": "native",
+      "requiresApproval": false,
+      "title": "Query web app data"
+    },
+    {
+      "adapter": {
+        "type": "native"
+      },
+      "description": "Run a mutating SQL statement (INSERT/UPDATE/DELETE/DDL) against an installed web app's SQLite database, e.g. to add a record on the user's behalf. The app's pages and widget will reflect the change.",
+      "id": "webapp.execute",
+      "inputSchema": {
+        "properties": {
+          "app_id": {
+            "description": "ID of the installed web app (see webapp.list).",
+            "type": "string"
+          },
+          "params": {
+            "description": "Positional parameters bound to the ? placeholders.",
+            "type": "array"
+          },
+          "sql": {
+            "description": "A single SQL statement. Use ? placeholders with params.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "app_id",
+          "sql"
+        ],
+        "type": "object"
+      },
+      "invocation": "webapp.execute",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Modify web app data"
+    },
+    {
+      "adapter": {
+        "type": "native"
+      },
+      "description": "Call an HTTP route on a web app's backend process (starts it if needed). Use for apps whose llms.txt documents backend routes, e.g. data refresh endpoints.",
+      "id": "webapp.request",
+      "inputSchema": {
+        "properties": {
+          "app_id": {
+            "description": "ID of the installed web app (see webapp.list).",
+            "type": "string"
+          },
+          "body": {
+            "description": "Optional JSON request body.",
+            "type": "string"
+          },
+          "method": {
+            "description": "HTTP method (default GET).",
+            "type": "string"
+          },
+          "path": {
+            "description": "Backend route path, e.g. api/stocks.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "app_id",
+          "path"
+        ],
+        "type": "object"
+      },
+      "invocation": "webapp.request",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Call web app backend"
     }
   ],
-  "description" : "Vibe-code small local web apps: single-file HTML hosted on a loopback server with per-app SQLite storage, shown in the Apps page as embedded pages.",
-  "id" : "builtin.webapp-runtime",
-  "name" : "WebApp Runtime",
-  "systemPromptAddendum" : "IMPORTANT: when building a web app, do NOT draft or rehearse the code inside your private reasoning — that exhausts the output budget before anything is produced. Decide the approach in a few sentences at most, then immediately emit the webapp.create tool call and write the code only inside its arguments. Local web apps are self-contained single-file HTML documents served from a loopback-only server. The page must be fully readable BEFORE any JavaScript runs: always declare an explicit body background color in CSS that matches your text colors (never rely on the default canvas or on JS to paint the first background). Each app has its own SQLite database reachable from page JavaScript via POST api/query with the token from the page URL query string. Apps may optionally declare a node or python backend process (standard library only) that listens on 127.0.0.1 at env PORT; the page reaches it via fetch('backend/<route>?token=' + token) and HER_WEBAPP_DB gives the backend the SQLite path. Prefer the static + SQLite form; add a backend only when page JavaScript is not enough. Apps can also ship widget_html: a compact card rendered live inside conversations and the Apps dashboard — include one for apps whose state is worth glancing at (trackers, counters, lists). Creating, updating, and removing apps requires user approval — mention clearly in your reply when an app will run a local backend process. After webapp.create succeeds, call webapp.open so the user sees the app immediately.",
-  "version" : "0.1.0"
+  "description": "Vibe-code small local web apps: single-file HTML hosted on a loopback server with per-app SQLite storage, shown in the Apps page as embedded pages.",
+  "id": "builtin.webapp-runtime",
+  "name": "WebApp Runtime",
+  "systemPromptAddendum": "IMPORTANT: when building a web app, do NOT draft or rehearse the code inside your private reasoning — that exhausts the output budget before anything is produced. Decide the approach in a few sentences at most, then immediately emit the webapp.create tool call and write the code only inside its arguments. Local web apps are self-contained single-file HTML documents served from a loopback-only server. The page must be fully readable BEFORE any JavaScript runs: always declare an explicit body background color in CSS that matches your text colors (never rely on the default canvas or on JS to paint the first background). Each app has its own SQLite database reachable from page JavaScript via POST api/query with the token from the page URL query string. Apps may optionally declare a node or python backend process (standard library only) that listens on 127.0.0.1 at env PORT; the page reaches it via fetch('backend/<route>?token=' + token) and HER_WEBAPP_DB gives the backend the SQLite path. Prefer the static + SQLite form; add a backend only when page JavaScript is not enough. Apps can also ship widget_html: a compact card rendered live inside conversations and the Apps dashboard — include one for apps whose state is worth glancing at (trackers, counters, lists). Creating, updating, and removing apps requires user approval — mention clearly in your reply when an app will run a local backend process. After webapp.create succeeds, call webapp.open so the user sees the app immediately. Conversations can work with app data directly: webapp.inspect returns an app's llms.txt and live schema, webapp.query answers questions from app data (read-only, no approval), webapp.execute modifies data with approval, and webapp.request calls backend routes. When the user asks about anything an installed app tracks (habits, weather, expenses...), inspect then query it instead of guessing. Always include llms_txt when creating an app.",
+  "version": "0.1.0"
 }

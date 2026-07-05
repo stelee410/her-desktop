@@ -248,6 +248,18 @@ extension AppViewModel {
         if invocation.capabilityID == "webapp.remove" {
             return removeWebAppCapability(arguments: invocation.arguments)
         }
+        if invocation.capabilityID == "webapp.query" {
+            return queryWebAppCapability(arguments: invocation.arguments)
+        }
+        if invocation.capabilityID == "webapp.execute" {
+            return executeWebAppSQLCapability(arguments: invocation.arguments)
+        }
+        if invocation.capabilityID == "webapp.inspect" {
+            return inspectWebAppCapability(arguments: invocation.arguments)
+        }
+        if invocation.capabilityID == "webapp.request" {
+            return await requestWebAppBackendCapability(arguments: invocation.arguments)
+        }
         return await capabilityExecutor.execute(invocation)
     }
 

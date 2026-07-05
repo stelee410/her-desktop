@@ -1014,6 +1014,62 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.webAppReferences(for: ChatMessage(role: .tool, content: "unrelated")).isEmpty)
     }
 
+    func testConversationCanInspectQueryAndExecuteWebAppData() async {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-webapp-data-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(cwd: root.path)
+        _ = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "c1", functionName: "webapp_create", capabilityID: "webapp.create",
+            arguments: [
+                "name": "Expenses",
+                "html": "<html><body>x</body></html>",
+                "llms_txt": "# Expenses\ntable: expenses(id, amount, note)"
+            ]
+        ))
+
+        // Approval-gated execute can create and mutate data.
+        let created = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "c2", functionName: "webapp_execute", capabilityID: "webapp.execute",
+            arguments: ["app_id": "expenses", "sql": "CREATE TABLE expenses (id INTEGER PRIMARY KEY, amount REAL, note TEXT)"]
+        ))
+        XCTAssertEqual(created.title, "Web App Execute")
+        _ = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "c3", functionName: "webapp_execute", capabilityID: "webapp.execute",
+            arguments: ["app_id": "expenses", "sql": "INSERT INTO expenses (amount, note) VALUES (?, ?)", "params": [12.5, "coffee"]]
+        ))
+
+        // Read-only query answers from live data.
+        let queried = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "c4", functionName: "webapp_query", capabilityID: "webapp.query",
+            arguments: ["app_id": "expenses", "sql": "SELECT note, amount FROM expenses"]
+        ))
+        XCTAssertEqual(queried.title, "Web App Query")
+        XCTAssertTrue(queried.content.contains("coffee"))
+
+        // Write statements are rejected on the read-only path.
+        let blocked = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "c5", functionName: "webapp_query", capabilityID: "webapp.query",
+            arguments: ["app_id": "expenses", "sql": "DELETE FROM expenses"]
+        ))
+        XCTAssertEqual(blocked.title, "Web App Query Failed")
+        XCTAssertTrue(blocked.content.contains("webapp.execute"))
+
+        // Inspect returns the llms.txt contract and live schema.
+        let inspected = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "c6", functionName: "webapp_inspect", capabilityID: "webapp.inspect",
+            arguments: ["app_id": "expenses"]
+        ))
+        XCTAssertEqual(inspected.title, "Web App Contract")
+        XCTAssertTrue(inspected.content.contains("CREATE TABLE expenses"))
+        XCTAssertTrue(inspected.content.contains("# Expenses"))
+
+        // Approval contract: reads are free, writes are gated.
+        XCTAssertFalse(model.requiresApproval(capabilityID: "webapp.query"))
+        XCTAssertFalse(model.requiresApproval(capabilityID: "webapp.inspect"))
+        XCTAssertTrue(model.requiresApproval(capabilityID: "webapp.execute"))
+        XCTAssertTrue(model.requiresApproval(capabilityID: "webapp.request"))
+    }
+
     func testWebAppCreateAndRemoveRequireApprovalByManifest() {
         let model = AppViewModel(cwd: URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-webapp-approval-\(UUID().uuidString)", isDirectory: true).path)

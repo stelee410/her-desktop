@@ -17,17 +17,24 @@ enum WebAppDatabase {
         case cannotOpen(String)
         case prepareFailed(String)
         case stepFailed(String)
+        case writeNotAllowed
 
         var errorDescription: String? {
             switch self {
             case .cannotOpen(let message): return "Cannot open database: \(message)"
             case .prepareFailed(let message): return "SQL prepare failed: \(message)"
             case .stepFailed(let message): return "SQL execution failed: \(message)"
+            case .writeNotAllowed: return "This statement modifies data; use webapp.execute (requires approval) instead of webapp.query."
             }
         }
     }
 
-    static func execute(sql: String, params: [JSONValue] = [], databaseURL: URL) throws -> QueryResult {
+    static func execute(
+        sql: String,
+        params: [JSONValue] = [],
+        databaseURL: URL,
+        requireReadOnly: Bool = false
+    ) throws -> QueryResult {
         try FileManager.default.createDirectory(
             at: databaseURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
@@ -46,6 +53,9 @@ enum WebAppDatabase {
             throw DatabaseError.prepareFailed(String(cString: sqlite3_errmsg(db)))
         }
         defer { sqlite3_finalize(statement) }
+        if requireReadOnly, sqlite3_stmt_readonly(statement) == 0 {
+            throw DatabaseError.writeNotAllowed
+        }
 
         let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
         for (index, param) in params.enumerated() {

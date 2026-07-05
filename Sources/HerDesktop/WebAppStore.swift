@@ -100,6 +100,23 @@ final class WebAppStore: @unchecked Sendable {
         appDirectory(id: id).appendingPathComponent("backend", isDirectory: true)
     }
 
+    /// LLM-facing description of the app: what it stores, table schemas,
+    /// meaningful queries, and backend routes. Lives at the app root, not
+    /// under `www/`, so it is never served over HTTP.
+    func llmsTxtURL(id: String) -> URL {
+        appDirectory(id: id).appendingPathComponent("llms.txt")
+    }
+
+    func llmsTxt(id: String) -> String? {
+        guard let data = try? Data(contentsOf: llmsTxtURL(id: id)) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    func writeLLMsTxt(id: String, content: String) throws {
+        guard manifest(id: id) != nil else { throw StoreError.appNotFound(id) }
+        try Data(content.utf8).write(to: llmsTxtURL(id: id), options: .atomic)
+    }
+
     private func manifestURL(id: String) -> URL {
         appDirectory(id: id).appendingPathComponent("webapp.json")
     }
@@ -135,6 +152,7 @@ final class WebAppStore: @unchecked Sendable {
         backendCode: String? = nil,
         widgetHTML: String? = nil,
         widgetHeight: Double? = nil,
+        llmsTxt: String? = nil,
         idHint: String = "",
         now: Date = Date()
     ) throws -> WebAppManifest {
@@ -160,6 +178,9 @@ final class WebAppStore: @unchecked Sendable {
         manifest.runtime = try writeBackendIfRequested(id: id, type: backendType, code: backendCode)
         manifest.widget = try writeWidgetIfRequested(id: id, html: widgetHTML, height: widgetHeight)
         try save(manifest)
+        if let llmsTxt = llmsTxt?.trimmingCharacters(in: .whitespacesAndNewlines), !llmsTxt.isEmpty {
+            try writeLLMsTxt(id: id, content: llmsTxt)
+        }
         return manifest
     }
 
@@ -173,6 +194,7 @@ final class WebAppStore: @unchecked Sendable {
         backendCode: String? = nil,
         widgetHTML: String? = nil,
         widgetHeight: Double? = nil,
+        llmsTxt: String? = nil,
         now: Date = Date()
     ) throws -> WebAppManifest {
         guard var manifest = manifest(id: id) else { throw StoreError.appNotFound(id) }
@@ -198,6 +220,9 @@ final class WebAppStore: @unchecked Sendable {
         }
         manifest.updatedAt = now
         try save(manifest)
+        if let llmsTxt = llmsTxt?.trimmingCharacters(in: .whitespacesAndNewlines), !llmsTxt.isEmpty {
+            try writeLLMsTxt(id: id, content: llmsTxt)
+        }
         return manifest
     }
 
