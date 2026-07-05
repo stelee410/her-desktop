@@ -64,6 +64,22 @@ extension AppViewModel {
         persistConversationIndex()
     }
 
+    func renameConversation(_ id: String, to title: String) {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let index = conversations.firstIndex(where: { $0.id == id }),
+              conversations[index].title != trimmed else {
+            return
+        }
+        conversations[index].title = String(trimmed.prefix(60))
+        audit(
+            type: "session.rename_conversation",
+            summary: "Renamed a local conversation.",
+            metadata: ["sessionID": id]
+        )
+        persistConversationIndex()
+    }
+
     func togglePinConversation(_ id: String) {
         guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
         conversations[index].pinned.toggle()

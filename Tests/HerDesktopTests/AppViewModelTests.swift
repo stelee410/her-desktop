@@ -824,6 +824,29 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.auditEvents.contains { $0.type == "session.switch_conversation" })
     }
 
+    func testRenameConversationUpdatesTitleAndPersists() {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-rename-conversation-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(cwd: root.path)
+        let id = model.activeConversationID
+
+        model.renameConversation(id, to: "  我的项目讨论  ")
+
+        XCTAssertEqual(model.conversations.first { $0.id == id }?.title, "我的项目讨论")
+        XCTAssertTrue(model.auditEvents.contains { $0.type == "session.rename_conversation" })
+        let stored = try? ConversationStore(cwd: root.path).loadIndex()
+        XCTAssertEqual(stored?.conversations.first { $0.id == id }?.title, "我的项目讨论")
+
+        model.renameConversation(id, to: "   ")
+        XCTAssertEqual(model.conversations.first { $0.id == id }?.title, "我的项目讨论",
+                       "blank rename should be ignored")
+
+        // A manual title survives the auto-title pass on save.
+        model.messages.append(ChatMessage(role: .user, content: "这条消息不该变成标题"))
+        model.newLocalConversation()
+        XCTAssertEqual(model.conversations.first { $0.id == id }?.title, "我的项目讨论")
+    }
+
     func testTogglePinConversationSortsPinnedFirst() {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-pin-conversation-\(UUID().uuidString)", isDirectory: true)

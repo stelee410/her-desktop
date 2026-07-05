@@ -76,6 +76,9 @@ struct SidebarView: View {
                             onTogglePin: {
                                 model.togglePinConversation(conversation.id)
                             },
+                            onRename: { newTitle in
+                                model.renameConversation(conversation.id, to: newTitle)
+                            },
                             onDelete: {
                                 conversationPendingDeletion = conversation
                             }
@@ -137,21 +140,45 @@ private struct ConversationListRow: View {
     var selected: Bool
     var onSelect: () -> Void
     var onTogglePin: () -> Void
+    var onRename: (String) -> Void
     var onDelete: () -> Void
     @State private var isHovering = false
+    @State private var isRenaming = false
+    @State private var draftTitle = ""
+    @FocusState private var isRenameFieldFocused: Bool
 
     var body: some View {
-        Button(action: onSelect) {
+        Button(action: { if !isRenaming { onSelect() } }) {
             HStack(spacing: 8) {
                 Image(systemName: conversation.pinned ? "pin.fill" : "bubble.left")
                     .font(.caption)
                     .frame(width: 14)
                     .foregroundStyle(conversation.pinned ? AppTheme.coral : AppTheme.muted)
-                Text(conversation.title)
-                    .font(.system(size: 13, weight: selected ? .semibold : .regular))
-                    .lineLimit(1)
+                if isRenaming {
+                    TextField("对话名称", text: $draftTitle)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13))
+                        .focused($isRenameFieldFocused)
+                        .onSubmit { commitRename() }
+                        .onExitCommand { isRenaming = false }
+                        .onChange(of: isRenameFieldFocused) { _, focused in
+                            if !focused, isRenaming { commitRename() }
+                        }
+                } else {
+                    Text(conversation.title)
+                        .font(.system(size: 13, weight: selected ? .semibold : .regular))
+                        .lineLimit(1)
+                }
                 Spacer(minLength: 4)
-                if isHovering {
+                if isHovering, !isRenaming {
+                    Button(action: startRename) {
+                        Image(systemName: "pencil")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.muted)
+                    }
+                    .buttonStyle(.plain)
+                    .help("重命名对话")
+
                     Button(action: onTogglePin) {
                         Image(systemName: conversation.pinned ? "pin.slash" : "pin")
                             .font(.caption)
@@ -181,9 +208,21 @@ private struct ConversationListRow: View {
             isHovering = hovering
         }
         .contextMenu {
+            Button("重命名…", action: startRename)
             Button(conversation.pinned ? "取消置顶" : "置顶对话", action: onTogglePin)
             Button("删除对话…", role: .destructive, action: onDelete)
         }
+    }
+
+    private func startRename() {
+        draftTitle = conversation.title
+        isRenaming = true
+        isRenameFieldFocused = true
+    }
+
+    private func commitRename() {
+        isRenaming = false
+        onRename(draftTitle)
     }
 }
 
