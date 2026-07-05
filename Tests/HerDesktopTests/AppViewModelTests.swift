@@ -899,6 +899,21 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.messages.first?.content.contains("新会话") == true)
     }
 
+    func testTruncatedThinkingReplyExplainsMaxTokensBudget() async {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-truncated-\(UUID().uuidString)", isDirectory: true)
+        let fakeLLM = FakeLLM(responses: [
+            .init(role: "assistant", content: "", reasoningContent: "超长思考……", toolCalls: nil, finishReason: "length")
+        ])
+        let model = AppViewModel(cwd: root.path, agentLLM: fakeLLM)
+
+        await model.send("做一个股票追踪工具")
+
+        let last = model.messages.last?.content ?? ""
+        XCTAssertTrue(last.contains("输出预算"), "should explain the truncation: \(last)")
+        XCTAssertTrue(last.contains("Max Tokens"))
+    }
+
     func testSuccessfulChatReplyMarksAgentLLMOnline() async {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-chat-evidence-\(UUID().uuidString)", isDirectory: true)

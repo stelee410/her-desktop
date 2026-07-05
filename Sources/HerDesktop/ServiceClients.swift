@@ -309,12 +309,16 @@ struct AgentLLMChatResponse: Codable {
             var content: String?
             var reasoningContent: String?
             var toolCalls: [ToolCall]?
+            /// Why generation stopped ("stop", "length", "tool_calls").
+            /// Filled from stream chunks or the enclosing choice.
+            var finishReason: String? = nil
 
             enum CodingKeys: String, CodingKey {
                 case role
                 case content
                 case reasoningContent = "reasoning_content"
                 case toolCalls = "tool_calls"
+                case finishReason = "finish_reason"
             }
         }
         var message: Message?
@@ -552,6 +556,7 @@ final class AgentLLMClient: AgentLLMChatting {
         var role: String?
         var content = ""
         var reasoning = ""
+        var finishReason: String?
         var thinkFilter = ThinkTagStreamFilter()
         var toolCalls: [Int: StreamedToolCallAccumulator] = [:]
         var nextImplicitToolIndex = 0
@@ -583,8 +588,11 @@ final class AgentLLMClient: AgentLLMChatting {
                 let payload = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
                 if payload == "[DONE]" { break }
                 guard let data = payload.data(using: .utf8),
-                      let chunk = try? JSONDecoder().decode(AgentLLMStreamChunk.self, from: data),
-                      let delta = chunk.choices?.first?.delta else { continue }
+                      let chunk = try? JSONDecoder().decode(AgentLLMStreamChunk.self, from: data) else { continue }
+                if let reason = chunk.choices?.first?.finishReason, !reason.isEmpty {
+                    finishReason = reason
+                }
+                guard let delta = chunk.choices?.first?.delta else { continue }
                 if let deltaRole = delta.role, !deltaRole.isEmpty {
                     role = deltaRole
                 }
@@ -626,7 +634,8 @@ final class AgentLLMClient: AgentLLMChatting {
             role: role ?? "assistant",
             content: content,
             reasoningContent: reasoning.isEmpty ? nil : reasoning,
-            toolCalls: finalToolCalls.isEmpty ? nil : finalToolCalls
+            toolCalls: finalToolCalls.isEmpty ? nil : finalToolCalls,
+            finishReason: finishReason
         )
     }
 
@@ -642,6 +651,9 @@ final class AgentLLMClient: AgentLLMChatting {
             throw ServiceError.decoding("AgentLLM returned an unrecognized streaming response.")
         }
         var message = decoded.choices.first?.message ?? .init(role: "assistant", content: "")
+        if message.finishReason == nil {
+            message.finishReason = decoded.choices.first?.finishReason
+        }
         let extracted = ThinkTagStreamFilter.extract(from: message.content ?? "")
         message.content = extracted.content
         if message.reasoningContent?.isEmpty != false, !extracted.reasoning.isEmpty {

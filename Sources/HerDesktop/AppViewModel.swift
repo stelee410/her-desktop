@@ -80,6 +80,9 @@ final class AppViewModel: ObservableObject {
     var dictationBaseText = ""
     var didBootstrapRuntime = false
     var bootstrapTask: Task<Void, Never>?
+    /// finish_reason of the most recent model reply in the tool loop,
+    /// used to explain empty replies (e.g. output truncated at "length").
+    var lastAssistantFinishReason: String?
 
     init(
         config explicitConfig: HerAppConfig? = nil,

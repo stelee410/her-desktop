@@ -554,7 +554,7 @@ struct WebServiceArtifact: Identifiable, Equatable {
 }
 
 struct HerAppConfig: Codable, Equatable {
-    static let defaultAgentLLMMaxTokens = 8192
+    static let defaultAgentLLMMaxTokens = 16384
 
     var agentLLMBaseURL: URL
     var agentLLMAPIKey: String

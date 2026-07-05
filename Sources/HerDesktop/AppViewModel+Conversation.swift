@@ -199,7 +199,14 @@ extension AppViewModel {
             let catalog = CapabilityToolCatalog.build(from: plugins)
             var llmMessages = conversationContextBuilder.build(systemPrompt: prompt, messages: messages)
             let reply = try await runAgentToolLoop(llmMessages: &llmMessages, catalog: catalog)
-            let final = reply.isEmpty ? "我收到啦，但这次模型没有返回正文。" : reply
+            let final: String
+            if reply.isEmpty {
+                final = lastAssistantFinishReason == "length"
+                    ? "这次生成没有完成：模型在思考阶段就用完了输出预算（max tokens），还没来得及写正文或调用工具。你可以对我说「重试，少想多做，直接调用工具」，或者在 Settings 里调大 AgentLLM Max Tokens 后再试。"
+                    : "我收到啦，但这次模型没有返回正文。"
+            } else {
+                final = reply
+            }
             deliverAssistantReply(final)
             connectionState = .ready
             saveSessionSnapshot()
@@ -289,6 +296,7 @@ extension AppViewModel {
                     self?.applyAssistantStreamEvent(event)
                 }
             )
+            lastAssistantFinishReason = message.finishReason
             let toolCalls = message.toolCalls ?? []
             guard !toolCalls.isEmpty else {
                 return finalizeStreamedAssistantReply(with: message)
