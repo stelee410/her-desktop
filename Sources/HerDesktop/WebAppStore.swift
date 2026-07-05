@@ -23,6 +23,11 @@ struct WebAppManifest: Identifiable, Codable, Equatable {
     var updatedAt: Date
     var runtime: WebAppRuntime?
     var widget: WebAppWidget?
+    /// Optional for backward compatibility with manifests written before
+    /// pinning existed; use `isPinned`.
+    var pinned: Bool?
+
+    var isPinned: Bool { pinned ?? false }
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -33,6 +38,7 @@ struct WebAppManifest: Identifiable, Codable, Equatable {
         case updatedAt = "updated_at"
         case runtime
         case widget
+        case pinned
     }
 }
 
@@ -219,6 +225,14 @@ final class WebAppStore: @unchecked Sendable {
         try fileManager.createDirectory(at: backendDirectory(id: id), withIntermediateDirectories: true)
         try Data(code.utf8).write(to: backendDirectory(id: id).appendingPathComponent(fileName), options: .atomic)
         return WebAppRuntime(type: type, entry: "backend/\(fileName)")
+    }
+
+    @discardableResult
+    func togglePin(id: String) throws -> WebAppManifest {
+        guard var manifest = manifest(id: id) else { throw StoreError.appNotFound(id) }
+        manifest.pinned = !manifest.isPinned
+        try save(manifest)
+        return manifest
     }
 
     func remove(id: String) throws {

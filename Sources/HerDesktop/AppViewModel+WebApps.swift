@@ -69,6 +69,26 @@ extension AppViewModel {
         audit(type: "webapp.opened_in_browser", summary: "Opened web app in the default browser.", metadata: ["appID": id])
     }
 
+    var pinnedWebApps: [WebAppManifest] {
+        webApps.filter(\.isPinned)
+    }
+
+    func togglePinWebApp(_ id: String) {
+        do {
+            let manifest = try webAppStore.togglePin(id: id)
+            refreshWebApps()
+            audit(
+                type: manifest.isPinned ? "webapp.pinned" : "webapp.unpinned",
+                summary: manifest.isPinned
+                    ? "Pinned web app to the widget panel."
+                    : "Unpinned web app from the widget panel.",
+                metadata: ["appID": id]
+            )
+        } catch {
+            lastError = "Could not update the pin state: \(error.localizedDescription)"
+        }
+    }
+
     func removeWebApp(_ id: String) {
         do {
             webAppProcessManager.stop(appID: id)

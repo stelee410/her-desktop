@@ -559,6 +559,15 @@ private struct WebAppsWorkspaceView: View {
                                 .controlSize(.small)
 
                                 Button {
+                                    model.togglePinWebApp(app.id)
+                                } label: {
+                                    Image(systemName: app.isPinned ? "pin.fill" : "pin")
+                                }
+                                .buttonStyle(.borderless)
+                                .foregroundStyle(app.isPinned ? AppTheme.coral : AppTheme.muted)
+                                .help(app.isPinned ? "从小组件面板取消固定" : "固定到小组件面板")
+
+                                Button {
                                     removalCandidate = app
                                 } label: {
                                     Image(systemName: "trash")

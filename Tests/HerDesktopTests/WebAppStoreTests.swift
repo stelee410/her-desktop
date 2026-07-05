@@ -111,6 +111,20 @@ final class WebAppStoreTests: XCTestCase {
         XCTAssertEqual(store.manifest(id: created.id)?.widget?.height, 120)
     }
 
+    func testTogglePinPersistsAndDefaultsToFalseForLegacyManifests() throws {
+        let store = makeStore("pin")
+        let manifest = try store.create(name: "Pin Me", description: "", html: "<p>x</p>")
+        XCTAssertFalse(manifest.isPinned, "legacy/default manifests are unpinned")
+
+        let pinned = try store.togglePin(id: manifest.id)
+        XCTAssertTrue(pinned.isPinned)
+        XCTAssertTrue(store.manifest(id: manifest.id)?.isPinned == true)
+
+        let unpinned = try store.togglePin(id: manifest.id)
+        XCTAssertFalse(unpinned.isPinned)
+        XCTAssertThrowsError(try store.togglePin(id: "missing"))
+    }
+
     func testSlugSanitizesNames() {
         XCTAssertEqual(WebAppStore.slug(from: "My Habit App"), "my-habit-app")
         XCTAssertEqual(WebAppStore.slug(from: "  Spaced__Out.. "), "spaced-out")
