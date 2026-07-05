@@ -492,6 +492,14 @@ private struct WebAppsWorkspaceView: View {
                                             RoundedRectangle(cornerRadius: 8)
                                                 .stroke(Color.black.opacity(0.06), lineWidth: 1)
                                         )
+                                        // Widgets are glanceable: a click anywhere opens the full app.
+                                        .overlay(
+                                            Rectangle()
+                                                .fill(Color.clear)
+                                                .contentShape(Rectangle())
+                                                .onTapGesture { model.openWebApp(app.id) }
+                                        )
+                                        .help("点击打开完整应用")
                                 }
                                 .padding(10)
                                 .background(Color.white.opacity(0.5))
