@@ -1,0 +1,123 @@
+{
+  "author": "Her",
+  "capabilities": [
+    {
+      "adapter": {
+        "type": "native"
+      },
+      "description": "Open a real Chrome (stable channel) with a persistent profile that reuses the user's logins, and show it in the browser drawer. Automation is hidden (navigator.webdriver is false). Returns the current page.",
+      "id": "browser.open",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "invocation": "browser.open",
+      "kind": "native",
+      "requiresApproval": false,
+      "title": "Open browser"
+    },
+    {
+      "adapter": {
+        "type": "native"
+      },
+      "description": "Read the current page: URL, title, visible text, and top links. Use this to understand a page before acting or to answer the user from page content.",
+      "id": "browser.read",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "invocation": "browser.read",
+      "kind": "native",
+      "requiresApproval": false,
+      "title": "Read current page"
+    },
+    {
+      "adapter": {
+        "type": "native"
+      },
+      "description": "Navigate the browser to a URL. The drawer shows the live page and the reply includes the new title/URL.",
+      "id": "browser.navigate",
+      "inputSchema": {
+        "properties": {
+          "url": {
+            "description": "Destination URL (https:// is added if missing).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
+      "invocation": "browser.navigate",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Navigate browser"
+    },
+    {
+      "adapter": {
+        "type": "native"
+      },
+      "description": "Click in the page, by CSS selector (preferred) or by x/y coordinates. Call browser.read first to find selectors.",
+      "id": "browser.click",
+      "inputSchema": {
+        "properties": {
+          "selector": {
+            "description": "CSS selector of the element to click.",
+            "type": "string"
+          },
+          "x": {
+            "description": "Click x coordinate (with y) if no selector.",
+            "type": "number"
+          },
+          "y": {
+            "description": "Click y coordinate (with x) if no selector.",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "invocation": "browser.click",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Click in browser"
+    },
+    {
+      "adapter": {
+        "type": "native"
+      },
+      "description": "Type into the page: literal text (optionally into a CSS selector's field), or a single named key. Set enter=true to submit. Examples: fill a search box with {selector: \"input[name=q]\", text: \"...\", enter: true}; press a key with {key: \"Escape\"}.",
+      "id": "browser.type",
+      "inputSchema": {
+        "properties": {
+          "enter": {
+            "description": "Press Enter after typing (default false).",
+            "type": "boolean"
+          },
+          "key": {
+            "description": "A single key to press instead of typing text (e.g. Enter, Escape, ArrowDown, Tab).",
+            "type": "string"
+          },
+          "selector": {
+            "description": "CSS selector of the field to fill.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Literal text to type.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "invocation": "browser.type",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Type in browser"
+    }
+  ],
+  "description": "Drive the user's real Chrome from the conversation: a persistent profile reuses logins and automation is hard to detect. Open it, read the page, and navigate/click/type with approval.",
+  "id": "builtin.browser-control",
+  "name": "Browser Control",
+  "systemPromptAddendum": "The browser is a real Chrome stable window with the user's persistent profile, so logins are already there and automation is hidden (navigator.webdriver is false). browser.open shows it; browser.read returns the page URL/title/text/links (free, use it to find selectors and to answer from page content); browser.navigate/click/type act on the page and each requires approval and surfaces the drawer so the user watches. Prefer CSS selectors over x/y. After acting, browser.read again to see the result. Never log into new accounts or submit sensitive forms without the user explicitly asking.",
+  "version": "0.1.0"
+}

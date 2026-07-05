@@ -11,6 +11,12 @@ struct RootView: View {
             VStack(spacing: 0) {
                 CenterWorkspaceView()
                     .frame(maxHeight: .infinity)
+                if model.isBrowserPresented {
+                    Divider().opacity(0.45)
+                    BrowserDrawer(controller: model.browserControllerInstance)
+                        .frame(height: 360)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
                 if model.isTerminalPresented {
                     Divider().opacity(0.45)
                     TerminalDrawer()
@@ -20,6 +26,7 @@ struct RootView: View {
             }
             .frame(minWidth: 560)
             .animation(.snappy(duration: 0.22), value: model.isTerminalPresented)
+            .animation(.snappy(duration: 0.22), value: model.isBrowserPresented)
             if model.isInspectorPresented {
                 Divider().opacity(0.45)
                 InspectorView()

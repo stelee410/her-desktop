@@ -269,6 +269,21 @@ extension AppViewModel {
         if invocation.capabilityID == "terminal.send" {
             return await sendTerminalCapability(arguments: invocation.arguments)
         }
+        if invocation.capabilityID == "browser.open" {
+            return await openBrowserCapability()
+        }
+        if invocation.capabilityID == "browser.navigate" {
+            return await navigateBrowserCapability(arguments: invocation.arguments)
+        }
+        if invocation.capabilityID == "browser.read" {
+            return await readBrowserCapability()
+        }
+        if invocation.capabilityID == "browser.click" {
+            return await clickBrowserCapability(arguments: invocation.arguments)
+        }
+        if invocation.capabilityID == "browser.type" {
+            return await typeBrowserCapability(arguments: invocation.arguments)
+        }
         return await capabilityExecutor.execute(invocation)
     }
 

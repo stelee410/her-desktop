@@ -1128,6 +1128,83 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.requiresApproval(capabilityID: "terminal.send"))
     }
 
+    @MainActor
+    final class FakeBrowser: BrowserBridging {
+        var isRunning = false
+        var currentURL = ""
+        var startCount = 0
+        var navigated: [String] = []
+        var typed: [(String, Bool)] = []
+        var readText = "Example page body text"
+
+        func start() async throws { isRunning = true; startCount += 1 }
+        func navigate(_ url: String) async throws -> BrowserActionResult {
+            navigated.append(url); currentURL = url.contains("://") ? url : "https://\(url)"
+            return BrowserActionResult(url: currentURL, title: "Example", screenshotPNG: Data([1, 2, 3]))
+        }
+        func click(selector: String?, x: Double?, y: Double?) async throws -> BrowserActionResult {
+            BrowserActionResult(url: currentURL, title: "Example", screenshotPNG: nil)
+        }
+        func type(text: String, selector: String?, enter: Bool) async throws -> BrowserActionResult {
+            typed.append((text, enter))
+            return BrowserActionResult(url: currentURL, title: "Example", screenshotPNG: nil)
+        }
+        func press(key: String) async throws -> BrowserActionResult {
+            BrowserActionResult(url: currentURL, title: "Example", screenshotPNG: nil)
+        }
+        func read() async throws -> BrowserReadResult {
+            BrowserReadResult(url: currentURL, title: "Example", text: readText,
+                              links: [(text: "More", href: "https://iana.org")])
+        }
+        func screenshotPNG() async throws -> Data { Data([1, 2, 3]) }
+    }
+
+    func testBrowserCapabilitiesOpenNavigateReadType() async {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-browser-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(cwd: root.path)
+        let fake = FakeBrowser()
+        model.browserBridge = fake
+
+        let opened = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "b1", functionName: "browser_open", capabilityID: "browser.open", arguments: [:]
+        ))
+        XCTAssertEqual(opened.title, "Browser Opened")
+        XCTAssertTrue(model.isBrowserPresented)
+        XCTAssertTrue(fake.isRunning)
+
+        let nav = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "b2", functionName: "browser_navigate", capabilityID: "browser.navigate",
+            arguments: ["url": "example.com"]
+        ))
+        XCTAssertEqual(nav.title, "Navigated")
+        XCTAssertEqual(fake.navigated, ["example.com"])
+        XCTAssertTrue(nav.content.contains("example.com"))
+
+        let read = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "b3", functionName: "browser_read", capabilityID: "browser.read", arguments: [:]
+        ))
+        XCTAssertEqual(read.title, "Browser Page")
+        XCTAssertTrue(read.content.contains("Example page body text"))
+        XCTAssertTrue(read.content.contains("iana.org"))
+
+        let typed = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "b4", functionName: "browser_type", capabilityID: "browser.type",
+            arguments: ["selector": "input[name=q]", "text": "her desktop", "enter": true]
+        ))
+        XCTAssertEqual(typed.title, "Typed")
+        XCTAssertEqual(fake.typed.first?.0, "her desktop")
+        XCTAssertEqual(fake.typed.first?.1, true)
+        XCTAssertTrue(model.auditEvents.contains { $0.type == "browser.typed" })
+
+        // Approval contract: reads free, side effects gated.
+        XCTAssertFalse(model.requiresApproval(capabilityID: "browser.open"))
+        XCTAssertFalse(model.requiresApproval(capabilityID: "browser.read"))
+        XCTAssertTrue(model.requiresApproval(capabilityID: "browser.navigate"))
+        XCTAssertTrue(model.requiresApproval(capabilityID: "browser.click"))
+        XCTAssertTrue(model.requiresApproval(capabilityID: "browser.type"))
+    }
+
     func testWebAppCreateAndRemoveRequireApprovalByManifest() {
         let model = AppViewModel(cwd: URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-webapp-approval-\(UUID().uuidString)", isDirectory: true).path)

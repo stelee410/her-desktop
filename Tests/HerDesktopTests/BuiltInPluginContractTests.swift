@@ -128,7 +128,9 @@ final class BuiltInPluginContractTests: XCTestCase {
                 "webapp.inspect",
                 "webapp.query",
                 "terminal.open",
-                "terminal.read"
+                "terminal.read",
+                "browser.open",
+                "browser.read"
             ].contains(capability.id)
         }
         return false

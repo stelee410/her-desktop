@@ -39,6 +39,7 @@ final class AppViewModel: ObservableObject {
     @Published var webApps: [WebAppManifest]
     @Published var selectedWebAppID: String?
     @Published var isTerminalPresented: Bool
+    @Published var isBrowserPresented: Bool
 
     @Published var streamingAssistantMessageID: UUID?
 
@@ -87,6 +88,9 @@ final class AppViewModel: ObservableObject {
     /// Conversation-facing terminal surface; tests inject a fake.
     lazy var terminalBridge: TerminalBridging = terminalControllerInstance
     lazy var terminalControllerInstance = TerminalController()
+    /// Conversation-facing browser surface; tests inject a fake.
+    lazy var browserBridge: BrowserBridging = browserControllerInstance
+    lazy var browserControllerInstance = BrowserController(cwd: runtimeCwd)
 
     init(
         config explicitConfig: HerAppConfig? = nil,
@@ -172,6 +176,7 @@ final class AppViewModel: ObservableObject {
         self.pendingVibePluginComposerPreset = nil
         self.isInspectorPresented = false
         self.isTerminalPresented = false
+        self.isBrowserPresented = false
         rebuildRunningTasks()
     }
 
@@ -179,6 +184,7 @@ final class AppViewModel: ObservableObject {
         localInboxBridgeServer.stop()
         webAppServer.stop()
         webAppProcessManager.stopAll()
+        // BrowserController terminates its sidecar in its own deinit.
     }
 
     /// Launch bootstrap in a model-owned task. SwiftUI `.task` cancels its
