@@ -172,6 +172,15 @@ private struct ToolbarView: View {
             }
 
             Button {
+                model.isTerminalPresented.toggle()
+            } label: {
+                Image(systemName: "rectangle.bottomthird.inset.filled")
+                    .foregroundStyle(model.isTerminalPresented ? AppTheme.coral : AppTheme.muted)
+            }
+            .buttonStyle(.plain)
+            .help(model.isTerminalPresented ? "收起终端" : "打开终端")
+
+            Button {
                 model.isInspectorPresented.toggle()
             } label: {
                 Image(systemName: "sidebar.trailing")

@@ -260,6 +260,15 @@ extension AppViewModel {
         if invocation.capabilityID == "webapp.request" {
             return await requestWebAppBackendCapability(arguments: invocation.arguments)
         }
+        if invocation.capabilityID == "terminal.open" {
+            return openTerminalCapability()
+        }
+        if invocation.capabilityID == "terminal.read" {
+            return readTerminalCapability()
+        }
+        if invocation.capabilityID == "terminal.send" {
+            return await sendTerminalCapability(arguments: invocation.arguments)
+        }
         return await capabilityExecutor.execute(invocation)
     }
 

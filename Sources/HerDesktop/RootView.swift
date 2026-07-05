@@ -8,8 +8,18 @@ struct RootView: View {
             SidebarView()
                 .frame(width: 240)
             Divider().opacity(0.45)
-            CenterWorkspaceView()
-                .frame(minWidth: 560)
+            VStack(spacing: 0) {
+                CenterWorkspaceView()
+                    .frame(maxHeight: .infinity)
+                if model.isTerminalPresented {
+                    Divider().opacity(0.45)
+                    TerminalDrawer()
+                        .frame(height: 280)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .frame(minWidth: 560)
+            .animation(.snappy(duration: 0.22), value: model.isTerminalPresented)
             if model.isInspectorPresented {
                 Divider().opacity(0.45)
                 InspectorView()

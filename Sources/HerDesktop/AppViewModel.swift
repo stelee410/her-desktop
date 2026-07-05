@@ -38,6 +38,7 @@ final class AppViewModel: ObservableObject {
     @Published var isInspectorPresented: Bool
     @Published var webApps: [WebAppManifest]
     @Published var selectedWebAppID: String?
+    @Published var isTerminalPresented: Bool
 
     @Published var streamingAssistantMessageID: UUID?
 
@@ -83,6 +84,9 @@ final class AppViewModel: ObservableObject {
     /// finish_reason of the most recent model reply in the tool loop,
     /// used to explain empty replies (e.g. output truncated at "length").
     var lastAssistantFinishReason: String?
+    /// Conversation-facing terminal surface; tests inject a fake.
+    lazy var terminalBridge: TerminalBridging = terminalControllerInstance
+    lazy var terminalControllerInstance = TerminalController()
 
     init(
         config explicitConfig: HerAppConfig? = nil,
@@ -167,6 +171,7 @@ final class AppViewModel: ObservableObject {
         self.isVibePluginComposerPresented = false
         self.pendingVibePluginComposerPreset = nil
         self.isInspectorPresented = false
+        self.isTerminalPresented = false
         rebuildRunningTasks()
     }
 

@@ -1,0 +1,68 @@
+{
+  "author": "Her",
+  "capabilities": [
+    {
+      "adapter": {
+        "type": "native"
+      },
+      "description": "Open the embedded terminal drawer (a real login shell with full TUI support) and return the current screen.",
+      "id": "terminal.open",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "invocation": "terminal.open",
+      "kind": "native",
+      "requiresApproval": false,
+      "title": "Open terminal"
+    },
+    {
+      "adapter": {
+        "type": "native"
+      },
+      "description": "Read the terminal's currently visible screen — works for shell output and full-screen TUIs (vim, claude, htop). Call after terminal.send to see how the program reacted.",
+      "id": "terminal.read",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "invocation": "terminal.read",
+      "kind": "native",
+      "requiresApproval": false,
+      "title": "Read terminal screen"
+    },
+    {
+      "adapter": {
+        "type": "native"
+      },
+      "description": "Type into the terminal exactly like a user: literal text, an optional named special key, and optional enter. Examples: run a command with {text: \"claude\", enter: true}; answer a TUI prompt with {text: \"yes\", enter: true}; navigate a TUI with {key: \"down\"} then {key: \"enter\"}; interrupt with {key: \"ctrl-c\"}. The reply includes the refreshed screen.",
+      "id": "terminal.send",
+      "inputSchema": {
+        "properties": {
+          "enter": {
+            "description": "Press Enter after the text (default false).",
+            "type": "boolean"
+          },
+          "key": {
+            "description": "Named special key sent after text: enter, tab, escape, backspace, space, up, down, left, right, ctrl-c, ctrl-d, ctrl-z, ctrl-r, ctrl-l, shift-tab.",
+            "type": "string"
+          },
+          "text": {
+            "description": "Literal text to type.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "invocation": "terminal.send",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Type into terminal"
+    }
+  ],
+  "description": "An embedded terminal the conversation can drive: open it, read the visible screen (including TUIs), and type input with user approval.",
+  "id": "builtin.terminal-bridge",
+  "name": "Terminal Bridge",
+  "systemPromptAddendum": "The embedded terminal is a real login shell with full TUI emulation. To work with it: terminal.open shows it and returns the screen; terminal.send types like a user (every send requires approval and surfaces the drawer so the user watches); terminal.read re-reads the screen. For long-running commands or TUIs (like claude), send input, then read the screen again after a moment to see the result; repeat read if the program is still working. Never chain destructive shell commands without explaining them to the user first.",
+  "version": "0.1.0"
+}

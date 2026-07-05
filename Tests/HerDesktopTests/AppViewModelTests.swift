@@ -1070,6 +1070,64 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.requiresApproval(capabilityID: "webapp.request"))
     }
 
+    @MainActor
+    final class FakeTerminal: TerminalBridging {
+        var isRunning = false
+        var sent: [String] = []
+        var screen = "her % "
+
+        func startIfNeeded(workingDirectory: String) { isRunning = true }
+        func screenText() -> String { screen }
+        func send(text: String) { sent.append(text) }
+    }
+
+    func testTerminalCapabilitiesOpenSendAndRead() async {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-terminal-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(cwd: root.path)
+        let fake = FakeTerminal()
+        model.terminalBridge = fake
+
+        let opened = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "t1", functionName: "terminal_open", capabilityID: "terminal.open", arguments: [:]
+        ))
+        XCTAssertEqual(opened.title, "Terminal Opened")
+        XCTAssertTrue(model.isTerminalPresented)
+        XCTAssertTrue(fake.isRunning)
+        XCTAssertTrue(opened.content.contains("her %"))
+
+        fake.screen = "her % claude\nWelcome to Claude Code!\n> "
+        let sent = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "t2", functionName: "terminal_send", capabilityID: "terminal.send",
+            arguments: ["text": "claude", "enter": true]
+        ))
+        XCTAssertEqual(sent.title, "Terminal Input Sent")
+        XCTAssertEqual(fake.sent, ["claude\r"])
+        XCTAssertTrue(sent.content.contains("Welcome to Claude Code!"))
+
+        let key = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "t3", functionName: "terminal_send", capabilityID: "terminal.send",
+            arguments: ["key": "ctrl-c"]
+        ))
+        XCTAssertEqual(key.title, "Terminal Input Sent")
+        XCTAssertEqual(fake.sent.last, "\u{03}")
+
+        let badKey = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "t4", functionName: "terminal_send", capabilityID: "terminal.send",
+            arguments: ["key": "hyperspace"]
+        ))
+        XCTAssertEqual(badKey.title, "Terminal Send Failed")
+
+        let read = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "t5", functionName: "terminal_read", capabilityID: "terminal.read", arguments: [:]
+        ))
+        XCTAssertEqual(read.title, "Terminal Screen")
+
+        XCTAssertFalse(model.requiresApproval(capabilityID: "terminal.open"))
+        XCTAssertFalse(model.requiresApproval(capabilityID: "terminal.read"))
+        XCTAssertTrue(model.requiresApproval(capabilityID: "terminal.send"))
+    }
+
     func testWebAppCreateAndRemoveRequireApprovalByManifest() {
         let model = AppViewModel(cwd: URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-webapp-approval-\(UUID().uuidString)", isDirectory: true).path)
