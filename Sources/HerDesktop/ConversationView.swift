@@ -407,7 +407,7 @@ private struct WebAppMessageCard: View {
                 .controlSize(.mini)
             }
             if live, app.widget != nil, let url = model.webAppWidgetURL(app.id) {
-                WebAppWebView(url: url)
+                WebAppWebView(url: url, transparent: true)
                     .frame(height: app.widget?.height ?? 160)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .overlay(

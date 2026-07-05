@@ -485,7 +485,7 @@ private struct WebAppsWorkspaceView: View {
                                         .foregroundStyle(AppTheme.coral)
                                         .help("打开完整应用")
                                     }
-                                    WebAppWebView(url: url)
+                                    WebAppWebView(url: url, transparent: true)
                                         .frame(height: app.widget?.height ?? 160)
                                         .clipShape(RoundedRectangle(cornerRadius: 8))
                                         .overlay(
