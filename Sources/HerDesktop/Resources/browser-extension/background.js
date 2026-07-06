@@ -33,7 +33,8 @@ async function activeTab() {
 // Injected into the page to enumerate interactive elements + read text.
 function pageReadFn() {
   const sel = 'a[href], button, input:not([type=hidden]), textarea, select,'
-    + ' [role=button], [role=link], [role=tab], [role=menuitem], [onclick], [contenteditable=true]';
+    + ' [role=button], [role=link], [role=tab], [role=menuitem], [role=textbox],'
+    + ' [role=searchbox], [role=combobox], [onclick], [contenteditable=true]';
   const nodes = Array.from(document.querySelectorAll(sel));
   const elements = [];
   let idx = 0;
@@ -61,31 +62,57 @@ function pageReadFn() {
   };
 }
 
-function pageClickFn(selector, index) {
-  const target = index != null
-    ? document.querySelector('[data-her-idx="' + index + '"]')
-    : document.querySelector(selector);
+function pageClickFn(selector, index, x, y) {
+  let target;
+  if (index != null) target = document.querySelector('[data-her-idx="' + index + '"]');
+  else if (selector) target = document.querySelector(selector);
+  else if (x != null && y != null) target = document.elementFromPoint(x, y);
   if (!target) return { ok: false, error: 'element not found' };
   target.scrollIntoView({ block: 'center' });
-  target.click();
+  if (x != null && y != null) {
+    for (const type of ['mousedown', 'mouseup', 'click']) {
+      target.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+    }
+  } else {
+    target.click();
+  }
   return { ok: true };
 }
 
-function pageTypeFn(selector, index, text, enter) {
-  const target = index != null
-    ? document.querySelector('[data-her-idx="' + index + '"]')
-    : document.querySelector(selector);
+function pageTypeFn(selector, index, x, y, text, enter) {
+  let target;
+  if (index != null) target = document.querySelector('[data-her-idx="' + index + '"]');
+  else if (selector) target = document.querySelector(selector);
+  else if (x != null && y != null) target = document.elementFromPoint(x, y);
+  else target = document.activeElement;
   if (!target) return { ok: false, error: 'element not found' };
   target.focus();
-  const setter = Object.getOwnPropertyDescriptor(target.__proto__, 'value');
-  if (setter && setter.set) { setter.set.call(target, text); } else { target.value = text; }
-  target.dispatchEvent(new Event('input', { bubbles: true }));
-  target.dispatchEvent(new Event('change', { bubbles: true }));
+  const editable = target.isContentEditable || (target.getAttribute && target.getAttribute('role') === 'textbox');
+  if (editable) {
+    // React rich editors (Draft/Lexical, e.g. X's compose box) listen for
+    // beforeinput/input; execCommand('insertText') dispatches both.
+    target.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, cancelable: true, inputType: 'insertText', data: text }));
+    const ok = document.execCommand('insertText', false, text);
+    if (!ok) {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount) { sel.getRangeAt(0).insertNode(document.createTextNode(text)); }
+    }
+    target.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+  } else if ('value' in target) {
+    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(target), 'value');
+    const next = (target.value || '') + text;
+    if (setter && setter.set) { setter.set.call(target, next); } else { target.value = next; }
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+    target.dispatchEvent(new Event('change', { bubbles: true }));
+  } else {
+    document.execCommand('insertText', false, text);
+  }
   if (enter) {
-    const opts = { bubbles: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 };
+    const opts = { bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 };
     target.dispatchEvent(new KeyboardEvent('keydown', opts));
+    target.dispatchEvent(new KeyboardEvent('keypress', opts));
     target.dispatchEvent(new KeyboardEvent('keyup', opts));
-    if (target.form) { target.form.requestSubmit ? target.form.requestSubmit() : target.form.submit(); }
+    if (target.form && !editable) { target.form.requestSubmit ? target.form.requestSubmit() : target.form.submit(); }
   }
   return { ok: true };
 }
@@ -124,14 +151,16 @@ async function execute(command) {
       return { id: command.id, ok: true, screenshot: await screenshot() };
     }
     if (command.action === 'click') {
-      const r = await runInPage(tab.id, pageClickFn, [p.selector || null, p.index != null ? p.index : null]);
+      const r = await runInPage(tab.id, pageClickFn,
+        [p.selector || null, p.index != null ? p.index : null, p.x != null ? p.x : null, p.y != null ? p.y : null]);
       await new Promise(res => setTimeout(res, 400));
       const read = await runInPage(tab.id, pageReadFn, []);
       return { id: command.id, ok: r && r.ok, error: r && r.error, ...(read || {}), screenshot: await screenshot() };
     }
     if (command.action === 'type' || command.action === 'key') {
       const r = await runInPage(tab.id, pageTypeFn,
-        [p.selector || null, p.index != null ? p.index : null, p.text || '', !!p.enter || command.action === 'key']);
+        [p.selector || null, p.index != null ? p.index : null, p.x != null ? p.x : null, p.y != null ? p.y : null,
+         p.text || '', !!p.enter || command.action === 'key']);
       await new Promise(res => setTimeout(res, 500));
       const read = await runInPage(tab.id, pageReadFn, []);
       return { id: command.id, ok: r && r.ok, error: r && r.error, ...(read || {}), screenshot: await screenshot() };

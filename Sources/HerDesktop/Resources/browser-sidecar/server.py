@@ -182,8 +182,8 @@ class Browser:
 
     ELEMENTS_JS = """() => {
         const sel = 'a[href], button, input:not([type=hidden]), textarea, select,'
-            + ' [role=button], [role=link], [role=tab], [role=menuitem], [onclick],'
-            + ' [contenteditable=true]';
+            + ' [role=button], [role=link], [role=tab], [role=menuitem], [role=textbox],'
+            + ' [role=searchbox], [role=combobox], [onclick], [contenteditable=true]';
         const nodes = Array.from(document.querySelectorAll(sel));
         const out = [];
         let idx = 0;

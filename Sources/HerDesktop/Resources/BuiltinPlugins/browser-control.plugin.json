@@ -105,7 +105,7 @@
       "adapter": {
         "type": "native"
       },
-      "description": "Type into the page: literal text into a field (by element index from browser.read, or a CSS selector), or a single named key. Set enter=true to submit. Examples: fill a search box with {index: 3, text: \"...\", enter: true}; press a key with {key: \"Escape\"}.",
+      "description": "Type into the page with a real keyboard. Target a field by element index (from browser.read), a CSS selector, or type into whatever is currently focused (give only text — first browser.click the field, e.g. by coordinate). For rich editors like X's compose box (contenteditable / role=textbox), click the box then type with real keys so React sees the input. Set enter=true to submit simple forms; for X, click the Post button instead. Examples: {index: 3, text: \"hello\", enter: true}; click then {text: \"my tweet\"}; {key: \"Escape\"}.",
       "id": "browser.type",
       "inputSchema": {
         "properties": {
@@ -141,6 +141,6 @@
   "description": "Drive the user's real Chrome from the conversation: a persistent profile reuses logins and automation is hard to detect. Open it, read the page, and navigate/click/type with approval.",
   "id": "builtin.browser-control",
   "name": "Browser Control",
-  "systemPromptAddendum": "The browser is a real Chrome stable window with the user's persistent profile, so logins are already there and automation is hidden (navigator.webdriver is false). Loop: browser.read returns the page text plus a numbered list of interactive elements; pick an [index] and call browser.click or browser.type with it; then browser.read again to see the result; repeat until the goal is met. browser.read and browser.detect are free; navigate/click/type each require approval UNLESS the user has turned on the drawer's 自动操作 (autonomous session) toggle, in which case chain actions freely while narrating what you do. Prefer element indexes over CSS selectors or x/y. Never log into new accounts or submit sensitive/payment forms without the user explicitly asking.",
+  "systemPromptAddendum": "The browser is a real Chrome stable window with the user's persistent profile, so logins are already there and automation is hidden (navigator.webdriver is false). Loop: browser.read returns the page text plus a numbered list of interactive elements; pick an [index] and call browser.click or browser.type with it; then browser.read again to see the result; repeat until the goal is met. Input uses a real mouse and real keyboard (system-level in 专用 mode), so it works on rich React editors. For a contenteditable / role=textbox box such as X's tweet composer: browser.click the box (by its [index], or by x/y coordinates from the screenshot), then browser.type with just text (no selector) so the keystrokes land on the focused editor and React's onInput fires; to publish, browser.click the 发帖/Post button rather than pressing Enter. browser.read and browser.detect are free; navigate/click/type each require approval UNLESS the user turned on the drawer's 自动操作 toggle, in which case chain actions freely while narrating. Never log into new accounts or submit sensitive/payment forms without the user explicitly asking.",
   "version": "0.1.0"
 }

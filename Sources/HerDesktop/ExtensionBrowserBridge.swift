@@ -67,6 +67,8 @@ final class ExtensionBrowserBridge: BrowserBridging {
         var params: [String: Any] = [:]
         if let selector { params["selector"] = selector }
         if let index { params["index"] = index }
+        if let x { params["x"] = x }
+        if let y { params["y"] = y }
         return actionResult(try await run("click", params))
     }
 
