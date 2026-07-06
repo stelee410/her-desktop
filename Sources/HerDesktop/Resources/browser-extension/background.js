@@ -62,11 +62,31 @@ function pageReadFn() {
   };
 }
 
+function isEditable(el) {
+  if (!el) return false;
+  return el.isContentEditable
+    || (el.getAttribute && el.getAttribute('role') === 'textbox')
+    || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA';
+}
+
+function firstVisibleEditable() {
+  const nodes = document.querySelectorAll('[contenteditable=true], [role=textbox], textarea, input:not([type=hidden])');
+  for (const el of nodes) {
+    const r = el.getBoundingClientRect();
+    if (r.width > 2 && r.height > 2 && getComputedStyle(el).visibility !== 'hidden') return el;
+  }
+  return null;
+}
+
+function resolveTarget(selector, index, x, y) {
+  if (index != null) return document.querySelector('[data-her-idx="' + index + '"]');
+  if (selector) return document.querySelector(selector);
+  if (x != null && y != null) return document.elementFromPoint(x, y);
+  return null;
+}
+
 function pageClickFn(selector, index, x, y) {
-  let target;
-  if (index != null) target = document.querySelector('[data-her-idx="' + index + '"]');
-  else if (selector) target = document.querySelector(selector);
-  else if (x != null && y != null) target = document.elementFromPoint(x, y);
+  const target = resolveTarget(selector, index, x, y);
   if (!target) return { ok: false, error: 'element not found' };
   target.scrollIntoView({ block: 'center' });
   if (x != null && y != null) {
@@ -76,16 +96,20 @@ function pageClickFn(selector, index, x, y) {
   } else {
     target.click();
   }
+  // Clicking a rich editor doesn't reliably move focus; do it explicitly so
+  // a following type lands there.
+  if (isEditable(target)) target.focus();
   return { ok: true };
 }
 
 function pageTypeFn(selector, index, x, y, text, enter) {
-  let target;
-  if (index != null) target = document.querySelector('[data-her-idx="' + index + '"]');
-  else if (selector) target = document.querySelector(selector);
-  else if (x != null && y != null) target = document.elementFromPoint(x, y);
-  else target = document.activeElement;
-  if (!target) return { ok: false, error: 'element not found' };
+  // Prefer an explicit target; else the focused element; else the first
+  // visible editable on the page (handles X's compose box after a click,
+  // and stale data-her-idx from React re-renders).
+  let target = resolveTarget(selector, index, x, y);
+  if (!target && isEditable(document.activeElement)) target = document.activeElement;
+  if (!target) target = firstVisibleEditable();
+  if (!target) return { ok: false, error: 'no editable field found' };
   target.focus();
   const editable = target.isContentEditable || (target.getAttribute && target.getAttribute('role') === 'textbox');
   if (editable) {
@@ -151,6 +175,9 @@ async function execute(command) {
       return { id: command.id, ok: true, screenshot: await screenshot() };
     }
     if (command.action === 'click') {
+      // Re-tag elements so a data-her-idx from an earlier read still resolves
+      // after a React re-render.
+      if (p.index != null) await runInPage(tab.id, pageReadFn, []);
       const r = await runInPage(tab.id, pageClickFn,
         [p.selector || null, p.index != null ? p.index : null, p.x != null ? p.x : null, p.y != null ? p.y : null]);
       await new Promise(res => setTimeout(res, 400));
@@ -158,6 +185,7 @@ async function execute(command) {
       return { id: command.id, ok: r && r.ok, error: r && r.error, ...(read || {}), screenshot: await screenshot() };
     }
     if (command.action === 'type' || command.action === 'key') {
+      if (p.index != null) await runInPage(tab.id, pageReadFn, []);
       const r = await runInPage(tab.id, pageTypeFn,
         [p.selector || null, p.index != null ? p.index : null, p.x != null ? p.x : null, p.y != null ? p.y : null,
          p.text || '', !!p.enter || command.action === 'key']);
