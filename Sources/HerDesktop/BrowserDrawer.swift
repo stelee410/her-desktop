@@ -101,9 +101,10 @@ struct BrowserDrawer: View {
                 .font(.caption2)
                 .foregroundStyle(AppTheme.muted)
             Divider().opacity(0.4)
-            Text("首次设置：chrome://extensions → 打开开发者模式 → 加载已解压的扩展 → 选择 browser-extension 文件夹 → 在扩展选项里填入：")
+            Text("首次设置：先点下方「导出扩展并打开文件夹」，然后 chrome://extensions → 打开开发者模式 → 加载已解压的扩展 → 选择「Her Desktop Browser Extension」文件夹 → 在扩展选项里填入：")
                 .font(.caption2)
                 .foregroundStyle(AppTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 10) {
                 configField("端口", "\(config.port)")
                 configField("令牌", config.token)
@@ -120,10 +121,12 @@ struct BrowserDrawer: View {
             Button {
                 model.openBrowserExtensionFolder()
             } label: {
-                Label("打开扩展文件夹", systemImage: "folder").font(.caption2)
+                Label("导出扩展并打开文件夹", systemImage: "folder").font(.caption2)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.borderedProminent)
+            .tint(AppTheme.coral)
             .controlSize(.small)
+            .help("把扩展复制到「文稿 / Her Desktop Browser Extension」并在访达中显示")
             Spacer()
         }
         .padding(16)

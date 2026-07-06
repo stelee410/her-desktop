@@ -99,12 +99,20 @@ extension AppViewModel {
         try? browserExtensionServer.start()
     }
 
+    /// Where the loadable extension is copied for the user to pick. Uses a
+    /// visible Documents folder because Chrome's "Load unpacked" picker
+    /// cannot enter the hidden `.her` directory.
+    var browserExtensionFolder: URL {
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Documents", isDirectory: true)
+        return documents.appendingPathComponent("Her Desktop Browser Extension", isDirectory: true)
+    }
+
     /// Reveal the bundled unpacked extension so the user can load it. The
     /// files ship flattened in the resource bundle, so copy them into a
-    /// clean `.her/browser-extension/` folder the user points Chrome at.
+    /// visible folder Chrome's picker can reach.
     func openBrowserExtensionFolder() {
-        let destination = HerWorkspacePaths.localAgentDirectory(cwd: runtimeCwd)
-            .appendingPathComponent("browser-extension", isDirectory: true)
+        let destination = browserExtensionFolder
         let names = ["manifest.json", "background.js", "options.html", "options.js"]
         try? FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
         for name in names {
