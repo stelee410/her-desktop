@@ -157,9 +157,12 @@ struct BrowserDrawer: View {
 
     private func start() async {
         pollTimer?.invalidate()
+        let controller = self.controller
         let timer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { _ in
-            guard controller.isRunning else { return }
-            Task { @MainActor in await controller.refreshScreenshot() }
+            Task { @MainActor in
+                guard controller.isRunning else { return }
+                await controller.refreshScreenshot()
+            }
         }
         pollTimer = timer
     }
