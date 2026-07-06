@@ -28,6 +28,14 @@ struct BrowserDrawer: View {
                     .foregroundStyle(AppTheme.muted)
                     .lineLimit(1)
                 Spacer()
+                Toggle(isOn: $model.browserAutonomyGranted) {
+                    Text("自动操作")
+                        .font(.caption2)
+                }
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .tint(AppTheme.coral)
+                .help("开启后，Her 在本会话可自行导航/点击/输入，无需逐步批准（仍全程可见、可随时关闭）")
                 Button {
                     model.isBrowserPresented = false
                 } label: {

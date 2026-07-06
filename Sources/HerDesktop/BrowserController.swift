@@ -7,15 +7,23 @@ struct BrowserActionResult: Equatable {
     var screenshotPNG: Data?
 }
 
+struct BrowserElement: Equatable {
+    var index: Int
+    var tag: String
+    var type: String
+    var label: String
+}
+
 struct BrowserReadResult: Equatable {
     var url: String
     var title: String
     var text: String
     var links: [(text: String, href: String)]
+    var elements: [BrowserElement]
 
     static func == (lhs: BrowserReadResult, rhs: BrowserReadResult) -> Bool {
         lhs.url == rhs.url && lhs.title == rhs.title && lhs.text == rhs.text
-            && lhs.links.map(\.href) == rhs.links.map(\.href)
+            && lhs.links.map(\.href) == rhs.links.map(\.href) && lhs.elements == rhs.elements
     }
 }
 
@@ -27,8 +35,8 @@ protocol BrowserBridging: AnyObject {
     var currentURL: String { get }
     func start() async throws
     func navigate(_ url: String) async throws -> BrowserActionResult
-    func click(selector: String?, x: Double?, y: Double?) async throws -> BrowserActionResult
-    func type(text: String, selector: String?, enter: Bool) async throws -> BrowserActionResult
+    func click(selector: String?, x: Double?, y: Double?, index: Int?) async throws -> BrowserActionResult
+    func type(text: String, selector: String?, enter: Bool, index: Int?) async throws -> BrowserActionResult
     func press(key: String) async throws -> BrowserActionResult
     func read() async throws -> BrowserReadResult
     func screenshotPNG() async throws -> Data
@@ -244,17 +252,19 @@ final class BrowserController: ObservableObject, BrowserBridging {
         try await action(path: "/navigate", body: ["url": url])
     }
 
-    func click(selector: String?, x: Double?, y: Double?) async throws -> BrowserActionResult {
+    func click(selector: String?, x: Double?, y: Double?, index: Int?) async throws -> BrowserActionResult {
         var body: [String: Any] = [:]
         if let selector { body["selector"] = selector }
         if let x { body["x"] = x }
         if let y { body["y"] = y }
+        if let index { body["index"] = index }
         return try await action(path: "/click", body: body)
     }
 
-    func type(text: String, selector: String?, enter: Bool) async throws -> BrowserActionResult {
+    func type(text: String, selector: String?, enter: Bool, index: Int?) async throws -> BrowserActionResult {
         var body: [String: Any] = ["text": text, "enter": enter]
         if let selector { body["selector"] = selector }
+        if let index { body["index"] = index }
         return try await action(path: "/type", body: body)
     }
 
@@ -267,11 +277,20 @@ final class BrowserController: ObservableObject, BrowserBridging {
         let links = (object["links"] as? [[String: Any]] ?? []).map {
             (text: ($0["t"] as? String) ?? "", href: ($0["href"] as? String) ?? "")
         }
+        let elements = (object["elements"] as? [[String: Any]] ?? []).map {
+            BrowserElement(
+                index: ($0["index"] as? Int) ?? 0,
+                tag: ($0["tag"] as? String) ?? "",
+                type: ($0["type"] as? String) ?? "",
+                label: ($0["label"] as? String) ?? ""
+            )
+        }
         return BrowserReadResult(
             url: (object["url"] as? String) ?? "",
             title: (object["title"] as? String) ?? "",
             text: (object["text"] as? String) ?? "",
-            links: links
+            links: links,
+            elements: elements
         )
     }
 

@@ -20,7 +20,7 @@
       "adapter": {
         "type": "native"
       },
-      "description": "Read the current page: URL, title, visible text, and top links. Use this to understand a page before acting or to answer the user from page content.",
+      "description": "Read the current page: URL, title, visible text, and a numbered list of interactive elements ([index] tag: label). Use the [index] with browser.click / browser.type to act reliably without guessing CSS selectors. Read again after each action to see the updated page.",
       "id": "browser.read",
       "inputSchema": {
         "properties": {},
@@ -73,10 +73,14 @@
       "adapter": {
         "type": "native"
       },
-      "description": "Click in the page, by CSS selector (preferred) or by x/y coordinates. Call browser.read first to find selectors.",
+      "description": "Click in the page. Prefer an element index from browser.read's numbered list; a CSS selector or x/y coordinates also work.",
       "id": "browser.click",
       "inputSchema": {
         "properties": {
+          "index": {
+            "description": "Index of an element from browser.read's interactive-elements list.",
+            "type": "integer"
+          },
           "selector": {
             "description": "CSS selector of the element to click.",
             "type": "string"
@@ -101,13 +105,17 @@
       "adapter": {
         "type": "native"
       },
-      "description": "Type into the page: literal text (optionally into a CSS selector's field), or a single named key. Set enter=true to submit. Examples: fill a search box with {selector: \"input[name=q]\", text: \"...\", enter: true}; press a key with {key: \"Escape\"}.",
+      "description": "Type into the page: literal text into a field (by element index from browser.read, or a CSS selector), or a single named key. Set enter=true to submit. Examples: fill a search box with {index: 3, text: \"...\", enter: true}; press a key with {key: \"Escape\"}.",
       "id": "browser.type",
       "inputSchema": {
         "properties": {
           "enter": {
             "description": "Press Enter after typing (default false).",
             "type": "boolean"
+          },
+          "index": {
+            "description": "Index of the field element from browser.read's interactive-elements list.",
+            "type": "integer"
           },
           "key": {
             "description": "A single key to press instead of typing text (e.g. Enter, Escape, ArrowDown, Tab).",
@@ -133,6 +141,6 @@
   "description": "Drive the user's real Chrome from the conversation: a persistent profile reuses logins and automation is hard to detect. Open it, read the page, and navigate/click/type with approval.",
   "id": "builtin.browser-control",
   "name": "Browser Control",
-  "systemPromptAddendum": "The browser is a real Chrome stable window with the user's persistent profile, so logins are already there and automation is hidden (navigator.webdriver is false). browser.open shows it; browser.read returns the page URL/title/text/links (free, use it to find selectors and to answer from page content); browser.navigate/click/type act on the page and each requires approval and surfaces the drawer so the user watches. Prefer CSS selectors over x/y. After acting, browser.read again to see the result. Never log into new accounts or submit sensitive forms without the user explicitly asking.",
+  "systemPromptAddendum": "The browser is a real Chrome stable window with the user's persistent profile, so logins are already there and automation is hidden (navigator.webdriver is false). Loop: browser.read returns the page text plus a numbered list of interactive elements; pick an [index] and call browser.click or browser.type with it; then browser.read again to see the result; repeat until the goal is met. browser.read and browser.detect are free; navigate/click/type each require approval UNLESS the user has turned on the drawer's 自动操作 (autonomous session) toggle, in which case chain actions freely while narrating what you do. Prefer element indexes over CSS selectors or x/y. Never log into new accounts or submit sensitive/payment forms without the user explicitly asking.",
   "version": "0.1.0"
 }

@@ -45,9 +45,12 @@ extension AppViewModel {
             let read = try await browserBridge.read()
             audit(type: "browser.read", summary: "Read the browser page.", metadata: ["url": read.url])
             var content = "URL: \(read.url)\nTitle: \(read.title)\n\n\(read.text)"
-            if !read.links.isEmpty {
-                let linkLines = read.links.prefix(30).map { "- \($0.text) → \($0.href)" }.joined(separator: "\n")
-                content += "\n\nLinks:\n\(linkLines)"
+            if !read.elements.isEmpty {
+                let elementLines = read.elements.prefix(80).map { el in
+                    let kind = el.type.isEmpty ? el.tag : "\(el.tag)/\(el.type)"
+                    return "[\(el.index)] \(kind): \(el.label.isEmpty ? "(no label)" : el.label)"
+                }.joined(separator: "\n")
+                content += "\n\nInteractive elements (use the [index] with browser.click / browser.type):\n\(elementLines)"
             }
             return CapabilityResult(title: "Browser Page", content: content, requiresUserApproval: false)
         } catch {
@@ -59,11 +62,12 @@ extension AppViewModel {
         let selector = stringArgument(arguments, keys: ["selector", "css"], fallback: "")
         let x = doubleArgument(arguments, keys: ["x"])
         let y = doubleArgument(arguments, keys: ["y"])
-        guard !selector.isEmpty || (x != nil && y != nil) else {
-            return CapabilityResult(title: "Browser Click Failed", content: "Provide a selector or x/y.", requiresUserApproval: false)
+        let index = integerArgumentOptional(arguments, keys: ["index", "element", "element_index"])
+        guard !selector.isEmpty || (x != nil && y != nil) || index != nil else {
+            return CapabilityResult(title: "Browser Click Failed", content: "Provide an element index (from browser.read), a selector, or x/y.", requiresUserApproval: false)
         }
         return await withStartedBrowser {
-            let result = try await self.browserBridge.click(selector: selector.isEmpty ? nil : selector, x: x, y: y)
+            let result = try await self.browserBridge.click(selector: selector.isEmpty ? nil : selector, x: x, y: y, index: index)
             self.audit(type: "browser.clicked", summary: "Clicked in the browser.", metadata: ["selector": selector, "url": result.url])
             return CapabilityResult(title: "Clicked", content: self.pageBlock(url: result.url, title: result.title), requiresUserApproval: false)
         }
@@ -73,6 +77,7 @@ extension AppViewModel {
         let text = stringArgument(arguments, keys: ["text", "input"], fallback: "")
         let selector = stringArgument(arguments, keys: ["selector", "css"], fallback: "")
         let key = stringArgument(arguments, keys: ["key"], fallback: "")
+        let index = integerArgumentOptional(arguments, keys: ["index", "element", "element_index"])
         let enter = boolArgument(arguments, keys: ["enter", "press_enter", "pressEnter"], fallback: false)
         guard !text.isEmpty || !key.isEmpty else {
             return CapabilityResult(title: "Browser Type Failed", content: "Provide text or a key.", requiresUserApproval: false)
@@ -82,7 +87,7 @@ extension AppViewModel {
             if !key.isEmpty {
                 result = try await self.browserBridge.press(key: key)
             } else {
-                result = try await self.browserBridge.type(text: text, selector: selector.isEmpty ? nil : selector, enter: enter)
+                result = try await self.browserBridge.type(text: text, selector: selector.isEmpty ? nil : selector, enter: enter, index: index)
             }
             self.audit(type: "browser.typed", summary: "Typed in the browser.", metadata: ["characters": String(text.count), "url": result.url])
             return CapabilityResult(title: "Typed", content: self.pageBlock(url: result.url, title: result.title), requiresUserApproval: false)
@@ -121,6 +126,15 @@ extension AppViewModel {
             if let value = arguments[key] as? Double { return value }
             if let value = arguments[key] as? Int { return Double(value) }
             if let value = arguments[key] as? String, let parsed = Double(value) { return parsed }
+        }
+        return nil
+    }
+
+    func integerArgumentOptional(_ arguments: [String: Any], keys: [String]) -> Int? {
+        for key in keys {
+            if let value = arguments[key] as? Int { return value }
+            if let value = arguments[key] as? Double { return Int(value) }
+            if let value = arguments[key] as? String, let parsed = Int(value) { return parsed }
         }
         return nil
     }

@@ -40,6 +40,10 @@ final class AppViewModel: ObservableObject {
     @Published var selectedWebAppID: String?
     @Published var isTerminalPresented: Bool
     @Published var isBrowserPresented: Bool
+    /// When the user flips the drawer's autonomy toggle, browser side-effect
+    /// actions skip per-action approval for the session (still visible +
+    /// audited). The agent cannot grant this itself.
+    @Published var browserAutonomyGranted: Bool
 
     @Published var streamingAssistantMessageID: UUID?
 
@@ -177,6 +181,7 @@ final class AppViewModel: ObservableObject {
         self.isInspectorPresented = false
         self.isTerminalPresented = false
         self.isBrowserPresented = false
+        self.browserAutonomyGranted = false
         rebuildRunningTasks()
     }
 

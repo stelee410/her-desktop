@@ -198,7 +198,10 @@ extension AppViewModel {
             )
             let catalog = CapabilityToolCatalog.build(from: plugins)
             var llmMessages = conversationContextBuilder.build(systemPrompt: prompt, messages: messages)
-            let reply = try await runAgentToolLoop(llmMessages: &llmMessages, catalog: catalog)
+            // An autonomous browsing session needs many chained actions
+            // (read → click → read → type …), so widen the tool budget.
+            let rounds = browserAutonomyGranted ? 20 : 5
+            let reply = try await runAgentToolLoop(llmMessages: &llmMessages, catalog: catalog, maxToolRounds: rounds)
             let final: String
             if reply.isEmpty {
                 final = lastAssistantFinishReason == "length"

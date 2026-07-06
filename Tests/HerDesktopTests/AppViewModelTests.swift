@@ -1135,6 +1135,7 @@ final class AppViewModelTests: XCTestCase {
         var startCount = 0
         var navigated: [String] = []
         var typed: [(String, Bool)] = []
+        var clickedIndex: [Int] = []
         var readText = "Example page body text"
 
         func start() async throws { isRunning = true; startCount += 1 }
@@ -1142,10 +1143,11 @@ final class AppViewModelTests: XCTestCase {
             navigated.append(url); currentURL = url.contains("://") ? url : "https://\(url)"
             return BrowserActionResult(url: currentURL, title: "Example", screenshotPNG: Data([1, 2, 3]))
         }
-        func click(selector: String?, x: Double?, y: Double?) async throws -> BrowserActionResult {
-            BrowserActionResult(url: currentURL, title: "Example", screenshotPNG: nil)
+        func click(selector: String?, x: Double?, y: Double?, index: Int?) async throws -> BrowserActionResult {
+            if let index { clickedIndex.append(index) }
+            return BrowserActionResult(url: currentURL, title: "Example", screenshotPNG: nil)
         }
-        func type(text: String, selector: String?, enter: Bool) async throws -> BrowserActionResult {
+        func type(text: String, selector: String?, enter: Bool, index: Int?) async throws -> BrowserActionResult {
             typed.append((text, enter))
             return BrowserActionResult(url: currentURL, title: "Example", screenshotPNG: nil)
         }
@@ -1154,7 +1156,9 @@ final class AppViewModelTests: XCTestCase {
         }
         func read() async throws -> BrowserReadResult {
             BrowserReadResult(url: currentURL, title: "Example", text: readText,
-                              links: [(text: "More", href: "https://iana.org")])
+                              links: [(text: "More", href: "https://iana.org")],
+                              elements: [BrowserElement(index: 0, tag: "input", type: "search", label: "Search"),
+                                         BrowserElement(index: 1, tag: "button", type: "", label: "Go")])
         }
         func screenshotPNG() async throws -> Data { Data([1, 2, 3]) }
         func detectionReport() async throws -> String { "navigator.webdriver = false ✓ 人类特征" }
@@ -1187,7 +1191,16 @@ final class AppViewModelTests: XCTestCase {
         ))
         XCTAssertEqual(read.title, "Browser Page")
         XCTAssertTrue(read.content.contains("Example page body text"))
-        XCTAssertTrue(read.content.contains("iana.org"))
+        XCTAssertTrue(read.content.contains("[0] input/search: Search"), "read should list indexed elements")
+        XCTAssertTrue(read.content.contains("[1] button: Go"))
+
+        // Click by element index (from read's numbered list).
+        let clicked = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "b3b", functionName: "browser_click", capabilityID: "browser.click",
+            arguments: ["index": 1]
+        ))
+        XCTAssertEqual(clicked.title, "Clicked")
+        XCTAssertEqual(fake.clickedIndex, [1])
 
         let typed = await model.executeCapabilityInvocation(CapabilityInvocation(
             toolCallID: "b4", functionName: "browser_type", capabilityID: "browser.type",
@@ -1198,12 +1211,19 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(fake.typed.first?.1, true)
         XCTAssertTrue(model.auditEvents.contains { $0.type == "browser.typed" })
 
-        // Approval contract: reads free, side effects gated.
+        // Approval contract: reads free, side effects gated by default.
         XCTAssertFalse(model.requiresApproval(capabilityID: "browser.open"))
         XCTAssertFalse(model.requiresApproval(capabilityID: "browser.read"))
         XCTAssertTrue(model.requiresApproval(capabilityID: "browser.navigate"))
         XCTAssertTrue(model.requiresApproval(capabilityID: "browser.click"))
         XCTAssertTrue(model.requiresApproval(capabilityID: "browser.type"))
+
+        // A user-granted autonomous session relaxes browser side effects only.
+        model.browserAutonomyGranted = true
+        XCTAssertFalse(model.requiresApproval(capabilityID: "browser.navigate"))
+        XCTAssertFalse(model.requiresApproval(capabilityID: "browser.click"))
+        XCTAssertFalse(model.requiresApproval(capabilityID: "browser.type"))
+        XCTAssertTrue(model.requiresApproval(capabilityID: "terminal.send"), "autonomy is browser-scoped")
     }
 
     func testWebAppCreateAndRemoveRequireApprovalByManifest() {

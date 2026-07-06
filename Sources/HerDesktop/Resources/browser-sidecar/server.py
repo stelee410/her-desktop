@@ -101,8 +101,12 @@ class Browser:
         y = box["y"] + box["height"] * random.uniform(0.3, 0.7)
         return x, y
 
-    def click(self, selector=None, x=None, y=None, timeout=15000):
+    def click(self, selector=None, x=None, y=None, index=None, timeout=15000):
         page = self.page
+        if index is not None:
+            # Ensure the index map is current, then target it like a selector.
+            self.elements()
+            selector = self._index_selector(index)
         if selector:
             point = self._target_point(page, selector, timeout)
             if point:
@@ -125,8 +129,11 @@ class Browser:
             if ch == " " and random.random() < 0.15:
                 time.sleep(random.uniform(0.1, 0.25))  # occasional word pause
 
-    def type_text(self, text, selector=None, enter=False, timeout=15000):
+    def type_text(self, text, selector=None, enter=False, index=None, timeout=15000):
         page = self.page
+        if index is not None:
+            self.elements()
+            selector = self._index_selector(index)
         if selector:
             point = self._target_point(page, selector, timeout)
             if point:
@@ -173,16 +180,47 @@ class Browser:
         page.wait_for_timeout(250)
         return self.snapshot(page)
 
+    ELEMENTS_JS = """() => {
+        const sel = 'a[href], button, input:not([type=hidden]), textarea, select,'
+            + ' [role=button], [role=link], [role=tab], [role=menuitem], [onclick],'
+            + ' [contenteditable=true]';
+        const nodes = Array.from(document.querySelectorAll(sel));
+        const out = [];
+        let idx = 0;
+        for (const el of nodes) {
+            const rect = el.getBoundingClientRect();
+            if (rect.width < 3 || rect.height < 3) continue;
+            const style = getComputedStyle(el);
+            if (style.visibility === 'hidden' || style.display === 'none' || style.opacity === '0') continue;
+            el.setAttribute('data-her-idx', String(idx));
+            const label = (el.innerText || el.value || el.getAttribute('aria-label')
+                || el.getAttribute('placeholder') || el.getAttribute('name')
+                || el.getAttribute('title') || '').trim().replace(/\\s+/g, ' ').slice(0, 80);
+            out.push({index: idx, tag: el.tagName.toLowerCase(),
+                      type: el.getAttribute('type') || '', label});
+            idx++;
+            if (idx >= 120) break;
+        }
+        return out;
+    }"""
+
+    def elements(self):
+        return self.page.evaluate(self.ELEMENTS_JS)
+
+    def _index_selector(self, index):
+        return '[data-her-idx="%d"]' % int(index)
+
     def read(self, max_chars=8000):
         page = self.page
         text = page.evaluate("() => document.body ? document.body.innerText : ''")
+        elements = self.elements()  # also tags each element with data-her-idx
         links = page.evaluate(
             "() => Array.from(document.querySelectorAll('a[href]')).slice(0,40)"
             ".map(a => ({t: (a.innerText||'').trim().slice(0,60), href: a.href}))"
             ".filter(l => l.t)"
         )
         return {"url": page.url, "title": page.title(),
-                "text": (text or "")[:max_chars], "links": links}
+                "text": (text or "")[:max_chars], "links": links, "elements": elements}
 
     def screenshot(self):
         page = self.page
@@ -259,10 +297,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, {"ok": True, **BROWSER.navigate(body.get("url", ""))})
             elif self.path.startswith("/click"):
                 self._send(200, {"ok": True, **BROWSER.click(
-                    body.get("selector"), body.get("x"), body.get("y"))})
+                    body.get("selector"), body.get("x"), body.get("y"), body.get("index"))})
             elif self.path.startswith("/type"):
                 self._send(200, {"ok": True, **BROWSER.type_text(
-                    body.get("text", ""), body.get("selector"), bool(body.get("enter")))})
+                    body.get("text", ""), body.get("selector"), bool(body.get("enter")),
+                    body.get("index"))})
             elif self.path.startswith("/key"):
                 self._send(200, {"ok": True, **BROWSER.press(body.get("key", "Enter"))})
             elif self.path.startswith("/shutdown"):

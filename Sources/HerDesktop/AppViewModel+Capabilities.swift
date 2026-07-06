@@ -326,7 +326,14 @@ extension AppViewModel {
     }
 
     func requiresApproval(capabilityID: String) -> Bool {
-        pluginRegistry.capability(id: capabilityID, in: plugins)?.requiresApproval ?? true
+        // A user-granted browsing session lets the agent act without a click
+        // per step. The manifest stays approval-required (the safe default);
+        // only an explicit, user-flipped session relaxes browser actions.
+        if browserAutonomyGranted,
+           ["browser.navigate", "browser.click", "browser.type"].contains(capabilityID) {
+            return false
+        }
+        return pluginRegistry.capability(id: capabilityID, in: plugins)?.requiresApproval ?? true
     }
 
     @discardableResult
