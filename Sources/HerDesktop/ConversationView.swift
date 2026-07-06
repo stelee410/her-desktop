@@ -173,9 +173,7 @@ private struct ToolbarView: View {
 
             Button {
                 model.isBrowserPresented.toggle()
-                if model.isBrowserPresented {
-                    Task { try? await model.browserControllerInstance.start() }
-                }
+                if model.isBrowserPresented { model.onBrowserDrawerOpened() }
             } label: {
                 Image(systemName: "globe")
                     .foregroundStyle(model.isBrowserPresented ? AppTheme.coral : AppTheme.muted)

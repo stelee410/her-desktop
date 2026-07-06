@@ -198,7 +198,9 @@ final class AppViewModel: ObservableObject {
         self.isTerminalPresented = false
         self.isBrowserPresented = false
         self.browserAutonomyGranted = false
-        self.browserTarget = .sidecar
+        // Default to the user's everyday Chrome (via the extension): it uses
+        // the real logged-in profile and trusted CDP input.
+        self.browserTarget = .everyday
         rebuildRunningTasks()
     }
 

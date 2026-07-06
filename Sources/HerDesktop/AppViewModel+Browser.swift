@@ -99,6 +99,17 @@ extension AppViewModel {
         try? browserExtensionServer.start()
     }
 
+    /// Opening the drawer readies the active target: the everyday-Chrome
+    /// extension server (so the extension can connect), or the dedicated
+    /// sidecar Chrome.
+    func onBrowserDrawerOpened() {
+        if browserTarget == .everyday {
+            startExtensionServerIfNeeded()
+        } else {
+            Task { try? await browserControllerInstance.start() }
+        }
+    }
+
     /// Where the loadable extension is copied for the user to pick. Uses a
     /// visible Documents folder because Chrome's "Load unpacked" picker
     /// cannot enter the hidden `.her` directory.
