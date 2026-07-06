@@ -13,7 +13,7 @@
 // discovery file the user provides through the extension options; for now
 // they are read from chrome.storage.local, set by the paste-config step.
 
-const EXT_VERSION = '0.2-cdp';
+const EXT_VERSION = '0.3-focusfix';
 const DEFAULT_PORT = 8799;
 
 async function config() {
@@ -162,10 +162,12 @@ async function cdpAttach(tabId) {
   try {
     await chrome.debugger.attach({ tabId }, '1.3');
     cdpTabs.add(tabId);
+    console.log('[Her] debugger attached to tab', tabId);
     return true;
   } catch (e) {
     const msg = String((e && e.message) || e);
     if (msg.includes('already attached')) { cdpTabs.add(tabId); return true; }
+    console.warn('[Her] debugger attach FAILED — CDP input unavailable, falling back to DOM:', msg);
     return false; // DevTools open on this tab, or attach not permitted
   }
 }
@@ -253,6 +255,7 @@ async function execute(command) {
   const tab = await activeTab();
   if (!tab) return { id: command.id, ok: false, error: 'no active tab' };
   const p = command.params || {};
+  console.log('[Her] execute', command.action, 'on tab', tab.id, tab.url, p);
   try {
     if (command.action === 'navigate') {
       let url = p.url || '';
@@ -291,9 +294,14 @@ async function execute(command) {
       if (p.index != null) await runInPage(tab.id, pageReadFn, []);
       const isKey = command.action === 'key';
       let ok = false, err = null, method = 'none';
+      // Only click-to-focus when an explicit target is given. With no target,
+      // type into whatever is already focused (the composer the model just
+      // clicked) — clicking "the first editable" here would hit the wrong box
+      // (e.g. X's search field precedes the composer in the DOM).
+      const explicitTarget = p.index != null || !!p.selector || (p.x != null && p.y != null);
       if (await cdpAttach(tab.id)) {
         method = 'cdp';
-        if (!isKey) {
+        if (!isKey && explicitTarget) {
           const c = await targetCenter(tab.id, p);
           if (c) await cdpClick(tab.id, c.x, c.y);
         }
@@ -302,11 +310,9 @@ async function execute(command) {
           if (p.text) {
             await cdpInsertText(tab.id, p.text);
             // Some editors ignore a bulk insert; if it didn't take, retry with
-            // discrete trusted char events.
+            // discrete trusted char events (without re-clicking / re-focusing).
             const v1 = await runInPage(tab.id, verifyTypedFn, [p.text]);
             if (!(v1 && v1.present)) {
-              const c2 = await targetCenter(tab.id, p);
-              if (c2) await cdpClick(tab.id, c2.x, c2.y);
               for (const ch of p.text) {
                 await cdpSend(tab.id, 'Input.dispatchKeyEvent', { type: 'keyDown', text: ch, key: ch });
                 await cdpSend(tab.id, 'Input.dispatchKeyEvent', { type: 'char', text: ch });
@@ -339,6 +345,7 @@ async function execute(command) {
                   : 'The editor rejected the trusted input; try clicking the compose box first, then typing.');
         }
       }
+      console.log('[Her] type via', method, '| verified:', verified, '| field:', JSON.stringify(sample));
       const read = await runInPage(tab.id, pageReadFn, []);
       return { id: command.id, ok, error: err, input_method: method, typed_verified: verified,
                field_sample: sample, ext_version: EXT_VERSION, ...(read || {}), screenshot: await screenshot() };
