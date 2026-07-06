@@ -35,6 +35,21 @@
       "adapter": {
         "type": "native"
       },
+      "description": "Check whether the browser presents as a normal human Chrome: navigator.webdriver, headless UA, plugins, WebGL vendor, CPU cores, languages. Use when the user asks if the browser is detectable.",
+      "id": "browser.detect",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "invocation": "browser.detect",
+      "kind": "native",
+      "requiresApproval": false,
+      "title": "Check anti-detection"
+    },
+    {
+      "adapter": {
+        "type": "native"
+      },
       "description": "Navigate the browser to a URL. The drawer shows the live page and the reply includes the new title/URL.",
       "id": "browser.navigate",
       "inputSchema": {

@@ -284,6 +284,9 @@ extension AppViewModel {
         if invocation.capabilityID == "browser.type" {
             return await typeBrowserCapability(arguments: invocation.arguments)
         }
+        if invocation.capabilityID == "browser.detect" {
+            return await detectBrowserCapability()
+        }
         return await capabilityExecutor.execute(invocation)
     }
 

@@ -89,6 +89,19 @@ extension AppViewModel {
         }
     }
 
+    func detectBrowserCapability() async -> CapabilityResult {
+        guard browserBridge.isRunning else {
+            return CapabilityResult(title: "Browser Not Running", content: "Call browser.open first.", requiresUserApproval: false)
+        }
+        do {
+            let report = try await browserBridge.detectionReport()
+            audit(type: "browser.detect", summary: "Checked browser anti-detection signals.")
+            return CapabilityResult(title: "Browser Detection Check", content: report, requiresUserApproval: false)
+        } catch {
+            return CapabilityResult(title: "Detection Check Failed", content: error.localizedDescription, requiresUserApproval: false)
+        }
+    }
+
     private func withStartedBrowser(_ body: () async throws -> CapabilityResult) async -> CapabilityResult {
         isBrowserPresented = true
         do {

@@ -21,8 +21,11 @@ Environment:
 import base64
 import json
 import os
+import random
+import re
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from patchright.sync_api import sync_playwright
@@ -72,33 +75,97 @@ class Browser:
             return {"running": True, "url": "", "title": "", "error": str(exc)}
 
     def navigate(self, url, timeout=30000):
-        if "://" not in url:
+        # Add https:// only when the URL has no scheme at all; leave data:,
+        # file:, about:, chrome: and friends untouched.
+        if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", url):
             url = "https://" + url
         page = self.page
         page.goto(url, wait_until="domcontentloaded", timeout=timeout)
         return self.snapshot(page)
 
+    def _human_move(self, page, x, y):
+        # Approach the target in a few jittered steps instead of teleporting,
+        # so the pointer path and timing resemble a hand, not a script.
+        steps = random.randint(6, 12)
+        page.mouse.move(x, y, steps=steps)
+        time.sleep(random.uniform(0.03, 0.12))
+
+    def _target_point(self, page, selector, timeout):
+        locator = page.locator(selector).first
+        locator.wait_for(state="visible", timeout=timeout)
+        box = locator.bounding_box()
+        if not box:
+            return None
+        # Aim for a random point inside the element, not dead center.
+        x = box["x"] + box["width"] * random.uniform(0.3, 0.7)
+        y = box["y"] + box["height"] * random.uniform(0.3, 0.7)
+        return x, y
+
     def click(self, selector=None, x=None, y=None, timeout=15000):
         page = self.page
         if selector:
-            page.click(selector, timeout=timeout)
+            point = self._target_point(page, selector, timeout)
+            if point:
+                self._human_move(page, point[0], point[1])
+                page.mouse.click(point[0], point[1], delay=random.uniform(40, 110))
+            else:
+                page.click(selector, timeout=timeout)
         elif x is not None and y is not None:
-            page.mouse.click(float(x), float(y))
+            self._human_move(page, float(x), float(y))
+            page.mouse.click(float(x), float(y), delay=random.uniform(40, 110))
         else:
             raise ValueError("click requires selector or x/y")
-        page.wait_for_timeout(400)
+        page.wait_for_timeout(random.randint(300, 600))
         return self.snapshot(page)
+
+    def _human_type(self, page, text):
+        for ch in text:
+            page.keyboard.type(ch)
+            time.sleep(random.uniform(0.03, 0.14))
+            if ch == " " and random.random() < 0.15:
+                time.sleep(random.uniform(0.1, 0.25))  # occasional word pause
 
     def type_text(self, text, selector=None, enter=False, timeout=15000):
         page = self.page
         if selector:
-            page.fill(selector, text, timeout=timeout)
-        elif text:
-            page.keyboard.type(text)
+            point = self._target_point(page, selector, timeout)
+            if point:
+                self._human_move(page, point[0], point[1])
+                page.mouse.click(point[0], point[1], delay=random.uniform(40, 110))
+            else:
+                page.click(selector, timeout=timeout)
+            time.sleep(random.uniform(0.1, 0.25))
+        if text:
+            self._human_type(page, text)
         if enter:
+            time.sleep(random.uniform(0.15, 0.35))
             page.keyboard.press("Enter")
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(random.randint(400, 700))
         return self.snapshot(page)
+
+    def detect(self):
+        # Report the fingerprint vectors bot checks look at, so Her can
+        # confirm the browser presents as a normal human Chrome.
+        page = self.page
+        return page.evaluate(
+            """() => ({
+                webdriver: navigator.webdriver,
+                webdriver_present: 'webdriver' in navigator,
+                languages: navigator.languages,
+                plugins: navigator.plugins.length,
+                has_chrome: !!window.chrome,
+                has_chrome_runtime: !!(window.chrome && window.chrome.runtime),
+                platform: navigator.platform,
+                hardwareConcurrency: navigator.hardwareConcurrency,
+                headless_ua: /Headless/.test(navigator.userAgent),
+                webgl_vendor: (() => { try {
+                    const gl = document.createElement('canvas').getContext('webgl');
+                    const e = gl.getExtension('WEBGL_debug_renderer_info');
+                    return gl.getParameter(e.UNMASKED_VENDOR_WEBGL);
+                } catch (e) { return 'n/a'; } })(),
+                permissions_ok: typeof navigator.permissions !== 'undefined'
+            })"""
+        )
 
     def press(self, key):
         page = self.page
@@ -176,6 +243,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, {"ok": True, "screenshot": BROWSER.screenshot()})
             elif self.path.startswith("/read"):
                 self._send(200, {"ok": True, **BROWSER.read()})
+            elif self.path.startswith("/detect"):
+                self._send(200, {"ok": True, "signals": BROWSER.detect()})
             else:
                 self._send(404, {"ok": False, "error": "unknown path"})
         except Exception as exc:  # noqa: BLE001

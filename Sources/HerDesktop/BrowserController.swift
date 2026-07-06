@@ -32,6 +32,7 @@ protocol BrowserBridging: AnyObject {
     func press(key: String) async throws -> BrowserActionResult
     func read() async throws -> BrowserReadResult
     func screenshotPNG() async throws -> Data
+    func detectionReport() async throws -> String
 }
 
 /// Owns the browser sidecar: a Python (patchright) process that drives the
@@ -281,6 +282,30 @@ final class BrowserController: ObservableObject, BrowserBridging {
         }
         latestScreenshot = data
         return data
+    }
+
+    func detectionReport() async throws -> String {
+        let object = try await request(method: "GET", path: "/detect", body: nil)
+        guard let signals = object["signals"] as? [String: Any] else {
+            throw BrowserError.requestFailed("no signals")
+        }
+        func flag(_ ok: Bool) -> String { ok ? "✓ 人类特征" : "⚠ 可疑" }
+        let webdriver = signals["webdriver"] as? Bool ?? true
+        let headless = signals["headless_ua"] as? Bool ?? true
+        let plugins = signals["plugins"] as? Int ?? 0
+        let vendor = signals["webgl_vendor"] as? String ?? "n/a"
+        let cores = signals["hardwareConcurrency"] as? Int ?? 0
+        let languages = (signals["languages"] as? [String])?.joined(separator: ", ") ?? "?"
+        return """
+        浏览器反检测自检：
+        - navigator.webdriver = \(webdriver) \(flag(!webdriver))
+        - HeadlessChrome UA: \(headless) \(flag(!headless))
+        - 插件数: \(plugins) \(flag(plugins > 0))
+        - WebGL 厂商: \(vendor) \(flag(!vendor.contains("SwiftShader") && vendor != "n/a"))
+        - CPU 核心: \(cores) \(flag(cores > 0))
+        - 语言: \(languages)
+        综合：\(!webdriver && !headless && plugins > 0 ? "呈现为正常真人 Chrome。" : "存在可疑特征，可能被检测。")
+        """
     }
 
     /// Poll the current screen; drives the live drawer preview.

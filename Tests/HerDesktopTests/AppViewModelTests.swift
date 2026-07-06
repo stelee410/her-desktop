@@ -1157,6 +1157,7 @@ final class AppViewModelTests: XCTestCase {
                               links: [(text: "More", href: "https://iana.org")])
         }
         func screenshotPNG() async throws -> Data { Data([1, 2, 3]) }
+        func detectionReport() async throws -> String { "navigator.webdriver = false ✓ 人类特征" }
     }
 
     func testBrowserCapabilitiesOpenNavigateReadType() async {
