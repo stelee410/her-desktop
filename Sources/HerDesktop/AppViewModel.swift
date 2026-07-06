@@ -44,6 +44,11 @@ final class AppViewModel: ObservableObject {
     /// actions skip per-action approval for the session (still visible +
     /// audited). The agent cannot grant this itself.
     @Published var browserAutonomyGranted: Bool
+    /// Which browser the capabilities drive: a dedicated-profile Chrome
+    /// (sidecar) or the user's everyday Chrome (via the loaded extension).
+    @Published var browserTarget: BrowserTarget
+
+    enum BrowserTarget: String, Codable { case sidecar, everyday }
 
     @Published var streamingAssistantMessageID: UUID?
 
@@ -92,9 +97,20 @@ final class AppViewModel: ObservableObject {
     /// Conversation-facing terminal surface; tests inject a fake.
     lazy var terminalBridge: TerminalBridging = terminalControllerInstance
     lazy var terminalControllerInstance = TerminalController()
-    /// Conversation-facing browser surface; tests inject a fake.
-    lazy var browserBridge: BrowserBridging = browserControllerInstance
+    /// Conversation-facing browser surface. The dedicated-profile sidecar
+    /// and the everyday-Chrome extension both conform to BrowserBridging, so
+    /// capabilities are target-agnostic. Tests set `browserBridgeOverride`.
     lazy var browserControllerInstance = BrowserController(cwd: runtimeCwd)
+    lazy var browserExtensionServer = BrowserExtensionServer()
+    lazy var extensionBrowserBridge = ExtensionBrowserBridge(server: browserExtensionServer)
+    var browserBridgeOverride: BrowserBridging?
+    var browserBridge: BrowserBridging {
+        get {
+            browserBridgeOverride
+                ?? (browserTarget == .everyday ? extensionBrowserBridge : browserControllerInstance)
+        }
+        set { browserBridgeOverride = newValue }
+    }
 
     init(
         config explicitConfig: HerAppConfig? = nil,
@@ -182,6 +198,7 @@ final class AppViewModel: ObservableObject {
         self.isTerminalPresented = false
         self.isBrowserPresented = false
         self.browserAutonomyGranted = false
+        self.browserTarget = .sidecar
         rebuildRunningTasks()
     }
 

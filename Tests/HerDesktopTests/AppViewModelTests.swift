@@ -1218,6 +1218,14 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.requiresApproval(capabilityID: "browser.click"))
         XCTAssertTrue(model.requiresApproval(capabilityID: "browser.type"))
 
+        // Switching target routes capabilities to the everyday-Chrome bridge.
+        model.browserBridgeOverride = nil
+        model.browserTarget = .everyday
+        XCTAssertTrue(model.browserBridge is ExtensionBrowserBridge)
+        model.browserTarget = .sidecar
+        XCTAssertTrue(model.browserBridge is BrowserController)
+        model.browserBridge = fake  // restore override for the rest of the test
+
         // A user-granted autonomous session relaxes browser side effects only.
         model.browserAutonomyGranted = true
         XCTAssertFalse(model.requiresApproval(capabilityID: "browser.navigate"))

@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Her Desktop Browser Bridge</title>
+<style>
+  body { font-family: -apple-system, sans-serif; padding: 24px; max-width: 420px; color: #2a1f1c; }
+  h1 { font-size: 17px; }
+  label { display: block; font-size: 12px; color: #75645c; margin: 14px 0 4px; }
+  input { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
+  button { margin-top: 16px; padding: 9px 18px; border: none; border-radius: 8px; background: #f05e54; color: #fff; font-size: 14px; cursor: pointer; }
+  .status { margin-top: 12px; font-size: 12px; color: #3a9; }
+  p { font-size: 12px; color: #75645c; line-height: 1.5; }
+</style>
+</head>
+<body>
+<h1>Her Desktop 浏览器桥</h1>
+<p>在 Her 的浏览器抽屉切换到「扩展模式」，把那里显示的端口和令牌填到这里。</p>
+<label>端口 (Port)</label>
+<input id="port" type="number" placeholder="8799">
+<label>令牌 (Token)</label>
+<input id="token" type="text" placeholder="从 Her 复制">
+<button id="save">保存</button>
+<div class="status" id="status"></div>
+<script src="options.js"></script>
+</body>
+</html>

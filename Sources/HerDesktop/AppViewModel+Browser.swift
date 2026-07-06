@@ -94,6 +94,40 @@ extension AppViewModel {
         }
     }
 
+    func startExtensionServerIfNeeded() {
+        guard !browserExtensionServer.isRunning else { return }
+        try? browserExtensionServer.start()
+    }
+
+    /// Reveal the bundled unpacked extension so the user can load it. The
+    /// files ship flattened in the resource bundle, so copy them into a
+    /// clean `.her/browser-extension/` folder the user points Chrome at.
+    func openBrowserExtensionFolder() {
+        let destination = HerWorkspacePaths.localAgentDirectory(cwd: runtimeCwd)
+            .appendingPathComponent("browser-extension", isDirectory: true)
+        let names = ["manifest.json", "background.js", "options.html", "options.js"]
+        try? FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        for name in names {
+            let base = (name as NSString).deletingPathExtension
+            let ext = (name as NSString).pathExtension
+            guard let source = Bundle.module.url(forResource: base, withExtension: ext) else { continue }
+            let target = destination.appendingPathComponent(name)
+            try? FileManager.default.removeItem(at: target)
+            try? FileManager.default.copyItem(at: source, to: target)
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([destination])
+        audit(type: "browser.extension_folder_opened", summary: "Revealed the unpacked browser extension.")
+    }
+
+    /// Port + token the user pastes into the extension's options page.
+    var extensionConfig: (port: Int, token: String) {
+        (port: Int(browserExtensionServer.port ?? 8799), token: browserExtensionServer.sharedToken)
+    }
+
+    var isExtensionConnected: Bool {
+        browserExtensionServer.isExtensionConnected
+    }
+
     func detectBrowserCapability() async -> CapabilityResult {
         guard browserBridge.isRunning else {
             return CapabilityResult(title: "Browser Not Running", content: "Call browser.open first.", requiresUserApproval: false)

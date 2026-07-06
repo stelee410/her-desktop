@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Her Desktop Browser Bridge",
+  "version": "0.1.0",
+  "description": "Lets Her Desktop read and act on your active Chrome tab, in your everyday profile.",
+  "permissions": ["tabs", "scripting", "activeTab", "storage", "alarms"],
+  "host_permissions": ["<all_urls>", "http://127.0.0.1/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_page": "options.html",
+  "action": {
+    "default_title": "Her Desktop Browser Bridge"
+  }
+}

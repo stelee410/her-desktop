@@ -1,10 +1,10 @@
 import AppKit
 import SwiftUI
 
-/// The browser drawer: the agent's view of the real Chrome window — a live
-/// screenshot stream plus the current URL. The real Chrome is a separate
-/// window the user can also drive by hand; this panel is optional (toggled
-/// from the toolbar) and shows what the conversation is doing.
+/// The browser drawer: the agent's view of the browser. In 专用 (sidecar)
+/// mode it streams screenshots of a dedicated-profile Chrome. In 日常 mode
+/// it drives the user's everyday Chrome through the extension and shows the
+/// connection + setup, since the live picture is that real Chrome window.
 struct BrowserDrawer: View {
     @EnvironmentObject private var model: AppViewModel
     @ObservedObject private var controller: BrowserController
@@ -16,48 +16,55 @@ struct BrowserDrawer: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: "globe")
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.coral)
-                Text("浏览器")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(AppTheme.ink)
-                Text(statusLabel)
-                    .font(.caption2)
-                    .foregroundStyle(AppTheme.muted)
-                    .lineLimit(1)
-                Spacer()
-                Toggle(isOn: $model.browserAutonomyGranted) {
-                    Text("自动操作")
-                        .font(.caption2)
-                }
-                .toggleStyle(.switch)
-                .controlSize(.mini)
-                .tint(AppTheme.coral)
-                .help("开启后，Her 在本会话可自行导航/点击/输入，无需逐步批准（仍全程可见、可随时关闭）")
-                Button {
-                    model.isBrowserPresented = false
-                } label: {
-                    Image(systemName: "chevron.down")
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.muted)
-                }
-                .buttonStyle(.plain)
-                .help("收起浏览器")
+            header
+            if model.browserTarget == .everyday {
+                everydayPanel
+            } else {
+                sidecarContent
             }
-            .padding(.horizontal, 14)
-            .frame(height: 32)
-            .background(Color.white.opacity(0.5))
-
-            content
         }
         .task { await start() }
         .onDisappear { pollTimer?.invalidate() }
     }
 
+    private var header: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "globe")
+                .font(.caption)
+                .foregroundStyle(AppTheme.coral)
+            Picker("", selection: $model.browserTarget) {
+                Text("专用 Chrome").tag(AppViewModel.BrowserTarget.sidecar)
+                Text("日常 Chrome").tag(AppViewModel.BrowserTarget.everyday)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 220)
+            .onChange(of: model.browserTarget) { _, target in
+                if target == .everyday { model.startExtensionServerIfNeeded() }
+            }
+            Spacer()
+            Toggle(isOn: $model.browserAutonomyGranted) {
+                Text("自动操作").font(.caption2)
+            }
+            .toggleStyle(.switch)
+            .controlSize(.mini)
+            .tint(AppTheme.coral)
+            .help("开启后，Her 在本会话可自行导航/点击/输入，无需逐步批准（仍全程可见、可随时关闭）")
+            Button {
+                model.isBrowserPresented = false
+            } label: {
+                Image(systemName: "chevron.down").font(.caption).foregroundStyle(AppTheme.muted)
+            }
+            .buttonStyle(.plain)
+            .help("收起浏览器")
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 34)
+        .background(Color.white.opacity(0.5))
+    }
+
     @ViewBuilder
-    private var content: some View {
+    private var sidecarContent: some View {
         switch controller.phase {
         case .stopped:
             centered("浏览器未启动", systemImage: "globe", detail: "让 Her 打开浏览器，或在对话里说\"打开浏览器\"。")
@@ -70,8 +77,7 @@ struct BrowserDrawer: View {
         case .running:
             if let png = controller.latestScreenshot, let image = NSImage(data: png) {
                 Image(nsImage: image)
-                    .resizable()
-                    .scaledToFit()
+                    .resizable().scaledToFit()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color.black.opacity(0.04))
             } else {
@@ -80,38 +86,76 @@ struct BrowserDrawer: View {
         }
     }
 
-    private func centered(_ title: String, systemImage: String, detail: String) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: systemImage)
-                .font(.title2)
-                .foregroundStyle(AppTheme.coral)
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(AppTheme.ink)
-            if !detail.isEmpty {
-                Text(detail)
-                    .font(.caption2)
-                    .foregroundStyle(AppTheme.muted)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(3)
+    private var everydayPanel: some View {
+        let config = model.extensionConfig
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(model.isExtensionConnected ? Color.green : Color.orange)
+                    .frame(width: 8, height: 8)
+                Text(model.isExtensionConnected ? "扩展已连接 · 驱动你的日常 Chrome" : "等待扩展连接…")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.ink)
             }
+            Text("画面在你自己的 Chrome 窗口里。反检测强度最高：用的是你本人的浏览器，没有任何自动化驱动。")
+                .font(.caption2)
+                .foregroundStyle(AppTheme.muted)
+            Divider().opacity(0.4)
+            Text("首次设置：chrome://extensions → 打开开发者模式 → 加载已解压的扩展 → 选择 browser-extension 文件夹 → 在扩展选项里填入：")
+                .font(.caption2)
+                .foregroundStyle(AppTheme.muted)
+            HStack(spacing: 10) {
+                configField("端口", "\(config.port)")
+                configField("令牌", config.token)
+                Button {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(config.token, forType: .string)
+                } label: {
+                    Label("复制令牌", systemImage: "doc.on.doc").font(.caption2)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            Button {
+                model.openBrowserExtensionFolder()
+            } label: {
+                Label("打开扩展文件夹", systemImage: "folder").font(.caption2)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            Spacer()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(20)
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private var statusLabel: String {
-        switch controller.phase {
-        case .running: return controller.currentURL.isEmpty ? "已就绪" : controller.currentURL
-        case .starting: return "启动中…"
-        case .bootstrapping: return "安装中…"
-        case .failed: return "失败"
-        case .stopped: return "未启动"
+    private func configField(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label).font(.caption2).foregroundStyle(AppTheme.muted)
+            Text(value)
+                .font(.caption.monospaced())
+                .foregroundStyle(AppTheme.ink)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: 180, alignment: .leading)
+                .textSelection(.enabled)
         }
+    }
+
+    private func centered(_ title: String, systemImage: String, detail: String) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: systemImage).font(.title2).foregroundStyle(AppTheme.coral)
+            Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(AppTheme.ink)
+            if !detail.isEmpty {
+                Text(detail).font(.caption2).foregroundStyle(AppTheme.muted)
+                    .multilineTextAlignment(.center).lineLimit(3)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity).padding(20)
     }
 
     private func start() async {
-        // Live preview: refresh the screenshot while the drawer is visible.
         pollTimer?.invalidate()
         let timer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { _ in
             guard controller.isRunning else { return }
