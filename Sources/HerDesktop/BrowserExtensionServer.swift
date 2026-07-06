@@ -22,6 +22,7 @@ final class BrowserExtensionServer: @unchecked Sendable {
     private var waiters: [String: CheckedContinuation<Data, Error>] = [:]
     private var connectedAt: Date?
     private var counter = 0
+    private var version = ""
 
     private(set) var port: UInt16?
 
@@ -35,6 +36,11 @@ final class BrowserExtensionServer: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         guard let connectedAt else { return false }
         return Date().timeIntervalSince(connectedAt) < 10
+    }
+
+    var extensionVersion: String {
+        lock.lock(); defer { lock.unlock() }
+        return version
     }
 
     var isRunning: Bool { listener != nil }
@@ -126,6 +132,7 @@ final class BrowserExtensionServer: @unchecked Sendable {
         case ("GET", "/ext/next"):
             lock.lock()
             connectedAt = Date()
+            if let v = query["v"], !v.isEmpty { version = v }
             let next = pending.isEmpty ? nil : pending.removeFirst()
             lock.unlock()
             if let next {

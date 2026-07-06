@@ -93,7 +93,9 @@ struct BrowserDrawer: View {
                 Circle()
                     .fill(model.isExtensionConnected ? Color.green : Color.orange)
                     .frame(width: 8, height: 8)
-                Text(model.isExtensionConnected ? "扩展已连接 · 驱动你的日常 Chrome" : "等待扩展连接…")
+                Text(model.isExtensionConnected
+                     ? "扩展已连接 · 驱动你的日常 Chrome" + (model.extensionVersion.isEmpty ? "" : "（v\(model.extensionVersion)）")
+                     : "等待扩展连接…")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(AppTheme.ink)
             }

@@ -13,6 +13,7 @@
 // discovery file the user provides through the extension options; for now
 // they are read from chrome.storage.local, set by the paste-config step.
 
+const EXT_VERSION = '0.2-cdp';
 const DEFAULT_PORT = 8799;
 
 async function config() {
@@ -224,6 +225,22 @@ async function targetCenter(tabId, p) {
   return runInPage(tabId, elementCenterFn, [p.selector || null, p.index != null ? p.index : null]);
 }
 
+// Injected: ground-truth check that the typed text actually landed in an
+// editable, so we never falsely report success (the failure mode on X when
+// input isn't trusted).
+function verifyTypedFn(text) {
+  if (!text) return { present: true, sample: '' };
+  const readEl = (el) => (el && (el.value || el.innerText || el.textContent) || '');
+  let sample = readEl(document.activeElement).trim();
+  if (sample.includes(text)) return { present: true, sample: sample.slice(0, 80) };
+  for (const el of document.querySelectorAll('[contenteditable=true],[role=textbox],textarea,input:not([type=hidden])')) {
+    const t = readEl(el);
+    if (t.includes(text)) return { present: true, sample: t.trim().slice(0, 80) };
+    if (!sample) sample = t.trim();
+  }
+  return { present: false, sample: sample.slice(0, 80) };
+}
+
 async function screenshot() {
   try {
     return await chrome.tabs.captureVisibleTab({ format: 'png' });
@@ -273,29 +290,58 @@ async function execute(command) {
     if (command.action === 'type' || command.action === 'key') {
       if (p.index != null) await runInPage(tab.id, pageReadFn, []);
       const isKey = command.action === 'key';
-      let ok = false, err = null;
+      let ok = false, err = null, method = 'none';
       if (await cdpAttach(tab.id)) {
-        // Focus the target with a trusted click, then insert trusted input.
+        method = 'cdp';
         if (!isKey) {
           const c = await targetCenter(tab.id, p);
           if (c) await cdpClick(tab.id, c.x, c.y);
         }
         if (isKey && p.key) { await cdpKey(tab.id, p.key); ok = true; }
         else if (p.text != null) {
-          if (p.text) await cdpInsertText(tab.id, p.text);
+          if (p.text) {
+            await cdpInsertText(tab.id, p.text);
+            // Some editors ignore a bulk insert; if it didn't take, retry with
+            // discrete trusted char events.
+            const v1 = await runInPage(tab.id, verifyTypedFn, [p.text]);
+            if (!(v1 && v1.present)) {
+              const c2 = await targetCenter(tab.id, p);
+              if (c2) await cdpClick(tab.id, c2.x, c2.y);
+              for (const ch of p.text) {
+                await cdpSend(tab.id, 'Input.dispatchKeyEvent', { type: 'keyDown', text: ch, key: ch });
+                await cdpSend(tab.id, 'Input.dispatchKeyEvent', { type: 'char', text: ch });
+                await cdpSend(tab.id, 'Input.dispatchKeyEvent', { type: 'keyUp', key: ch });
+              }
+            }
+          }
           if (p.enter) await cdpKey(tab.id, 'Enter');
           ok = true;
         }
       }
       if (!ok) {
+        method = 'dom';
         const r = await runInPage(tab.id, pageTypeFn,
           [p.selector || null, p.index != null ? p.index : null, p.x != null ? p.x : null, p.y != null ? p.y : null,
            p.text || '', !!p.enter || isKey]);
         ok = !!(r && r.ok); err = r && r.error;
       }
       await new Promise(res => setTimeout(res, 500));
+      // Ground truth: did the text actually land? Prevents false success on X.
+      let verified = true, sample = '';
+      if (!isKey && p.text) {
+        const v = await runInPage(tab.id, verifyTypedFn, [p.text]);
+        verified = !!(v && v.present); sample = (v && v.sample) || '';
+        if (!verified) {
+          ok = false;
+          err = `Text was not accepted by the editor (input via ${method}). ` +
+                (method === 'dom'
+                  ? 'The Her extension is not driving via the Chrome Debugger Protocol — reload the extension in chrome://extensions and approve the debugging banner, or a tab has DevTools open.'
+                  : 'The editor rejected the trusted input; try clicking the compose box first, then typing.');
+        }
+      }
       const read = await runInPage(tab.id, pageReadFn, []);
-      return { id: command.id, ok, error: err, ...(read || {}), screenshot: await screenshot() };
+      return { id: command.id, ok, error: err, input_method: method, typed_verified: verified,
+               field_sample: sample, ext_version: EXT_VERSION, ...(read || {}), screenshot: await screenshot() };
     }
     return { id: command.id, ok: false, error: 'unknown action ' + command.action };
   } catch (e) {
@@ -307,7 +353,7 @@ async function poll() {
   const cfg = await config();
   if (!cfg.token) return;
   try {
-    const res = await fetch(`${base(cfg)}/ext/next?token=${encodeURIComponent(cfg.token)}`);
+    const res = await fetch(`${base(cfg)}/ext/next?token=${encodeURIComponent(cfg.token)}&v=${EXT_VERSION}`);
     const data = await res.json();
     if (data && data.command) {
       const result = await execute(data.command);

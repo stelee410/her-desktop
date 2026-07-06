@@ -147,6 +147,10 @@ extension AppViewModel {
         browserExtensionServer.isExtensionConnected
     }
 
+    var extensionVersion: String {
+        browserExtensionServer.extensionVersion
+    }
+
     func detectBrowserCapability() async -> CapabilityResult {
         guard browserBridge.isRunning else {
             return CapabilityResult(title: "Browser Not Running", content: "Call browser.open first.", requiresUserApproval: false)
