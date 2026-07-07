@@ -3,7 +3,7 @@ import Foundation
 import SwiftUI
 
 @MainActor
-final class AppViewModel: ObservableObject {
+final class AppViewModel: ObservableObject, AuditRecording {
     @Published var config: HerAppConfig
     @Published var connectionState: ConnectionState
     @Published var memorySignal: MemorySignal
@@ -339,6 +339,9 @@ final class AppViewModel: ObservableObject {
     /// survive as orphan processes across quits. Called from the app
     /// delegate's `applicationWillTerminate`.
     func shutdown() {
+        // Land any queued transcript/index/audit writes before exit.
+        conversationStore.flushPendingIO()
+        auditStore.flushPendingIO()
         localInboxBridgeServer.stop()
         webAppServer.stop()
         webAppProcessManager.stopAll()
@@ -522,7 +525,11 @@ final class AppViewModel: ObservableObject {
     func applyConfiguration(_ updated: HerAppConfig) {
         config = updated
         agentMem = AgentMemClient(config: updated, session: urlSession)
-        agentLLM = AgentLLMClient(config: updated, session: urlSession)
+        // Preserve an injected (test) LLM client: rebuilding unconditionally
+        // silently swapped a fake for a real network client mid-scenario.
+        if !allowsMissingLLMKeyForInjectedClient {
+            agentLLM = AgentLLMClient(config: updated, session: urlSession)
+        }
         pluginRegistry = PluginRegistry(config: updated, baseDirectory: runtimeCwd)
         capabilityExecutor = CapabilityExecutor(
             registry: pluginRegistry,
@@ -653,12 +660,15 @@ final class AppViewModel: ObservableObject {
     }
 
     func audit(type: String, summary: String, metadata: [String: String] = [:]) {
-        do {
-            let event = AuditEvent(type: type, summary: summary, metadata: metadata)
-            try auditStore.append(event)
-            auditEvents = Self.recentAuditEvents(from: auditEvents + [event])
-        } catch {
-            lastError = "Could not write audit log: \(error.localizedDescription)"
+        let event = AuditEvent(type: type, summary: summary, metadata: metadata)
+        // In-memory feed updates immediately; the disk append runs on the
+        // store's serial queue (audit fires on every message and tool step —
+        // it used to do a synchronous open/seek/write on the main actor).
+        auditEvents = Self.recentAuditEvents(from: auditEvents + [event])
+        auditStore.enqueueAppend(event) { error in
+            Task { @MainActor [weak self] in
+                self?.lastError = "Could not write audit log: \(error.localizedDescription)"
+            }
         }
     }
 

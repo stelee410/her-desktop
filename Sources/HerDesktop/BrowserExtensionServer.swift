@@ -122,7 +122,7 @@ final class BrowserExtensionServer: @unchecked Sendable {
 
     func handle(method: String, path: String, query: [String: String], body: [String: Any]) -> Response {
         let provided = query["token"] ?? (body["token"] as? String) ?? ""
-        guard provided == token else {
+        guard SecurityPrimitives.constantTimeEquals(provided, token) else {
             return Response(status: 401, json: ["ok": false, "error": "invalid token"])
         }
         switch (method, path) {
@@ -180,18 +180,40 @@ final class BrowserExtensionServer: @unchecked Sendable {
     }
 
     private func respond(_ data: Data, on connection: NWConnection) {
-        let (method, path, query, body) = Self.parse(data)
-        let response = handle(method: method, path: path, query: query, body: body)
+        // Reject non-local Host headers: a DNS-rebinding page (evil.com →
+        // 127.0.0.1) reaches this listener with Host: evil.com. This bridge
+        // can drive the user's real browser, so the token must not be the
+        // only barrier.
+        let response: Response
+        if SecurityPrimitives.isLoopbackHost(Self.hostHeader(data)) {
+            let (method, path, query, body) = Self.parse(data)
+            response = handle(method: method, path: path, query: query, body: body)
+        } else {
+            response = Response(status: 403, json: ["ok": false, "error": "forbidden host"])
+        }
         let payload = (try? JSONSerialization.data(withJSONObject: response.json)) ?? Data("{}".utf8)
+        // No CORS headers: the extension's fetches are authorized via
+        // host_permissions, so wildcard CORS only helped hostile pages.
         let header = "HTTP/1.1 \(response.status) \(response.status == 200 ? "OK" : "Error")\r\n"
             + "Content-Type: application/json\r\n"
-            + "Access-Control-Allow-Origin: *\r\n"
-            + "Access-Control-Allow-Headers: *\r\n"
             + "Content-Length: \(payload.count)\r\n"
             + "Connection: close\r\n\r\n"
         var out = Data(header.utf8)
         out.append(payload)
         connection.send(content: out, completion: .contentProcessed { _ in connection.cancel() })
+    }
+
+    /// The Host header of a raw HTTP request, if present.
+    static func hostHeader(_ data: Data) -> String? {
+        guard let range = data.range(of: Data("\r\n\r\n".utf8)),
+              let head = String(data: data[..<range.lowerBound], encoding: .utf8) else { return nil }
+        for line in head.components(separatedBy: "\r\n").dropFirst() {
+            let parts = line.split(separator: ":", maxSplits: 1).map(String.init)
+            if parts.count == 2, parts[0].caseInsensitiveCompare("Host") == .orderedSame {
+                return parts[1].trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return nil
     }
 
     private static func hasFullRequest(_ data: Data) -> Bool {
@@ -226,7 +248,7 @@ final class BrowserExtensionServer: @unchecked Sendable {
             }
         }
         let bodyData = Data(data[range.upperBound...])
-        let body = (try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any]) ?? [:]
-        return (method, path, query, body ?? [:])
+        let body = (try? JSONSerialization.jsonObject(with: bodyData)) as? [String: Any] ?? [:]
+        return (method, path, query, body)
     }
 }

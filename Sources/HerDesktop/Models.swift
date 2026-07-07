@@ -730,6 +730,11 @@ struct PluginManifest: Identifiable, Codable, Equatable {
         var adapter: CapabilityAdapter? = nil
     }
 
+    /// Version of the manifest FORMAT itself (distinct from `version`, the
+    /// plugin's own semver). Absent means 1. When the format evolves, readers
+    /// can migrate v1→v2 instead of silently failing to decode and dropping
+    /// the user's installed plugins.
+    var manifestSchemaVersion: Int? = nil
     var id: String
     var name: String
     var version: String
@@ -737,6 +742,12 @@ struct PluginManifest: Identifiable, Codable, Equatable {
     var author: String?
     var systemPromptAddendum: String?
     var capabilities: [Capability]
+
+    static let currentManifestSchemaVersion = 1
+
+    var resolvedManifestSchemaVersion: Int {
+        manifestSchemaVersion ?? 1
+    }
 }
 
 struct PluginPackage: Codable, Equatable {

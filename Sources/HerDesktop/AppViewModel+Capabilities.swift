@@ -75,27 +75,7 @@ extension AppViewModel {
             status: .running,
             summary: "Manual run from Plugin Library."
         )
-        let result = await executeCapabilityInvocation(invocation)
-        finishCapabilityActivity(activityID, result: result)
-        refreshWebServiceArtifacts()
-        captureExternalInboxEventIfNeeded(invocation: invocation, result: result)
-        let capturedPluginDraft = captureGeneratedPluginDraft(
-            from: result,
-            source: invocation.functionName,
-            installImmediately: boolArgument(arguments, keys: ["install_immediately", "installImmediately"], fallback: false)
-        )
-        captureInstalledPluginIfNeeded(invocation: invocation, result: result, approved: false)
-        captureRemovedPluginIfNeeded(invocation: invocation, result: result, approved: false)
-        if capturedPluginDraft == nil {
-            messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
-        }
-        auditCapabilityExecution(invocation: invocation, result: result, approved: false)
-        Task {
-            let memoryResult = capturedPluginDraft.map {
-                CapabilityResult(title: "Plugin Package Draft", content: $0.content, requiresUserApproval: $0.queuedInstallApproval)
-            } ?? result
-            await persistCapabilityMemory(invocation: invocation, result: memoryResult, approved: false)
-        }
+        _ = await runInvocation(invocation, activityID: activityID, approved: false)
         saveSessionSnapshot()
         await reloadPlugins()
         connectionState = .ready
@@ -107,12 +87,60 @@ extension AppViewModel {
         }
     }
 
+    struct CapabilityRunOutcome {
+        var result: CapabilityResult
+        var pluginDraft: PluginDraftCapture?
+    }
+
+    /// The single post-execution pipeline every capability run goes through:
+    /// execute → finish activity → refresh artifacts → capture inbox event /
+    /// plugin draft / installed / removed plugin → tool message → audit →
+    /// persist memory. This sequence used to be copy-pasted (and had already
+    /// diverged: the approval path silently dropped generated plugin drafts).
+    /// Keep it in one place so the three entry points cannot drift again.
+    func runInvocation(
+        _ invocation: CapabilityInvocation,
+        activityID: UUID,
+        approved: Bool
+    ) async -> CapabilityRunOutcome {
+        let result = await executeCapabilityInvocation(invocation)
+        finishCapabilityActivity(activityID, result: result)
+        refreshWebServiceArtifacts()
+        captureExternalInboxEventIfNeeded(invocation: invocation, result: result)
+        let pluginDraft = captureGeneratedPluginDraft(
+            from: result,
+            source: invocation.functionName,
+            installImmediately: boolArgument(
+                invocation.arguments,
+                keys: ["install_immediately", "installImmediately"],
+                fallback: false
+            )
+        )
+        captureInstalledPluginIfNeeded(invocation: invocation, result: result, approved: approved)
+        captureRemovedPluginIfNeeded(invocation: invocation, result: result, approved: approved)
+        if pluginDraft == nil {
+            messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
+        }
+        auditCapabilityExecution(invocation: invocation, result: result, approved: approved)
+        Task {
+            let memoryResult = pluginDraft.map {
+                CapabilityResult(
+                    title: "Plugin Package Draft",
+                    content: $0.content,
+                    requiresUserApproval: $0.queuedInstallApproval
+                )
+            } ?? result
+            await persistCapabilityMemory(invocation: invocation, result: memoryResult, approved: approved)
+        }
+        return CapabilityRunOutcome(result: result, pluginDraft: pluginDraft)
+    }
+
     /// The key "一直批准" stores and checks. Scoped to the risk boundary, not
     /// the bare capability ID: `shell.run` spans mkdir…rm…curl, so approving
     /// one benign command must never silently approve every later one — the
     /// executed command name is part of the identity.
     static func autoApprovalKey(capabilityID: String, arguments: [String: Any]) -> String {
-        guard capabilityID == "shell.run" else { return capabilityID }
+        guard capabilityID == CapabilityID.shellRun else { return capabilityID }
         let command = (arguments["command"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return command.isEmpty ? capabilityID : "\(capabilityID):\(command)"
@@ -159,13 +187,9 @@ extension AppViewModel {
             summary: "Approved by user; executing now."
         )
         rebuildRunningTasks()
-        let result = await executeCapabilityInvocation(approval.invocation)
-        finishCapabilityActivity(activityID, result: result)
-        refreshWebServiceArtifacts()
-        captureExternalInboxEventIfNeeded(invocation: approval.invocation, result: result)
-        captureInstalledPluginIfNeeded(invocation: approval.invocation, result: result, approved: true)
-        captureRemovedPluginIfNeeded(invocation: approval.invocation, result: result, approved: true)
-        messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
+        // Shared pipeline (also captures generated plugin drafts — the old
+        // hand-rolled copy here silently dropped them).
+        let outcome = await runInvocation(approval.invocation, activityID: activityID, approved: true)
         audit(
             type: "approval.approved",
             summary: "User approved capability execution.",
@@ -175,13 +199,9 @@ extension AppViewModel {
                 "functionName": approval.invocation.functionName
             ]
         )
-        auditCapabilityExecution(invocation: approval.invocation, result: result, approved: true)
-        Task {
-            await persistCapabilityMemory(invocation: approval.invocation, result: result, approved: true)
-        }
         saveSessionSnapshot()
         await reloadPlugins()
-        await synthesizeApprovedCapabilityResult(approval: approval, result: result)
+        await synthesizeApprovedCapabilityResult(approval: approval, result: outcome.result)
         connectionState = .ready
     }
 
@@ -218,104 +238,119 @@ extension AppViewModel {
         saveSessionSnapshot()
     }
 
+    /// Single dispatch point for app-state capabilities. One registry
+    /// replaces the old 30-branch if-chain that had to be kept in sync by
+    /// hand with a parallel switch in CapabilityExecutor — the classic
+    /// "edited one, forgot the other" split-brain. Anything not registered
+    /// here routes to the stateless adapter executor.
     func executeCapabilityInvocation(_ invocation: CapabilityInvocation) async -> CapabilityResult {
-        if invocation.capabilityID == "reflection.snapshot" {
-            let focus = stringArgument(
+        if let handler = Self.appCapabilityHandlers[invocation.capabilityID] {
+            return await handler(self, invocation)
+        }
+        return await capabilityExecutor.execute(invocation)
+    }
+
+    /// Handlers for capabilities that need live app state (registry, drafts,
+    /// webapp runtime, terminal, browser). Keyed by CapabilityID constants so
+    /// a typo is a compile error, not a silent mis-route. Static + explicit
+    /// `model` parameter: no closure captures, no retain cycles.
+    private static let appCapabilityHandlers: [String: @MainActor (AppViewModel, CapabilityInvocation) async -> CapabilityResult] = [
+        CapabilityID.reflectionSnapshot: { model, invocation in
+            let focus = model.stringArgument(
                 invocation.arguments,
                 keys: ["focus", "request", "summary"],
                 fallback: ""
             )
-            return saveReflectionSnapshot(focus: focus)
+            return model.saveReflectionSnapshot(focus: focus)
+        },
+        CapabilityID.workspacePlan: { model, invocation in
+            model.saveWorkPlan(arguments: invocation.arguments, source: invocation.functionName)
+        },
+        CapabilityID.productDiagnostics: { model, _ in
+            model.productDiagnosticsCapability()
+        },
+        CapabilityID.productExportDiagnostics: { model, invocation in
+            model.exportProductDiagnosticsCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.pluginListDrafts: { model, _ in
+            model.listGeneratedPluginDraftsCapability()
+        },
+        CapabilityID.pluginListInstalled: { model, _ in
+            model.listInstalledLocalPluginsCapability()
+        },
+        CapabilityID.pluginInspect: { model, invocation in
+            model.inspectInstalledLocalPluginCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.pluginReadFile: { model, invocation in
+            model.readInstalledLocalPluginFileCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.pluginStagePackage: { model, invocation in
+            model.stagePluginPackageCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.pluginInstallDraft: { model, invocation in
+            await model.installGeneratedPluginDraftCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.pluginDiscardDraft: { model, invocation in
+            model.discardGeneratedPluginDraftCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.pluginExport: { model, invocation in
+            model.exportPluginCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.webappCreate: { model, invocation in
+            model.createWebAppCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.webappUpdate: { model, invocation in
+            model.updateWebAppCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.webappList: { model, _ in
+            model.listWebAppsCapability()
+        },
+        CapabilityID.webappOpen: { model, invocation in
+            model.openWebAppCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.webappRemove: { model, invocation in
+            model.removeWebAppCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.webappQuery: { model, invocation in
+            model.queryWebAppCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.webappExecute: { model, invocation in
+            model.executeWebAppSQLCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.webappInspect: { model, invocation in
+            model.inspectWebAppCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.webappRequest: { model, invocation in
+            await model.requestWebAppBackendCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.terminalOpen: { model, _ in
+            model.openTerminalCapability()
+        },
+        CapabilityID.terminalRead: { model, _ in
+            model.readTerminalCapability()
+        },
+        CapabilityID.terminalSend: { model, invocation in
+            await model.sendTerminalCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.browserOpen: { model, _ in
+            await model.openBrowserCapability()
+        },
+        CapabilityID.browserNavigate: { model, invocation in
+            await model.navigateBrowserCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.browserRead: { model, _ in
+            await model.readBrowserCapability()
+        },
+        CapabilityID.browserClick: { model, invocation in
+            await model.clickBrowserCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.browserType: { model, invocation in
+            await model.typeBrowserCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.browserDetect: { model, _ in
+            await model.detectBrowserCapability()
         }
-        if invocation.capabilityID == "workspace.plan" {
-            return saveWorkPlan(arguments: invocation.arguments, source: invocation.functionName)
-        }
-        if invocation.capabilityID == "product.diagnostics" {
-            return productDiagnosticsCapability()
-        }
-        if invocation.capabilityID == "product.exportDiagnostics" {
-            return exportProductDiagnosticsCapability(arguments: invocation.arguments)
-        }
-        if invocation.capabilityID == "plugin.listDrafts" {
-            return listGeneratedPluginDraftsCapability()
-        }
-        if invocation.capabilityID == "plugin.listInstalled" {
-            return listInstalledLocalPluginsCapability()
-        }
-        if invocation.capabilityID == "plugin.inspect" {
-            return inspectInstalledLocalPluginCapability(arguments: invocation.arguments)
-        }
-        if invocation.capabilityID == "plugin.readFile" {
-            return readInstalledLocalPluginFileCapability(arguments: invocation.arguments)
-        }
-        if invocation.capabilityID == "plugin.stagePackage" {
-            return stagePluginPackageCapability(arguments: invocation.arguments)
-        }
-        if invocation.capabilityID == "plugin.installDraft" {
-            return await installGeneratedPluginDraftCapability(arguments: invocation.arguments)
-        }
-        if invocation.capabilityID == "plugin.discardDraft" {
-            return discardGeneratedPluginDraftCapability(arguments: invocation.arguments)
-        }
-        if invocation.capabilityID == "plugin.export" {
-            return exportPluginCapability(arguments: invocation.arguments)
-        }
-        if invocation.capabilityID == "webapp.create" {
-            return createWebAppCapability(arguments: invocation.arguments)
-        }
-        if invocation.capabilityID == "webapp.update" {
-            return updateWebAppCapability(arguments: invocation.arguments)
-        }
-        if invocation.capabilityID == "webapp.list" {
-            return listWebAppsCapability()
-        }
-        if invocation.capabilityID == "webapp.open" {
-            return openWebAppCapability(arguments: invocation.arguments)
-        }
-        if invocation.capabilityID == "webapp.remove" {
-            return removeWebAppCapability(arguments: invocation.arguments)
-        }
-        if invocation.capabilityID == "webapp.query" {
-            return queryWebAppCapability(arguments: invocation.arguments)
-        }
-        if invocation.capabilityID == "webapp.execute" {
-            return executeWebAppSQLCapability(arguments: invocation.arguments)
-        }
-        if invocation.capabilityID == "webapp.inspect" {
-            return inspectWebAppCapability(arguments: invocation.arguments)
-        }
-        if invocation.capabilityID == "webapp.request" {
-            return await requestWebAppBackendCapability(arguments: invocation.arguments)
-        }
-        if invocation.capabilityID == "terminal.open" {
-            return openTerminalCapability()
-        }
-        if invocation.capabilityID == "terminal.read" {
-            return readTerminalCapability()
-        }
-        if invocation.capabilityID == "terminal.send" {
-            return await sendTerminalCapability(arguments: invocation.arguments)
-        }
-        if invocation.capabilityID == "browser.open" {
-            return await openBrowserCapability()
-        }
-        if invocation.capabilityID == "browser.navigate" {
-            return await navigateBrowserCapability(arguments: invocation.arguments)
-        }
-        if invocation.capabilityID == "browser.read" {
-            return await readBrowserCapability()
-        }
-        if invocation.capabilityID == "browser.click" {
-            return await clickBrowserCapability(arguments: invocation.arguments)
-        }
-        if invocation.capabilityID == "browser.type" {
-            return await typeBrowserCapability(arguments: invocation.arguments)
-        }
-        if invocation.capabilityID == "browser.detect" {
-            return await detectBrowserCapability()
-        }
-        return await capabilityExecutor.execute(invocation)
-    }
+    ]
 
     func activeTaskSummary() -> String {
         ActiveWorkSummaryBuilder().build(
@@ -379,7 +414,8 @@ extension AppViewModel {
         // per step. The manifest stays approval-required (the safe default);
         // only an explicit, user-flipped session relaxes browser actions.
         if browserAutonomyGranted,
-           ["browser.navigate", "browser.click", "browser.type"].contains(capabilityID) {
+           [CapabilityID.browserNavigate, CapabilityID.browserClick, CapabilityID.browserType]
+               .contains(capabilityID) {
             return false
         }
         return pluginRegistry.capability(id: capabilityID, in: plugins)?.requiresApproval ?? true
@@ -468,12 +504,24 @@ extension AppViewModel {
     }
 
     func finishCapabilityActivity(_ id: UUID, result: CapabilityResult) {
-        let failed = result.requiresUserApproval
-            || result.title.localizedCaseInsensitiveContains("failed")
-            || result.title.localizedCaseInsensitiveContains("blocked")
-            || result.title.localizedCaseInsensitiveContains("missing")
-            || result.title.localizedCaseInsensitiveContains("unsupported")
-            || result.title.localizedCaseInsensitiveContains("timed out")
+        let failed: Bool
+        if let outcome = result.outcome {
+            // Explicit semantics from the executor — the reliable path.
+            switch outcome {
+            case .ok: failed = false
+            case .failed, .needsApproval: failed = true
+            }
+        } else {
+            // Legacy fallback for results that don't set `outcome` yet: guess
+            // from the title. Fragile by construction — executors should set
+            // outcome explicitly so new failure titles aren't misclassified.
+            failed = result.requiresUserApproval
+                || result.title.localizedCaseInsensitiveContains("failed")
+                || result.title.localizedCaseInsensitiveContains("blocked")
+                || result.title.localizedCaseInsensitiveContains("missing")
+                || result.title.localizedCaseInsensitiveContains("unsupported")
+                || result.title.localizedCaseInsensitiveContains("timed out")
+        }
         updateCapabilityActivity(
             id,
             status: failed ? .failed : .done,

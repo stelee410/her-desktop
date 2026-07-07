@@ -88,8 +88,10 @@ final class BuiltInPluginContractTests: XCTestCase {
         XCTAssertTrue(skill.contains("plugin.export"))
     }
 
-    func testFallbackWorkspacePlanMatchesNativeContract() throws {
-        let registry = PluginRegistry(config: .empty, loadBundledBuiltInResources: false)
+    func testBundledWorkspacePlanMatchesNativeContract() throws {
+        // Asserts the bundled JSON manifest (the single source of truth; the
+        // hand-written Swift fallback copy was removed).
+        let registry = PluginRegistry(config: .empty)
         let workspace = try XCTUnwrap(registry.loadPlugins().first { $0.id == "builtin.workspace" })
         let plan = try XCTUnwrap(workspace.capabilities.first { $0.id == "workspace.plan" })
 

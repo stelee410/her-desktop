@@ -669,17 +669,19 @@ final class CapabilityRuntimeTests: XCTestCase {
         )
     }
 
-    func testFallbackBuiltInsCoverCoreRuntimeWhenResourcesAreUnavailable() {
-        let fallback = PluginRegistry(config: .empty, loadBundledBuiltInResources: false)
+    func testBundledBuiltInsCoverCoreRuntimeAndDeclareSchemas() {
+        // The bundled .plugin.json manifests are the single source of truth —
+        // the old hand-written Swift fallback copy was deleted because the
+        // two inevitably drifted. Assert the real shipping artifact instead.
+        let bundled = PluginRegistry(config: .empty)
             .loadPlugins()
             .filter { $0.id.hasPrefix("builtin.") }
 
-        let fallbackIDs = Set(fallback.map(\.id))
+        let bundledIDs = Set(bundled.map(\.id))
         for requiredID in ProductReadinessBuilder.coreBuiltInPlugins.map(\.id) {
-            XCTAssertTrue(fallbackIDs.contains(requiredID), "Fallback built-ins should keep core runtime available without processed resources: \(requiredID)")
+            XCTAssertTrue(bundledIDs.contains(requiredID), "Bundled built-ins must cover the core runtime: \(requiredID)")
         }
-        XCTAssertTrue(fallback.flatMap(\.capabilities).allSatisfy { $0.inputSchema != nil })
-        XCTAssertNotNil(fallback.first { $0.id == "builtin.mcp-bridge" })
+        XCTAssertNotNil(bundled.first { $0.id == "builtin.mcp-bridge" })
     }
 
     func testBuiltInNativeNotificationRequiresApproval() {

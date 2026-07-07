@@ -85,10 +85,14 @@ struct WebAppHTTPResponse: Equatable {
         case 405: reason = "Method Not Allowed"
         default: reason = "Error"
         }
+        // same-origin referrers only: page URLs carry the app token in the
+        // query — same-origin fetches keep sending it (the Referer auth path
+        // relies on that), but it never flows to a third-party origin.
         let header = "HTTP/1.1 \(status) \(reason)\r\n"
             + "Content-Type: \(contentType)\r\n"
             + "Content-Length: \(body.count)\r\n"
             + "Cache-Control: no-store\r\n"
+            + "Referrer-Policy: same-origin\r\n"
             + "Connection: close\r\n"
             + "\r\n"
         var data = Data(header.utf8)
@@ -107,6 +111,11 @@ struct LocalWebAppRouter {
     var processManager: WebAppProcessManager?
 
     func route(_ request: WebAppHTTPRequest) async -> WebAppHTTPResponse {
+        // Reject non-loopback Host headers (DNS rebinding: an attacker page
+        // whose domain resolves to 127.0.0.1 arrives with its own Host).
+        guard SecurityPrimitives.isLoopbackHost(request.headers["host"]) else {
+            return .jsonError(403, "Forbidden host.")
+        }
         let segments = request.path.split(separator: "/").map(String.init)
         guard segments.count >= 2, segments[0] == "apps" else {
             return .jsonError(404, "Unknown path.")
@@ -153,13 +162,18 @@ struct LocalWebAppRouter {
     private func validToken(_ request: WebAppHTTPRequest, appID: String) -> Bool {
         guard let expected = tokenForApp(appID), !expected.isEmpty else { return false }
         // Accept the token from the query, a header, or the referring page's
-        // URL — so an app page's own fetch('api/…') authenticates without the
-        // model having to thread the token through every request.
-        if request.query["token"] == expected { return true }
-        if request.headers["x-webapp-token"] == expected { return true }
+        // URL — the Referer path is load-bearing: it authenticates the app
+        // page's own fetches that the injected shim doesn't catch. Honoring
+        // Referer adds no attack surface (a forger would already need the
+        // token); the leak vector — token flowing to third-party origins via
+        // referrers — is closed by the `Referrer-Policy: same-origin`
+        // response header instead. All comparisons are constant-time.
+        if SecurityPrimitives.constantTimeEquals(request.query["token"] ?? "", expected) { return true }
+        if SecurityPrimitives.constantTimeEquals(request.headers["x-webapp-token"] ?? "", expected) { return true }
         if let referer = request.headers["referer"],
            let comps = URLComponents(string: referer),
-           comps.queryItems?.first(where: { $0.name == "token" })?.value == expected {
+           let refererToken = comps.queryItems?.first(where: { $0.name == "token" })?.value,
+           SecurityPrimitives.constantTimeEquals(refererToken, expected) {
             return true
         }
         return false
@@ -242,6 +256,12 @@ struct LocalWebAppRouter {
             params = values
         }
         do {
+            // Deliberately read-write: the page IS the app's own UI operating
+            // its own single-app data.db (generated apps CREATE TABLE and
+            // INSERT through here). The token is the write authorization; the
+            // blast radius is that one app's database. The *model*-facing
+            // read path (webapp.query) stays requireReadOnly — that split is
+            // about approval-gating the agent, not the user's own UI.
             let result = try WebAppDatabase.execute(
                 sql: sql,
                 params: params,

@@ -477,6 +477,7 @@ struct PluginPackageValidator {
         case unsafeFilePath(String)
         case invalidWebServiceURL(String)
         case secretLikeContent(String)
+        case unsupportedManifestSchemaVersion(Int)
 
         var errorDescription: String? {
             switch self {
@@ -488,6 +489,8 @@ struct PluginPackageValidator {
                 return "Plugin package is missing \(field)."
             case .invalidCapabilityID(let id):
                 return "Capability id must belong to its plugin, got: \(id)"
+            case .unsupportedManifestSchemaVersion(let version):
+                return "This package uses manifest schema v\(version); this app understands up to v\(PluginManifest.currentManifestSchemaVersion). Update Her Desktop instead of installing blindly."
             case .unsupportedKind(let kind):
                 return "Unsupported capability kind: \(kind)"
             case .invalidAdapter(let message):
@@ -506,6 +509,11 @@ struct PluginPackageValidator {
 
     func validate(_ package: PluginPackage, existingPluginIDs: [String] = []) throws {
         let manifest = package.manifest
+        // A future manifest format must be rejected explicitly, not decoded
+        // half-blind and installed with silently-dropped fields.
+        guard manifest.resolvedManifestSchemaVersion <= PluginManifest.currentManifestSchemaVersion else {
+            throw ValidationError.unsupportedManifestSchemaVersion(manifest.resolvedManifestSchemaVersion)
+        }
         try validatePluginID(manifest.id)
         if existingPluginIDs.contains(manifest.id) {
             throw ValidationError.duplicatePluginID(manifest.id)

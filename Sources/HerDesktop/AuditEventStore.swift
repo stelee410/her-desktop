@@ -22,13 +22,43 @@ struct AuditEvent: Codable, Equatable, Identifiable {
     }
 }
 
-final class AuditEventStore {
+/// Cross-cutting audit seam. Capability handlers and future extracted
+/// services record events through this protocol instead of holding the whole
+/// AppViewModel — `self.audit(...)` calls were the number-one edge gluing
+/// every subsystem to the god object.
+@MainActor
+protocol AuditRecording: AnyObject {
+    func audit(type: String, summary: String, metadata: [String: String])
+}
+
+/// Immutable config only; file appends run on the internal serial queue so
+/// they are ordered and off the main thread.
+final class AuditEventStore: @unchecked Sendable {
     private let cwd: String
     private let fileManager: FileManager
+    private let ioQueue = DispatchQueue(label: "HerDesktop.AuditEventStore.io", qos: .utility)
 
     init(cwd: String = FileManager.default.currentDirectoryPath, fileManager: FileManager = .default) {
         self.cwd = cwd
         self.fileManager = fileManager
+    }
+
+    /// Serialized off-main append. Audit fires on every user message and
+    /// every tool step; the synchronous open/seek/write used to run on the
+    /// main actor each time.
+    func enqueueAppend(_ event: AuditEvent, onFailure: (@Sendable (Error) -> Void)? = nil) {
+        ioQueue.async { [self] in
+            do {
+                try append(event)
+            } catch {
+                onFailure?(error)
+            }
+        }
+    }
+
+    /// Blocks until queued appends have landed (shutdown + tests).
+    func flushPendingIO() {
+        ioQueue.sync {}
     }
 
     var auditURL: URL {

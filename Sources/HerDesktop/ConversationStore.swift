@@ -179,6 +179,22 @@ final class ConversationStore: @unchecked Sendable {
         return ConversationIndexFileV1(version: 1, activeConversationID: active, conversations: summaries)
     }
 
+    /// Serialized off-main index write. Fires on every message/rename/pin;
+    /// the synchronous encode+atomic-write used to run on the main actor.
+    func enqueueSaveIndex(
+        conversations: [ConversationSummary],
+        activeConversationID: String?,
+        onFailure: (@Sendable (Error) -> Void)? = nil
+    ) {
+        ioQueue.async { [self] in
+            do {
+                try saveIndex(conversations: conversations, activeConversationID: activeConversationID)
+            } catch {
+                onFailure?(error)
+            }
+        }
+    }
+
     func saveIndex(conversations: [ConversationSummary], activeConversationID: String?) throws {
         try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
         let index = ConversationIndexFileV1(
@@ -248,6 +264,13 @@ final class ConversationStore: @unchecked Sendable {
         }
     }
 
+    /// Blocks until every queued save/load has completed. Called on app
+    /// shutdown so pending writes land before the process exits, and by
+    /// tests before asserting on-disk state.
+    func flushPendingIO() {
+        ioQueue.sync {}
+    }
+
     /// Serialized off-main load; runs after any queued save for the same id.
     func loadTranscriptAsync(id: String) async -> TranscriptLoad {
         await withCheckedContinuation { continuation in
@@ -269,9 +292,14 @@ final class ConversationStore: @unchecked Sendable {
     }
 
     func deleteConversationFile(id: String) throws {
-        let url = conversationURL(id: id)
-        guard fileManager.fileExists(atPath: url.path) else { return }
-        try fileManager.removeItem(at: url)
+        // On the serial I/O queue so the delete is ordered AFTER any queued
+        // save for the same conversation — otherwise a pending async save
+        // could land after the delete and resurrect the file.
+        try ioQueue.sync {
+            let url = conversationURL(id: id)
+            guard fileManager.fileExists(atPath: url.path) else { return }
+            try fileManager.removeItem(at: url)
+        }
     }
 
     /// Short title candidate from the first user message, or nil while the

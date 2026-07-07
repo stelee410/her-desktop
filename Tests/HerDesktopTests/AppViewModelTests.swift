@@ -801,6 +801,7 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(model.draft, "")
         XCTAssertNotEqual(model.activeConversationID, previousConversationID)
         XCTAssertEqual(model.conversations.count, 2)
+        model.conversationStore.flushPendingIO() // index/transcript writes are queued off-main
         XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(".her/conversations/index.json").path))
         let previousTranscript = try ConversationStore(cwd: root.path).loadMessages(id: previousConversationID)
         XCTAssertTrue(previousTranscript.contains { $0.content == "old turn" })
@@ -846,6 +847,7 @@ final class AppViewModelTests: XCTestCase {
         // A save firing during the load window must be a no-op, so A's real
         // content on disk is not clobbered with the empty transient state.
         model.saveSessionSnapshot()
+        model.conversationStore.flushPendingIO() // land queued writes before reading disk
         let onDisk = try ConversationStore(cwd: root.path).loadMessages(id: first)
         XCTAssertTrue(onDisk.contains { $0.content == "real content A" },
                       "the target transcript must survive a save during its load")
@@ -1019,6 +1021,7 @@ final class AppViewModelTests: XCTestCase {
 
         XCTAssertEqual(model.conversations.first { $0.id == id }?.title, "我的项目讨论")
         XCTAssertTrue(model.auditEvents.contains { $0.type == "session.rename_conversation" })
+        model.conversationStore.flushPendingIO() // index writes are queued off-main
         let stored = try? ConversationStore(cwd: root.path).loadIndex()
         XCTAssertEqual(stored?.conversations.first { $0.id == id }?.title, "我的项目讨论")
 
@@ -2415,6 +2418,7 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.generatedPluginDrafts.isEmpty)
         XCTAssertTrue(model.messages.contains { $0.content.contains("Plugin Package Import Failed") })
         XCTAssertTrue(model.lastError?.contains("did not contain a JSON object") == true)
+        model.auditStore.flushPendingIO() // audit appends are queued off-main
         let audit = try AuditEventStore(cwd: cwd.path).loadAll()
         XCTAssertTrue(audit.contains { $0.type == "plugin.package_import_failed" })
     }

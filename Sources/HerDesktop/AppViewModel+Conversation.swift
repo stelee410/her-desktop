@@ -576,30 +576,10 @@ extension AppViewModel {
             status: .running,
             summary: "Executing without additional approval."
         )
-        let result = await executeCapabilityInvocation(invocation)
-        finishCapabilityActivity(activityID, result: result)
-        refreshWebServiceArtifacts()
-        captureExternalInboxEventIfNeeded(invocation: invocation, result: result)
-        let capturedPluginDraft = captureGeneratedPluginDraft(
-            from: result,
-            source: toolCall.function.name,
-            installImmediately: boolArgument(invocation.arguments, keys: ["install_immediately", "installImmediately"], fallback: false)
-        )
-        captureInstalledPluginIfNeeded(invocation: invocation, result: result, approved: false)
-        captureRemovedPluginIfNeeded(invocation: invocation, result: result, approved: false)
-        if capturedPluginDraft == nil {
-            messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
-        }
-        auditCapabilityExecution(invocation: invocation, result: result, approved: false)
-        Task {
-            let memoryResult = capturedPluginDraft.map {
-                CapabilityResult(title: "Plugin Package Draft", content: $0.content, requiresUserApproval: $0.queuedInstallApproval)
-            } ?? result
-            await persistCapabilityMemory(invocation: invocation, result: memoryResult, approved: false)
-        }
+        let outcome = await runInvocation(invocation, activityID: activityID, approved: false)
         return ToolCallHandlingResult(
-            content: capturedPluginDraft?.content ?? result.content,
-            needsApproval: capturedPluginDraft?.queuedInstallApproval ?? false
+            content: outcome.pluginDraft?.content ?? outcome.result.content,
+            needsApproval: outcome.pluginDraft?.queuedInstallApproval ?? false
         )
     }
 
@@ -633,13 +613,14 @@ extension AppViewModel {
     }
 
     func persistConversationIndex() {
-        do {
-            try conversationStore.saveIndex(
-                conversations: conversations,
-                activeConversationID: activeConversationID
-            )
-        } catch {
-            lastError = "Could not save the conversation index: \(error.localizedDescription)"
+        // Off-main, ordered with transcript saves on the store's serial queue.
+        conversationStore.enqueueSaveIndex(
+            conversations: conversations,
+            activeConversationID: activeConversationID
+        ) { error in
+            Task { @MainActor [weak self] in
+                self?.lastError = "Could not save the conversation index: \(error.localizedDescription)"
+            }
         }
     }
 

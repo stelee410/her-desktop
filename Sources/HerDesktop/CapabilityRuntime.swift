@@ -13,10 +13,35 @@ struct CapabilityInvocation: Equatable {
     }
 }
 
+/// Explicit success/failure semantics for a capability execution.
+/// Historically success was *guessed* by substring-matching the result title
+/// ("failed"/"blocked"/…), so any new capability whose failure title didn't
+/// contain one of those words was silently recorded as done.
+enum CapabilityOutcome: Equatable {
+    case ok
+    case failed(String)
+    case needsApproval
+}
+
 struct CapabilityResult: Equatable {
     var title: String
     var content: String
     var requiresUserApproval: Bool
+    /// Set explicitly by executors; when nil, activity classification falls
+    /// back to the legacy title heuristic. New code should always set it.
+    var outcome: CapabilityOutcome?
+
+    init(
+        title: String,
+        content: String,
+        requiresUserApproval: Bool,
+        outcome: CapabilityOutcome? = nil
+    ) {
+        self.title = title
+        self.content = content
+        self.requiresUserApproval = requiresUserApproval
+        self.outcome = outcome
+    }
 }
 
 /// Small curated shell command set. Commands run directly (no shell), from
@@ -227,64 +252,16 @@ final class CapabilityExecutor {
             return writeWorkspaceTextFile(arguments: invocation.arguments)
         case "workspace.replaceText":
             return replaceWorkspaceText(arguments: invocation.arguments)
-        case "workspace.plan":
-            return CapabilityResult(
-                title: "Workspace Plan",
-                content: "Workspace planning is available. I can inspect files and prepare a scoped implementation plan before editing.",
-                requiresUserApproval: false
-            )
+        // NOTE: app-state capabilities (plugin.listDrafts/installDraft/…,
+        // product.*, workspace.plan, webapp.*, terminal.*, browser.*) are NOT
+        // handled here. They dispatch through AppViewModel's handler registry
+        // before this executor is reached; the placeholder cases that used to
+        // shadow them here were dead code that could silently mask a missed
+        // registration.
         case "plugin.draft":
             return draftPlugin(arguments: invocation.arguments)
         case "plugin.install":
             return installPlugin(arguments: invocation.arguments)
-        case "plugin.listDrafts":
-            return CapabilityResult(
-                title: "Plugin Draft List Failed",
-                content: "Staged draft listing is handled by the Her Desktop app state because drafts live in the generated review queue.",
-                requiresUserApproval: false
-            )
-        case "plugin.listInstalled":
-            return CapabilityResult(
-                title: "Installed Plugin List Failed",
-                content: "Installed local plugin listing is handled by the Her Desktop app state because the active plugin registry lives in the app model.",
-                requiresUserApproval: false
-            )
-        case "plugin.inspect":
-            return CapabilityResult(
-                title: "Plugin Inspect Failed",
-                content: "Installed local plugin inspection is handled by the Her Desktop app state because package review uses the active plugin registry.",
-                requiresUserApproval: false
-            )
-        case "plugin.readFile":
-            return CapabilityResult(
-                title: "Plugin File Read Failed",
-                content: "Installed local plugin file reads are handled by the Her Desktop app state because package files live in the active plugin registry.",
-                requiresUserApproval: false
-            )
-        case "plugin.stagePackage":
-            return CapabilityResult(
-                title: "Plugin Package Import Failed",
-                content: "Plugin package staging is handled by the Her Desktop app state because imported packages enter the generated review queue.",
-                requiresUserApproval: false
-            )
-        case "plugin.installDraft":
-            return CapabilityResult(
-                title: "Plugin Draft Install Failed",
-                content: "Staged draft installation is handled by the Her Desktop app state because drafts live in the generated review queue.",
-                requiresUserApproval: false
-            )
-        case "plugin.discardDraft":
-            return CapabilityResult(
-                title: "Plugin Draft Discard Failed",
-                content: "Staged draft discard is handled by the Her Desktop app state because drafts live in the generated review queue.",
-                requiresUserApproval: false
-            )
-        case "plugin.export":
-            return CapabilityResult(
-                title: "Plugin Export Failed",
-                content: "Plugin package export is handled by the Her Desktop app state so it can write to the workspace export directory and record plugin lifecycle events.",
-                requiresUserApproval: false
-            )
         case "plugin.remove":
             return removePlugin(arguments: invocation.arguments)
         case "native.notify":
@@ -299,18 +276,6 @@ final class CapabilityExecutor {
             return await executeLocalShell(invocation: invocation, readOnly: true)
         case "shell.run":
             return await executeLocalShell(invocation: invocation, readOnly: false)
-        case "product.diagnostics":
-            return CapabilityResult(
-                title: "Product Diagnostics Unavailable",
-                content: "Product diagnostics are handled by the Her Desktop app state because readiness depends on live services, queues, plugins, and session context.",
-                requiresUserApproval: false
-            )
-        case "product.exportDiagnostics":
-            return CapabilityResult(
-                title: "Product Diagnostics Export Unavailable",
-                content: "Product diagnostics export is handled by the Her Desktop app state because the report is generated from live readiness, services, queues, plugins, and session context.",
-                requiresUserApproval: false
-            )
         case "inbox.capture":
             return executeInboxCapture(arguments: invocation.arguments)
         case "agentmem.query":
@@ -776,44 +741,10 @@ final class CapabilityExecutor {
         case "command":
             return await executeCommand(capability: capability, invocation: invocation)
         case "native":
-            if capability.id == "native.notify" {
-                return await executeNativeNotification(arguments: invocation.arguments)
-            }
-            if capability.id == "native.readTextFile" {
-                return executeNativeReadTextFile(arguments: invocation.arguments)
-            }
-            if capability.id == "native.speak" {
-                return await executeNativeSpeak(arguments: invocation.arguments)
-            }
-            if capability.id == "native.inspectAttachment" {
-                return executeNativeInspectAttachment(arguments: invocation.arguments)
-            }
-            if capability.id == "inbox.capture" {
-                return executeInboxCapture(arguments: invocation.arguments)
-            }
-            if capability.id == "agentmem.query" {
-                return await executeAgentMemQuery(arguments: invocation.arguments)
-            }
-            if capability.id == "agentmem.add" {
-                return await executeAgentMemAdd(arguments: invocation.arguments)
-            }
-            if capability.id == "mcp.discover" {
-                return await executeMCPToolDiscovery(arguments: invocation.arguments)
-            }
-            if capability.id == "product.diagnostics" {
-                return CapabilityResult(
-                    title: "Product Diagnostics Unavailable",
-                    content: "Product diagnostics are handled by the Her Desktop app state because readiness depends on live services, queues, plugins, and session context.",
-                    requiresUserApproval: false
-                )
-            }
-            if capability.id == "product.exportDiagnostics" {
-                return CapabilityResult(
-                    title: "Product Diagnostics Export Unavailable",
-                    content: "Product diagnostics export is handled by the Her Desktop app state because the report is generated from live readiness, services, queues, plugins, and session context.",
-                    requiresUserApproval: false
-                )
-            }
+            // Built-in native IDs are already dispatched by the top-level
+            // switch in execute(); a second per-ID re-dispatch used to live
+            // here and could only drift. Anything reaching this point is a
+            // declared native capability with no registered executor.
             return bridgePlaceholder(
                 title: "Native Adapter Missing",
                 capability: capability,
