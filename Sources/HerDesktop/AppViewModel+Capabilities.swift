@@ -101,7 +101,8 @@ extension AppViewModel {
     func runInvocation(
         _ invocation: CapabilityInvocation,
         activityID: UUID,
-        approved: Bool
+        approved: Bool,
+        postToConversation: Bool = true
     ) async -> CapabilityRunOutcome {
         let result = await executeCapabilityInvocation(invocation)
         finishCapabilityActivity(activityID, result: result)
@@ -118,7 +119,9 @@ extension AppViewModel {
         )
         captureInstalledPluginIfNeeded(invocation: invocation, result: result, approved: approved)
         captureRemovedPluginIfNeeded(invocation: invocation, result: result, approved: approved)
-        if pluginDraft == nil {
+        // Background jobs keep tool chatter in their own log; only the job's
+        // final result card reaches the conversation.
+        if pluginDraft == nil, postToConversation {
             messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
         }
         auditCapabilityExecution(invocation: invocation, result: result, approved: approved)

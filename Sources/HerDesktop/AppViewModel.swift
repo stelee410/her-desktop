@@ -87,6 +87,10 @@ final class AppViewModel: ObservableObject, AuditRecording {
         get { activityFeed.interactionEvents }
         set { activityFeed.interactionEvents = newValue }
     }
+    var agentJobs: [AgentJob] {
+        get { activityFeed.agentJobs }
+        set { activityFeed.agentJobs = newValue }
+    }
     @Published var webServiceArtifacts: [WebServiceArtifact] {
         didSet { messageScanVersion &+= 1 }
     }
@@ -202,6 +206,8 @@ final class AppViewModel: ObservableObject, AuditRecording {
     @Published var heartbeatTasks: [HeartbeatTask] = []
     var heartbeatTimer: Timer?
     lazy var heartbeatStore = HeartbeatTaskStore(cwd: runtimeCwd)
+    /// The single background-job worker draining the queue (see +Jobs).
+    var jobWorkerTask: Task<Void, Never>?
     /// Injected for tests; heartbeat notify tasks fire through this directly.
     let notificationScheduler: NativeNotificationScheduling
 
@@ -349,6 +355,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
     /// delegate's `applicationWillTerminate`.
     func shutdown() {
         stopHeartbeat()
+        cancelQueuedJobs()
         // Land any queued transcript/index/audit writes before exit.
         conversationStore.flushPendingIO()
         auditStore.flushPendingIO()

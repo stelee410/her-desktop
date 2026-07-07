@@ -137,7 +137,7 @@ final class HeartbeatTests: XCTestCase {
         XCTAssertNotNil(persisted.first { $0.title == "喝水" }?.completedAt)
     }
 
-    func testPromptTaskWaitsWhileGenerating() async {
+    func testPromptTaskEnqueuesJobThatYieldsToInFlightTurn() async {
         let root = makeRoot("busy")
         let notifier = FakeNotifier()
         let model = AppViewModel(cwd: root.path, notificationScheduler: notifier)
@@ -151,8 +151,12 @@ final class HeartbeatTests: XCTestCase {
 
         await model.heartbeatTick()
 
-        XCTAssertNil(model.heartbeatTasks[0].lastFiredAt,
-                     "prompt tasks must not collide with an in-flight turn")
+        // The task fires into a background job; the job (not the tick)
+        // yields to the in-flight turn, so the conversation is untouched.
+        XCTAssertNotNil(model.heartbeatTasks[0].lastFiredAt)
+        XCTAssertEqual(model.agentJobs.first?.state, .queued)
+        XCTAssertFalse(model.messages.contains { $0.role == .user })
+        model.cancelQueuedJobs()
     }
 
     // MARK: - Capabilities

@@ -30,6 +30,9 @@ final class ActivityFeedModel: ObservableObject {
     @Published var interactionEvents: [InteractionEvent] = []
     @Published var capabilityActivities: [CapabilityActivity] = []
     @Published var pluginEvents: [PluginLifecycleEvent] = []
+    /// Background agent jobs (heartbeat / event triggered); updated per
+    /// job round, displayed by the inspector's jobs card.
+    @Published var agentJobs: [AgentJob] = []
 }
 
 /// The conversation itself — transcript, composer, and conversation list.

@@ -35,17 +35,13 @@ extension AppViewModel {
         heartbeatTimer = nil
     }
 
-    /// One heartbeat: fire every due task, reschedule, persist.
+    /// One heartbeat: fire every due task, reschedule, persist. Prompt tasks
+    /// enqueue background jobs (which themselves yield to an in-flight user
+    /// turn), so firing is safe at any time.
     func heartbeatTick(now: Date = Date()) async {
         guard !heartbeatTasks.isEmpty else { return }
         for index in heartbeatTasks.indices {
             guard heartbeatTasks[index].isDue(at: now) else { continue }
-            // Prompt tasks need the conversation idle: a due task fires on
-            // the next tick after the current turn ends rather than
-            // colliding with it. Notifications are safe at any time.
-            if heartbeatTasks[index].action == .prompt, isGenerating || isLoadingConversation {
-                continue
-            }
             var task = heartbeatTasks[index]
             task.lastFiredAt = now
             if case .once = task.schedule {
@@ -79,9 +75,14 @@ extension AppViewModel {
                 )
             }
         case .prompt:
-            // A real agent turn, visibly attributed to the schedule so the
-            // transcript never pretends the user typed it.
-            await send("[定时任务 · \(task.title)] \(task.prompt)")
+            // Runs as a background job in its own context — the conversation
+            // the user is looking at is never interrupted; only the finished
+            // result card lands there.
+            enqueueJob(
+                title: task.title,
+                prompt: task.prompt,
+                source: .heartbeat(taskTitle: task.title)
+            )
         }
     }
 

@@ -41,6 +41,7 @@ struct InspectorView: View {
                     switch pane {
                     case .attention:
                         ApprovalQueueCard()
+                        BackgroundJobsCard()
                         GeneratedPluginDraftsCard()
                         RunningTasksCard()
                         CapabilityActivityCard()
@@ -357,6 +358,76 @@ private struct ProductReadinessCard: View {
         case .ready: return .green
         case .attention: return AppTheme.coral
         case .optional: return AppTheme.muted
+        }
+    }
+}
+
+/// Background agent jobs (the agentOS "process list"): scheduled and
+/// event-triggered work running in its own context, not the conversation.
+private struct BackgroundJobsCard: View {
+    @EnvironmentObject private var activityFeed: ActivityFeedModel
+
+    var body: some View {
+        if !activityFeed.agentJobs.isEmpty {
+            Panel(
+                title: "Background Jobs",
+                trailing: activityFeed.agentJobs.contains { $0.state == .running } ? "Running" : "Idle"
+            ) {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(activityFeed.agentJobs.prefix(6)) { job in
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: icon(for: job.state))
+                                .font(.caption)
+                                .foregroundStyle(color(for: job.state))
+                                .frame(width: 16)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(job.title)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AppTheme.ink)
+                                    .lineLimit(1)
+                                Text(statusLine(for: job))
+                                    .font(.caption2)
+                                    .foregroundStyle(AppTheme.muted)
+                                    .lineLimit(2)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(8)
+                        .background(Color.white.opacity(job.state == .running ? 0.5 : 0.36))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+            }
+        }
+    }
+
+    private func statusLine(for job: AgentJob) -> String {
+        switch job.state {
+        case .queued: return "排队中"
+        case .running: return job.log.last ?? "执行中…"
+        case .done: return job.result.map { String($0.prefix(80)) } ?? "完成"
+        case .needsApproval: return "等待你在对话里批准"
+        case .failed: return job.failureReason ?? "失败"
+        }
+    }
+
+    private func icon(for state: AgentJob.State) -> String {
+        switch state {
+        case .queued: return "clock"
+        case .running: return "gearshape.2"
+        case .done: return "checkmark.circle"
+        case .needsApproval: return "hand.raised"
+        case .failed: return "xmark.octagon"
+        }
+    }
+
+    private func color(for state: AgentJob.State) -> Color {
+        switch state {
+        case .running: return AppTheme.coral
+        case .done: return .green
+        case .needsApproval: return .orange
+        case .failed: return .red
+        case .queued: return AppTheme.muted
         }
     }
 }
