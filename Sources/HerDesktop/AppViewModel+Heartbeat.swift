@@ -24,6 +24,8 @@ extension AppViewModel {
                 await self?.heartbeatTick()
             }
         }
+        // Heartbeat is slack-tolerant; tolerance lets the OS coalesce wakeups.
+        timer.tolerance = HeartbeatEngine.tickInterval * 0.2
         heartbeatTimer = timer
         Task { @MainActor [weak self] in
             await self?.heartbeatTick()

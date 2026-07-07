@@ -166,6 +166,10 @@ extension AppViewModel {
     }
 
     func resetConversationScopedState() {
+        // Stop the previous conversation's voice mid-sentence.
+        speechTask?.cancel()
+        speechTask = nil
+        speechSynthesizer.stop()
         pendingApprovals = []
         capabilityActivities = []
         pendingAttachments = []
@@ -323,8 +327,10 @@ extension AppViewModel {
             deliverAssistantReply(final)
             connectionState = .ready
             saveSessionSnapshot()
-            Task { await persistTurnMemory(userInput: userInput, agentResponse: final) }
-            Task { await speakAssistantReplyIfEnabled(final) }
+            let turnSessionID = sessionID
+            Task { await persistTurnMemory(userInput: userInput, agentResponse: final, boundSessionID: turnSessionID) }
+            speechTask?.cancel()
+            speechTask = Task { await speakAssistantReplyIfEnabled(final) }
         } catch is CancellationError {
             handleTurnCancelled()
         } catch let error as URLError where error.code == .cancelled {

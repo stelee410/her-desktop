@@ -2679,6 +2679,9 @@ final class AppViewModelTests: XCTestCase {
         ))
 
         let model = AppViewModel(config: .empty, cwd: cwd.path)
+        // Feeds load in bootstrapRuntime() (right after first paint), not in
+        // init — audit.jsonl is unbounded and used to block startup.
+        model.refreshAuditEvents()
 
         XCTAssertEqual(model.auditEvents.map(\.type), ["plugin.installed", "plugin.draft_staged"])
         XCTAssertEqual(model.auditEvents.first?.metadata["pluginID"], "local.new")
@@ -2713,6 +2716,7 @@ final class AppViewModelTests: XCTestCase {
         ))
 
         let model = AppViewModel(config: .empty, cwd: cwd.path)
+        model.refreshPluginEvents()
 
         XCTAssertEqual(model.pluginEvents.map(\.pluginID), ["local.new", "local.old"])
         XCTAssertEqual(model.pluginEvents.first?.action, .installed)
@@ -3430,6 +3434,7 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(persisted.contains { $0.id == event.id })
 
         let restarted = AppViewModel(cwd: cwd.path)
+        restarted.refreshInteractionEvents()
         XCTAssertTrue(restarted.interactionEvents.contains { restored in
             restored.id == event.id
                 && restored.kind == .externalInboxCaptured

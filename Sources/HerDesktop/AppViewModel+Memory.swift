@@ -153,8 +153,17 @@ extension AppViewModel {
         CompanionPromptContext(profile: agentProfile, memorySignal: memorySignal)
     }
 
-    func persistTurnMemory(userInput: String, agentResponse: String, attachments: [MessageAttachment] = []) async {
+    /// `boundSessionID` is captured by the caller at turn time: this runs in
+    /// a detached Task, and reading `sessionID` lazily attributed the turn's
+    /// memory to whatever conversation was active when the network call ran.
+    func persistTurnMemory(
+        userInput: String,
+        agentResponse: String,
+        attachments: [MessageAttachment] = [],
+        boundSessionID: String? = nil
+    ) async {
         guard config.hasMemKey else { return }
+        let sessionID = boundSessionID ?? self.sessionID
         do {
             var metadata: [String: Any] = ["surface": "mac", "source": "her-desktop"]
             if !attachments.isEmpty {

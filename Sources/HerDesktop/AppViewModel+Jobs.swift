@@ -59,6 +59,11 @@ extension AppViewModel {
             source: source,
             maxToolRounds: min(max(maxToolRounds, 1), 12)
         )
+        guard !isShuttingDown else {
+            // Teardown already began (a heartbeat tick can still be in
+            // flight); don't respawn the worker after shutdown.
+            return job
+        }
         agentJobs.insert(job, at: 0)
         audit(
             type: "job.enqueued",

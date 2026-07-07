@@ -43,10 +43,15 @@ final class BrowserExtensionServer: @unchecked Sendable {
         return version
     }
 
-    var isRunning: Bool { listener != nil }
+    var isRunning: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return listener != nil
+    }
 
     func start(port fixedPort: UInt16 = 8799) throws {
-        guard listener == nil else { return }
+        lock.lock()
+        guard listener == nil else { lock.unlock(); return }
+        lock.unlock()
         let params = NWParameters.tcp
         let nwPort = NWEndpoint.Port(rawValue: fixedPort) ?? .any
         params.requiredLocalEndpoint = NWEndpoint.hostPort(host: .ipv4(.loopback), port: nwPort)
@@ -54,18 +59,23 @@ final class BrowserExtensionServer: @unchecked Sendable {
         listener.newConnectionHandler = { [weak self] connection in
             self?.accept(connection)
         }
-        let ready = DispatchSemaphore(value: 0)
-        listener.stateUpdateHandler = { if case .ready = $0 { ready.signal() } }
+        // No semaphore wait: the port is fixed, so nothing needs the kernel
+        // round-trip — blocking the caller (main actor) up to 3s bought
+        // nothing. The listener accepts as soon as it is ready.
         listener.start(queue: queue)
-        _ = ready.wait(timeout: .now() + 3)
+        lock.lock()
         self.listener = listener
-        self.port = listener.port?.rawValue
+        self.port = fixedPort
+        lock.unlock()
     }
 
     func stop() {
-        listener?.cancel()
+        lock.lock()
+        let active = listener
         listener = nil
         port = nil
+        lock.unlock()
+        active?.cancel()
         lock.lock()
         let pendingWaiters = waiters
         waiters = [:]

@@ -50,6 +50,7 @@ final class WebServiceArtifactStoreTests: XCTestCase {
         ).write(to: directory.appendingPathComponent("vm-sample-manifest.json"), atomically: true, encoding: .utf8)
 
         let model = AppViewModel(cwd: root.path)
+        model.refreshWebServiceArtifacts()
 
         XCTAssertEqual(model.webServiceArtifacts.map(\.id), ["vm-sample"])
     }
@@ -72,6 +73,7 @@ final class WebServiceArtifactStoreTests: XCTestCase {
             imageFile: imageFile.path
         ).write(to: manifestFile, atomically: true, encoding: .utf8)
         let model = AppViewModel(cwd: root.path)
+        model.refreshWebServiceArtifacts()
         let message = ChatMessage(
             role: .tool,
             content: """

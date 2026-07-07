@@ -208,6 +208,12 @@ final class AppViewModel: ObservableObject, AuditRecording {
     lazy var heartbeatStore = HeartbeatTaskStore(cwd: runtimeCwd)
     /// The single background-job worker draining the queue (see +Jobs).
     var jobWorkerTask: Task<Void, Never>?
+    /// In-flight TTS for the last reply; cancelled on conversation switch
+    /// and shutdown so a previous conversation doesn't keep speaking.
+    var speechTask: Task<Void, Never>?
+    /// Set by shutdown(); an already-in-flight heartbeat tick must not
+    /// enqueue new jobs (and respawn the worker) after teardown began.
+    var isShuttingDown = false
     /// Injected for tests; heartbeat notify tasks fire through this directly.
     let notificationScheduler: NativeNotificationScheduling
 
@@ -300,7 +306,9 @@ final class AppViewModel: ObservableObject, AuditRecording {
         self.plugins = loadedPlugins
         self.pendingApprovals = []
         self.generatedPluginDrafts = restoredDrafts
-        self.webServiceArtifacts = (try? webServiceArtifactStore.loadAll()) ?? []
+        // Loaded by bootstrapRuntime() (refreshWebServiceArtifacts) right
+        // after first paint — loading here too was duplicated startup work.
+        self.webServiceArtifacts = []
         self.dreamContext = DreamPromptContextLoader.load(cwd: cwd)
         self.workPlan = (try? workPlanStore.load()) ?? nil
         self.mcpDiscoveredTools = []
@@ -324,9 +332,11 @@ final class AppViewModel: ObservableObject, AuditRecording {
         // Sub-observable state (computed passthroughs need fully-initialized self).
         serviceStatus.serviceHealth = initialHealth
         serviceStatus.tools = AppViewModel.tools(from: initialHealth, model: loaded.agentLLMModel)
-        activityFeed.pluginEvents = AppViewModel.recentPluginEvents(from: (try? pluginEventStore.loadAll()) ?? [])
-        activityFeed.auditEvents = AppViewModel.recentAuditEvents(from: (try? auditStore.loadAll()) ?? [])
-        activityFeed.interactionEvents = AppViewModel.recentInteractionEvents(from: (try? inboxEventStore.loadAll()) ?? [])
+        // Event feeds are NOT loaded here: audit.jsonl (and friends) grow
+        // without bound, and decoding them synchronously in init blocked
+        // first paint. bootstrapRuntime() populates all three right after
+        // launch (refreshAuditEvents / refreshPluginEvents /
+        // refreshInteractionEvents).
         conversation.conversations = conversationBootstrap.conversations
         conversation.activeConversationID = conversationBootstrap.activeConversationID
         if conversationBootstrap.activeTranscriptCorrupt {
@@ -354,8 +364,11 @@ final class AppViewModel: ObservableObject, AuditRecording {
     /// survive as orphan processes across quits. Called from the app
     /// delegate's `applicationWillTerminate`.
     func shutdown() {
+        isShuttingDown = true
         stopHeartbeat()
         cancelQueuedJobs()
+        speechTask?.cancel()
+        speechSynthesizer.stop()
         // Land any queued transcript/index/audit writes before exit.
         conversationStore.flushPendingIO()
         auditStore.flushPendingIO()
@@ -384,6 +397,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
         didBootstrapRuntime = true
         refreshAuditEvents()
         refreshPluginEvents()
+        refreshInteractionEvents()
         refreshWebServiceArtifacts()
         refreshDreamContext()
         startWebAppServerIfNeeded()

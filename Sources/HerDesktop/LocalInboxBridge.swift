@@ -179,11 +179,16 @@ enum LocalInboxBridgeRequestParser {
 final class LocalInboxBridgeServer: @unchecked Sendable {
     typealias MessageHandler = @Sendable (LocalInboxMessage) async -> Void
 
+    // `listener` is guarded by `lock`: start/stop run on the main actor
+    // while the network queue may observe state — the @unchecked Sendable
+    // promise has to actually hold.
     private var listener: NWListener?
+    private let lock = NSLock()
     private let queue = DispatchQueue(label: "HerDesktop.LocalInboxBridge")
 
     var isRunning: Bool {
-        listener != nil
+        lock.lock(); defer { lock.unlock() }
+        return listener != nil
     }
 
     func start(port: UInt16, onMessage: @escaping MessageHandler) throws {
@@ -194,12 +199,17 @@ final class LocalInboxBridgeServer: @unchecked Sendable {
             self?.handle(connection: connection, onMessage: onMessage)
         }
         listener.start(queue: queue)
+        lock.lock()
         self.listener = listener
+        lock.unlock()
     }
 
     func stop() {
-        listener?.cancel()
+        lock.lock()
+        let active = listener
         listener = nil
+        lock.unlock()
+        active?.cancel()
     }
 
     private func handle(connection: NWConnection, onMessage: @escaping MessageHandler) {

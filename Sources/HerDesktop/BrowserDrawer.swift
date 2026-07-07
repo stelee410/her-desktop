@@ -170,6 +170,7 @@ struct BrowserDrawer: View {
                 await controller.refreshScreenshot()
             }
         }
+        timer.tolerance = 0.3 // screenshot cadence is slack-tolerant
         pollTimer = timer
     }
 }

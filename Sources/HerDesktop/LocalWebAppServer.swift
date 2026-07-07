@@ -315,21 +315,36 @@ struct LocalWebAppRouter {
 /// 127.0.0.1 on an ephemeral port; every app gets a per-launch random
 /// token that gates its SQLite query API.
 final class LocalWebAppServer: @unchecked Sendable {
+    // All mutable state below is guarded by `lock`: start/stop run on the
+    // main actor while connection handlers read on the server queue.
     private var listener: NWListener?
     private var router: LocalWebAppRouter?
     private let queue = DispatchQueue(label: "HerDesktop.LocalWebAppServer")
     private let lock = NSLock()
     private var tokens: [String: String] = [:]
-    private(set) var port: UInt16?
+    private var boundPort: UInt16?
+
+    var port: UInt16? {
+        lock.lock(); defer { lock.unlock() }
+        return boundPort
+    }
 
     var isRunning: Bool {
-        listener != nil
+        lock.lock(); defer { lock.unlock() }
+        return listener != nil
     }
 
     func start(store: WebAppStore, processManager: WebAppProcessManager? = nil) throws {
         stop()
+        // Bind a pre-discovered free port instead of `.any` — the port is
+        // then known synchronously, which removes the DispatchSemaphore wait
+        // that used to block the calling (main) thread for up to 3s.
+        let chosenPort = WebAppProcessManager.findFreePort()
         let parameters = NWParameters.tcp
-        parameters.requiredLocalEndpoint = NWEndpoint.hostPort(host: .ipv4(.loopback), port: .any)
+        parameters.requiredLocalEndpoint = NWEndpoint.hostPort(
+            host: .ipv4(.loopback),
+            port: NWEndpoint.Port(rawValue: chosenPort) ?? .any
+        )
         let listener = try NWListener(using: parameters)
         let router = LocalWebAppRouter(
             store: store,
@@ -338,26 +353,24 @@ final class LocalWebAppServer: @unchecked Sendable {
             },
             processManager: processManager
         )
-        self.router = router
         listener.newConnectionHandler = { [weak self] connection in
             self?.handle(connection: connection)
         }
-        let ready = DispatchSemaphore(value: 0)
-        listener.stateUpdateHandler = { state in
-            if case .ready = state {
-                ready.signal()
-            }
-        }
         listener.start(queue: queue)
-        _ = ready.wait(timeout: .now() + 3)
+        lock.lock()
+        self.router = router
         self.listener = listener
-        self.port = listener.port?.rawValue
+        self.boundPort = chosenPort
+        lock.unlock()
     }
 
     func stop() {
-        listener?.cancel()
+        lock.lock()
+        let active = listener
         listener = nil
-        port = nil
+        boundPort = nil
+        lock.unlock()
+        active?.cancel()
     }
 
     /// Stable per-launch token for one app; tokens are never persisted.
@@ -411,6 +424,9 @@ final class LocalWebAppServer: @unchecked Sendable {
     }
 
     private func respond(to data: Data, on connection: NWConnection) {
+        lock.lock()
+        let router = self.router
+        lock.unlock()
         guard let request = WebAppHTTPRequest.parse(data), let router else {
             let response = WebAppHTTPResponse.jsonError(400, "Invalid HTTP request.")
             connection.send(content: response.serialized, completion: .contentProcessed { _ in

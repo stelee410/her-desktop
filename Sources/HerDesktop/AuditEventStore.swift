@@ -61,6 +61,30 @@ final class AuditEventStore: @unchecked Sendable {
         ioQueue.sync {}
     }
 
+    /// Reads only the tail of the (unbounded, append-only) log — enough for
+    /// the recent-events feed without decoding years of history at startup.
+    func loadRecent(maxBytes: Int = 131_072) throws -> [AuditEvent] {
+        guard fileManager.fileExists(atPath: auditURL.path) else {
+            return []
+        }
+        let handle = try FileHandle(forReadingFrom: auditURL)
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        let start = size > UInt64(maxBytes) ? size - UInt64(maxBytes) : 0
+        try handle.seek(toOffset: start)
+        let data = (try? handle.readToEnd()) ?? Data()
+        var text = String(data: data, encoding: .utf8) ?? ""
+        if start > 0, let firstNewline = text.firstIndex(of: "\n") {
+            // Drop the first (probably partial) line of a mid-file read.
+            text = String(text[text.index(after: firstNewline)...])
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return text
+            .split(separator: "\n")
+            .compactMap { try? decoder.decode(AuditEvent.self, from: Data(String($0).utf8)) }
+    }
+
     var auditURL: URL {
         HerWorkspacePaths.logsDirectory(cwd: cwd)
             .appendingPathComponent("audit.jsonl")

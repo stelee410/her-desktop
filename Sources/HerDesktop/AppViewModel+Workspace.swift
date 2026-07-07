@@ -62,9 +62,19 @@ extension AppViewModel {
 
     func refreshAuditEvents() {
         do {
-            auditEvents = Self.recentAuditEvents(from: try auditStore.loadAll())
+            // Tail read: audit.jsonl is append-only and unbounded; only the
+            // most recent events are ever displayed.
+            auditEvents = Self.recentAuditEvents(from: try auditStore.loadRecent())
         } catch {
             lastError = "Could not load audit log: \(error.localizedDescription)"
+        }
+    }
+
+    func refreshInteractionEvents() {
+        do {
+            interactionEvents = Self.recentInteractionEvents(from: try inboxEventStore.loadAll())
+        } catch {
+            lastError = "Could not load interaction events: \(error.localizedDescription)"
         }
     }
 

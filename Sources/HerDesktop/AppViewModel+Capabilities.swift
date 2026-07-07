@@ -653,7 +653,8 @@ extension AppViewModel {
             if !content.isEmpty {
                 deliverAssistantReply(content)
                 saveSessionSnapshot()
-                Task { await speakAssistantReplyIfEnabled(content) }
+                speechTask?.cancel()
+                speechTask = Task { await speakAssistantReplyIfEnabled(content) }
             } else {
                 discardEmptyStreamedAssistantMessage()
             }
