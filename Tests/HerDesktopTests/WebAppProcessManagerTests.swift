@@ -137,4 +137,35 @@ final class WebAppProcessManagerTests: XCTestCase {
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         XCTAssertEqual(object["message"] as? String, "from backend")
     }
+
+    func testPageFetchToBackendRouteWithoutBackendPrefixAuthedByReferer() async throws {
+        try XCTSkipUnless(
+            FileManager.default.isExecutableFile(atPath: "/usr/bin/python3"),
+            "python3 is not available on this machine"
+        )
+        let (store, manifest, manager) = try makeBackendApp("apiroute")
+        defer { manager.stopAll() }
+        let server = LocalWebAppServer()
+        try server.start(store: store, processManager: manager)
+        defer { server.stop() }
+        let port = try XCTUnwrap(server.port)
+        let token = server.token(for: manifest.id)
+        let pageURL = "http://127.0.0.1:\(port)/apps/\(manifest.id)/?token=\(token)"
+
+        // A page's own fetch('hello') — no 'backend/' prefix, no token in the
+        // query — must reach the backend, authenticated by the page Referer
+        // (this is exactly the shape the stock app used: fetch('api/quote')).
+        var request = URLRequest(url: try XCTUnwrap(URL(string: "http://127.0.0.1:\(port)/apps/\(manifest.id)/hello")))
+        request.setValue(pageURL, forHTTPHeaderField: "Referer")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200,
+                       "a bare backend-route fetch should proxy to the backend, not 404 File not found")
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(object["message"] as? String, "from backend")
+
+        // No token anywhere (no query, no referer) is still refused.
+        let anon = try XCTUnwrap(URL(string: "http://127.0.0.1:\(port)/apps/\(manifest.id)/hello"))
+        let (_, anonResponse) = try await URLSession.shared.data(from: anon)
+        XCTAssertEqual((anonResponse as? HTTPURLResponse)?.statusCode, 401)
+    }
 }

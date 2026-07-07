@@ -117,34 +117,52 @@ struct LocalWebAppRouter {
         }
         let remainder = segments.dropFirst(2).joined(separator: "/")
 
+        // Built-in SQLite endpoint.
         if remainder == "api/query" {
             return queryAPI(request: request, appID: appID)
         }
-        if remainder == "backend" || remainder.hasPrefix("backend/") {
-            return await proxyBackend(
-                request: request,
-                manifest: manifest,
-                backendPath: String(remainder.dropFirst("backend".count).drop(while: { $0 == "/" }))
-            )
+        let isBackendPrefixed = remainder == "backend" || remainder.hasPrefix("backend/")
+        // A real static file wins (index.html, css, js…).
+        if request.method == "GET", !isBackendPrefixed,
+           let fileURL = store.staticFileURL(appID: appID, requestPath: remainder),
+           let data = try? Data(contentsOf: fileURL) {
+            let contentType = Self.contentType(for: fileURL.pathExtension)
+            // Inject a fetch shim into served HTML so the app's own relative
+            // requests (api/query, api/quote, backend/…) carry the token
+            // automatically — the model never has to thread it.
+            let body = contentType.hasPrefix("text/html")
+                ? Self.htmlWithTokenShim(data, token: tokenForApp(appID) ?? "")
+                : data
+            return WebAppHTTPResponse(status: 200, contentType: contentType, body: body)
+        }
+        // Otherwise, if the app has a backend, proxy to it. This is how a
+        // page's fetch reaches the backend — whether it uses the explicit
+        // `backend/…` prefix or just calls its own route like `api/quote`.
+        if manifest.runtime != nil {
+            let backendPath = isBackendPrefixed
+                ? String(remainder.dropFirst("backend".count).drop(while: { $0 == "/" }))
+                : remainder
+            return await proxyBackend(request: request, manifest: manifest, backendPath: backendPath)
         }
         guard request.method == "GET" else {
             return .jsonError(405, "Only GET is supported for static files.")
         }
-        guard let fileURL = store.staticFileURL(appID: appID, requestPath: remainder),
-              let data = try? Data(contentsOf: fileURL) else {
-            return .jsonError(404, "File not found.")
-        }
-        return WebAppHTTPResponse(
-            status: 200,
-            contentType: Self.contentType(for: fileURL.pathExtension),
-            body: data
-        )
+        return .jsonError(404, "File not found.")
     }
 
     private func validToken(_ request: WebAppHTTPRequest, appID: String) -> Bool {
-        let provided = request.headers["x-webapp-token"] ?? request.query["token"] ?? ""
         guard let expected = tokenForApp(appID), !expected.isEmpty else { return false }
-        return provided == expected
+        // Accept the token from the query, a header, or the referring page's
+        // URL — so an app page's own fetch('api/…') authenticates without the
+        // model having to thread the token through every request.
+        if request.query["token"] == expected { return true }
+        if request.headers["x-webapp-token"] == expected { return true }
+        if let referer = request.headers["referer"],
+           let comps = URLComponents(string: referer),
+           comps.queryItems?.first(where: { $0.name == "token" })?.value == expected {
+            return true
+        }
+        return false
     }
 
     private func proxyBackend(
@@ -239,6 +257,20 @@ struct LocalWebAppRouter {
         } catch {
             return .jsonError(400, error.localizedDescription)
         }
+    }
+
+    /// Prepend a small script that appends `token=` to the app's own relative
+    /// fetches, so backend/SQLite calls authenticate without the page code
+    /// having to include the token.
+    static func htmlWithTokenShim(_ data: Data, token: String) -> Data {
+        guard let html = String(data: data, encoding: .utf8), !token.isEmpty else { return data }
+        let shim = """
+        <script>(function(){var t=\"\(token)\";var f=window.fetch;window.fetch=function(u,o){try{if(typeof u===\"string\"&&!/^[a-z]+:\\/\\//i.test(u)){u+=(u.indexOf(\"?\")>=0?\"&\":\"?\")+\"token=\"+encodeURIComponent(t);}}catch(e){}return f.call(this,u,o);};})();</script>
+        """
+        if let range = html.range(of: "<head>", options: .caseInsensitive) {
+            return Data(html.replacingCharacters(in: range, with: "<head>" + shim).utf8)
+        }
+        return Data((shim + html).utf8)
     }
 
     static func contentType(for pathExtension: String) -> String {

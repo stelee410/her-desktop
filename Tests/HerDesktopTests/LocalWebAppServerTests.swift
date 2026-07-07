@@ -96,6 +96,15 @@ final class LocalWebAppServerTests: XCTestCase {
         XCTAssertEqual(bad["ok"] as? Bool, false)
     }
 
+    func testHtmlTokenShimAppendsTokenToRelativeFetches() {
+        let html = Data("<html><head></head><body></body></html>".utf8)
+        let injected = String(data: LocalWebAppRouter.htmlWithTokenShim(html, token: "TKN123"), encoding: .utf8)!
+        XCTAssertTrue(injected.contains("window.fetch"), "shim should wrap fetch")
+        XCTAssertTrue(injected.contains("TKN123"), "shim should embed the token")
+        // Empty token or missing <head>: unchanged / prepended safely.
+        XCTAssertEqual(LocalWebAppRouter.htmlWithTokenShim(html, token: ""), html)
+    }
+
     func testURLForAppIncludesToken() throws {
         let url = try XCTUnwrap(server.url(for: appID))
         XCTAssertTrue(url.absoluteString.contains("/apps/\(appID)/"))
