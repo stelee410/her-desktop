@@ -19,6 +19,16 @@ struct ConversationView: View {
                         VoicePresenceView()
                             .padding(.top, 34)
 
+                        if model.isLoadingConversation {
+                            HStack(spacing: 8) {
+                                ProgressView().controlSize(.small)
+                                Text("正在打开对话…")
+                                    .font(.caption)
+                                    .foregroundStyle(AppTheme.muted)
+                            }
+                            .padding(.top, 20)
+                        }
+
                         ForEach(model.messages) { message in
                             MessageBubble(
                                 message: message,

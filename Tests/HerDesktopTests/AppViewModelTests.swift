@@ -828,6 +828,29 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.auditEvents.contains { $0.type == "session.switch_conversation" })
     }
 
+    func testSwitchingDoesNotOverwriteTargetWhileLoading() throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-noclobber-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(cwd: root.path)
+        let first = model.activeConversationID
+        model.messages.append(ChatMessage(role: .user, content: "real content A"))
+        model.saveSessionSnapshot()
+
+        model.newLocalConversation() // active becomes a new conversation
+
+        // Switch back to A: this enters the loading window (messages is empty).
+        model.switchConversation(to: first)
+        XCTAssertTrue(model.isLoadingConversation)
+        XCTAssertTrue(model.messages.isEmpty, "transient state, not a placeholder message")
+
+        // A save firing during the load window must be a no-op, so A's real
+        // content on disk is not clobbered with the empty transient state.
+        model.saveSessionSnapshot()
+        let onDisk = try ConversationStore(cwd: root.path).loadMessages(id: first)
+        XCTAssertTrue(onDisk.contains { $0.content == "real content A" },
+                      "the target transcript must survive a save during its load")
+    }
+
     func testConversationOrderIsStableWhenUsed() {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-order-\(UUID().uuidString)", isDirectory: true)

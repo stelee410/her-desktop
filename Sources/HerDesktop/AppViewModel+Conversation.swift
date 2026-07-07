@@ -51,8 +51,11 @@ extension AppViewModel {
         activeConversationID = id
         resetConversationScopedState()
         // Decode the target transcript off the main thread so switching is
-        // instant even for long conversations; show a brief placeholder.
-        messages = [ChatMessage(role: .assistant, content: "正在打开对话…")]
+        // instant even for long conversations. Do NOT put a placeholder into
+        // `messages` — a save during the load window would persist it over the
+        // real content. A loading flag drives the UI and suppresses saves.
+        isLoadingConversation = true
+        messages = []
         Task {
             let loaded = await conversationStore.loadMessagesAsync(id: id)
             // The user may have switched again before this finished.
@@ -60,6 +63,7 @@ extension AppViewModel {
             messages = loaded.isEmpty
                 ? [ChatMessage(role: .assistant, content: "新会话已经准备好。我们从哪里开始？")]
                 : loaded
+            isLoadingConversation = false
         }
         audit(
             type: "session.switch_conversation",
@@ -551,6 +555,9 @@ extension AppViewModel {
     }
 
     func saveSessionSnapshot() {
+        // Never persist while a transcript is still loading — `messages` is a
+        // transient empty state that would overwrite the target's real content.
+        guard !isLoadingConversation else { return }
         // A conversation being deleted is no longer in the index; skip the
         // write so its transcript file is not recreated.
         guard let index = conversations.firstIndex(where: { $0.id == activeConversationID }) else { return }

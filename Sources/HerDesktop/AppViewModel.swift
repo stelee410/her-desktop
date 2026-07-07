@@ -35,6 +35,10 @@ final class AppViewModel: ObservableObject {
     @Published var pendingVibePluginComposerPreset: VibePluginComposerPreset?
     @Published var conversations: [ConversationSummary]
     @Published var activeConversationID: String
+    /// True while a switched-to transcript is still decoding off the main
+    /// thread. Saves are suppressed during this window so the transient empty
+    /// state is never persisted over the target's real content.
+    @Published var isLoadingConversation: Bool = false
     @Published var isInspectorPresented: Bool
     @Published var webApps: [WebAppManifest]
     @Published var selectedWebAppID: String?
