@@ -7,7 +7,7 @@ import Foundation
 /// is approval-gated and surfaces the browser drawer so the user watches.
 extension AppViewModel {
     func openBrowserCapability() async -> CapabilityResult {
-        isBrowserPresented = true
+        chrome.isBrowserPresented = true
         do {
             try await browserBridge.start()
         } catch {
@@ -165,7 +165,7 @@ extension AppViewModel {
     }
 
     private func withStartedBrowser(_ body: () async throws -> CapabilityResult) async -> CapabilityResult {
-        isBrowserPresented = true
+        chrome.isBrowserPresented = true
         do {
             try await browserBridge.start()
             return try await body()

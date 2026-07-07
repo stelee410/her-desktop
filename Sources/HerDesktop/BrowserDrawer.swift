@@ -7,6 +7,7 @@ import SwiftUI
 /// connection + setup, since the live picture is that real Chrome window.
 struct BrowserDrawer: View {
     @EnvironmentObject private var model: AppViewModel
+    @EnvironmentObject private var chrome: UIChrome
     @ObservedObject private var controller: BrowserController
     @State private var pollTimer: Timer?
 
@@ -51,7 +52,7 @@ struct BrowserDrawer: View {
             .tint(AppTheme.coral)
             .help("开启后，Her 在本会话可自行导航/点击/输入，无需逐步批准（仍全程可见、可随时关闭）")
             Button {
-                model.isBrowserPresented = false
+                chrome.isBrowserPresented = false
             } label: {
                 Image(systemName: "chevron.down").font(.caption).foregroundStyle(AppTheme.muted)
             }

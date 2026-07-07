@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var model: AppViewModel
+    @EnvironmentObject private var chrome: UIChrome
 
     var body: some View {
         HStack(spacing: 0) {
@@ -11,30 +12,38 @@ struct RootView: View {
             VStack(spacing: 0) {
                 CenterWorkspaceView()
                     .frame(maxHeight: .infinity)
-                if model.isBrowserPresented {
+                if chrome.isBrowserPresented {
                     Divider().opacity(0.45)
                     BrowserDrawer(controller: model.browserControllerInstance)
                         .frame(height: 360)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                if model.isTerminalPresented {
+                if chrome.isTerminalPresented {
                     Divider().opacity(0.45)
                     TerminalDrawer()
                         .frame(height: 280)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .frame(minWidth: 560)
-            .animation(.snappy(duration: 0.22), value: model.isTerminalPresented)
-            .animation(.snappy(duration: 0.22), value: model.isBrowserPresented)
-            if model.isInspectorPresented {
+            if chrome.isInspectorPresented {
                 Divider().opacity(0.45)
-                InspectorView()
-                    .frame(width: 330)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
             }
+            // The inspector is built ONCE and kept alive. Toggling only collapses
+            // its footprint (outer frame 330→0 + clipped), so its cards — and the
+            // expensive WKWebViews inside — are never destroyed/rebuilt. The inner
+            // fixed 330 width keeps the content from re-laying-out on toggle; only
+            // the space it occupies changes. Rebuilding on every open was the lag.
+            InspectorView()
+                .frame(width: 330)
+                // Collapse the footprint to 0 when hidden, anchoring the 330-wide
+                // content to the leading edge so the clipped overflow spills off the
+                // window's right edge — never over the center toolbar.
+                .frame(width: chrome.isInspectorPresented ? 330 : 0, alignment: .leading)
+                .clipped()
+                // .clipped() hides drawing but NOT hit-testing: without this the
+                // invisible collapsed inspector would still eat clicks on the
+                // toolbar buttons it overlaps.
+                .allowsHitTesting(chrome.isInspectorPresented)
         }
-        .animation(.snappy(duration: 0.22), value: model.isInspectorPresented)
         .background(AppTheme.windowBackground)
         .modifier(VibePluginComposerHost())
         .task {

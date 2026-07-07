@@ -41,6 +41,6 @@ final class InboxEventStore {
         decoder.dateDecodingStrategy = .iso8601
         return try text
             .split(separator: "\n")
-            .map { try decoder.decode(InteractionEvent.self, from: Data(String($0).utf8)) }
+            .compactMap { try? decoder.decode(InteractionEvent.self, from: Data(String($0).utf8)) } // skip corrupt lines
     }
 }

@@ -27,7 +27,16 @@ final class WorkPlanStore {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let file = try decoder.decode(WorkPlanFileV1.self, from: data)
-        guard file.version == 1 else { return nil }
+        guard file.version == 1 else {
+            // Unknown (future) format: preserve a copy before a later save()
+            // can overwrite it, instead of silently discarding the user's plan.
+            let backup = planURL.deletingPathExtension()
+                .appendingPathExtension("v\(file.version).bak.json")
+            if !fileManager.fileExists(atPath: backup.path) {
+                try? fileManager.copyItem(at: planURL, to: backup)
+            }
+            return nil
+        }
         return file.plan
     }
 

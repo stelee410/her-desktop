@@ -24,12 +24,16 @@ struct CenterWorkspaceView: View {
 }
 
 private struct MemoryWorkspaceView: View {
+    @EnvironmentObject private var activityFeed: ActivityFeedModel
     @EnvironmentObject private var model: AppViewModel
     private var writebacks: [MemoryWritebackStatus] {
-        MemoryWritebackStatusBuilder().build(from: model.auditEvents)
+        MemoryWritebackStatusBuilder().build(from: activityFeed.auditEvents)
     }
 
     var body: some View {
+        // Bind once: the panel below read `writebacks` four times per body
+        // pass, rebuilding the status list from auditEvents each time.
+        let writebacks = self.writebacks
         WorkspacePage(title: "Memory", subtitle: model.agentProfile.relationship) {
             HStack(spacing: 12) {
                 WorkspaceMetric(title: "Trust", value: "\(Int(model.memorySignal.trust * 100))%", icon: "heart")
@@ -132,12 +136,12 @@ private struct MemoryWorkspaceView: View {
                 }
             }
 
-            WorkspacePanel(title: "Recent Interaction Signals", trailing: "\(model.interactionEvents.count)") {
-                if model.interactionEvents.isEmpty {
+            WorkspacePanel(title: "Recent Interaction Signals", trailing: "\(activityFeed.interactionEvents.count)") {
+                if activityFeed.interactionEvents.isEmpty {
                     EmptyWorkspaceLine(icon: "dot.radiowaves.left.and.right", text: "Conversation, file, voice, and inbox signals will appear here.")
                 } else {
                     VStack(spacing: 8) {
-                        ForEach(model.interactionEvents.prefix(6)) { event in
+                        ForEach(activityFeed.interactionEvents.prefix(6)) { event in
                             WorkspaceEventRow(
                                 icon: icon(for: event),
                                 title: event.kind.rawValue,
@@ -238,22 +242,24 @@ private struct ReflectionCountLine: View {
 }
 
 private struct ProjectsWorkspaceView: View {
+    @EnvironmentObject private var serviceStatus: ServiceStatusModel
+    @EnvironmentObject private var activityFeed: ActivityFeedModel
     @EnvironmentObject private var model: AppViewModel
 
     var body: some View {
         WorkspacePage(title: "Projects", subtitle: "Workspace, artifacts, and active work") {
             HStack(spacing: 12) {
-                WorkspaceMetric(title: "Tasks", value: "\(model.runningTasks.count)", icon: "checklist")
+                WorkspaceMetric(title: "Tasks", value: "\(serviceStatus.runningTasks.count)", icon: "checklist")
                 WorkspaceMetric(title: "Artifacts", value: "\(model.webServiceArtifacts.count)", icon: "photo.on.rectangle")
-                WorkspaceMetric(title: "Audit", value: "\(model.auditEvents.count)", icon: "list.bullet.rectangle")
+                WorkspaceMetric(title: "Audit", value: "\(activityFeed.auditEvents.count)", icon: "list.bullet.rectangle")
             }
 
-            WorkspacePanel(title: "Active Work", trailing: model.runningTasks.isEmpty ? "Idle" : "\(model.runningTasks.count)") {
-                if model.runningTasks.isEmpty {
+            WorkspacePanel(title: "Active Work", trailing: serviceStatus.runningTasks.isEmpty ? "Idle" : "\(serviceStatus.runningTasks.count)") {
+                if serviceStatus.runningTasks.isEmpty {
                     EmptyWorkspaceLine(icon: "moon", text: "No active runtime tasks.")
                 } else {
                     VStack(spacing: 10) {
-                        ForEach(model.runningTasks) { task in
+                        ForEach(serviceStatus.runningTasks) { task in
                             VStack(alignment: .leading, spacing: 7) {
                                 HStack {
                                     Text(task.title)
@@ -828,9 +834,17 @@ private struct ToolsWorkspaceView: View {
 }
 
 private struct AgentsWorkspaceView: View {
+    @EnvironmentObject private var session: ConversationModel
+    @EnvironmentObject private var serviceStatus: ServiceStatusModel
+    @EnvironmentObject private var activityFeed: ActivityFeedModel
     @EnvironmentObject private var model: AppViewModel
 
     var body: some View {
+        // Bind once per body pass: `activePhase` re-ran the whole loop-steps
+        // builder a second time, and `toolEvidence` was built twice below.
+        let steps = loopSteps
+        let activePhase = steps.first(where: \.isActive)?.phase.rawValue ?? "Ready"
+        let toolEvidence = self.toolEvidence
         WorkspacePage(title: "Agents", subtitle: "Main loop, model routing, and subconscious context") {
             HStack(spacing: 12) {
                 WorkspaceMetric(title: "State", value: model.connectionState.rawValue.capitalized, icon: "dot.radiowaves.left.and.right")
@@ -840,7 +854,7 @@ private struct AgentsWorkspaceView: View {
 
             WorkspacePanel(title: "Loop State", trailing: activePhase) {
                 VStack(spacing: 9) {
-                    ForEach(loopSteps) { step in
+                    ForEach(steps) { step in
                         HStack(alignment: .top, spacing: 10) {
                             Image(systemName: icon(for: step.phase))
                                 .foregroundStyle(step.isActive ? AppTheme.coral : AppTheme.muted)
@@ -885,9 +899,9 @@ private struct AgentsWorkspaceView: View {
                 }
             }
 
-            WorkspacePanel(title: "Service Routing", trailing: PresenceCopy.serviceStatus(model.serviceHealth).title) {
+            WorkspacePanel(title: "Service Routing", trailing: PresenceCopy.serviceStatus(serviceStatus.serviceHealth).title) {
                 VStack(spacing: 8) {
-                    ForEach(model.serviceHealth) { item in
+                    ForEach(serviceStatus.serviceHealth) { item in
                         HStack(spacing: 9) {
                             Image(systemName: icon(for: item.state))
                                 .foregroundStyle(color(for: item.state))
@@ -917,8 +931,8 @@ private struct AgentsWorkspaceView: View {
 
     private var loopSteps: [AgentLoopStep] {
         AgentLoopSummaryBuilder().build(
-            events: model.interactionEvents,
-            activities: model.capabilityActivities,
+            events: activityFeed.interactionEvents,
+            activities: activityFeed.capabilityActivities,
             pendingApprovals: model.pendingApprovals,
             generatedDrafts: model.generatedPluginDrafts,
             workPlan: model.workPlan,
@@ -926,12 +940,8 @@ private struct AgentsWorkspaceView: View {
         )
     }
 
-    private var activePhase: String {
-        loopSteps.first(where: \.isActive)?.phase.rawValue ?? "Ready"
-    }
-
     private var toolEvidence: [ToolEvidenceSummary] {
-        ToolEvidenceSummaryBuilder().build(from: model.messages)
+        ToolEvidenceSummaryBuilder().build(from: session.messages)
     }
 
     private func icon(for phase: AgentLoopPhase) -> String {

@@ -3,13 +3,17 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ConversationView: View {
+    @EnvironmentObject private var session: ConversationModel
     @EnvironmentObject private var model: AppViewModel
 
     var body: some View {
+        // Build the readiness summary once per body pass — it aggregates 8
+        // published inputs and was being computed here AND inside the strip.
+        let readiness = model.productReadinessSummary
         VStack(spacing: 0) {
             ToolbarView()
-            if !model.productReadinessSummary.isReadyForCoreWork {
-                LaunchReadinessStrip()
+            if !readiness.isReadyForCoreWork {
+                LaunchReadinessStrip(summary: readiness)
                     .padding(.horizontal, 54)
                     .padding(.top, 12)
             }
@@ -21,7 +25,7 @@ struct ConversationView: View {
                         VoicePresenceView()
                             .padding(.top, 34)
 
-                        if model.isLoadingConversation {
+                        if session.isLoadingConversation {
                             HStack(spacing: 8) {
                                 ProgressView().controlSize(.small)
                                 Text("正在打开对话…")
@@ -31,7 +35,7 @@ struct ConversationView: View {
                             .padding(.top, 20)
                         }
 
-                        ForEach(model.messages) { message in
+                        ForEach(session.messages) { message in
                             MessageBubble(
                                 message: message,
                                 artifacts: model.webServiceArtifacts(for: message)
@@ -54,13 +58,13 @@ struct ConversationView: View {
                     .padding(.horizontal, 72)
                     .padding(.bottom, 26)
                 }
-                .onChange(of: model.messages.count) { _, _ in
-                    if let last = model.messages.last?.id {
+                .onChange(of: session.messages.count) { _, _ in
+                    if let last = session.messages.last?.id {
                         withAnimation { proxy.scrollTo(last, anchor: .bottom) }
                     }
                 }
-                .onChange(of: model.messages.last.map { $0.content.count + $0.reasoning.count }) { _, _ in
-                    if let last = model.messages.last?.id {
+                .onChange(of: session.messages.last.map { $0.content.count + $0.reasoning.count }) { _, _ in
+                    if let last = session.messages.last?.id {
                         proxy.scrollTo(last, anchor: .bottom)
                     }
                 }
@@ -79,10 +83,8 @@ struct ConversationView: View {
 
 private struct LaunchReadinessStrip: View {
     @EnvironmentObject private var model: AppViewModel
-
-    private var summary: ProductReadinessSummary {
-        model.productReadinessSummary
-    }
+    /// Computed once by the parent; recomputing here doubled the work.
+    let summary: ProductReadinessSummary
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
@@ -129,18 +131,21 @@ private struct LaunchReadinessStrip: View {
 }
 
 private struct ToolbarView: View {
+    @EnvironmentObject private var session: ConversationModel
+    @EnvironmentObject private var serviceStatus: ServiceStatusModel
     @EnvironmentObject private var model: AppViewModel
+    @EnvironmentObject private var chrome: UIChrome
     @State private var isStatusPopoverPresented = false
 
     var body: some View {
-        let status = PresenceCopy.serviceStatus(model.serviceHealth)
+        let status = PresenceCopy.serviceStatus(serviceStatus.serviceHealth)
         HStack(spacing: 14) {
             HStack(spacing: 8) {
                 Picker("Conversation", selection: Binding(
-                    get: { model.activeConversationID },
+                    get: { session.activeConversationID },
                     set: { model.switchConversation(to: $0) }
                 )) {
-                    ForEach(model.sortedConversations) { conversation in
+                    ForEach(session.sortedConversations) { conversation in
                         Text(conversation.pinned ? "📌 \(conversation.title)" : conversation.title)
                             .tag(conversation.id)
                     }
@@ -181,32 +186,33 @@ private struct ToolbarView: View {
             .popover(isPresented: $isStatusPopoverPresented, arrowEdge: .bottom) {
                 ServiceStatusPopover()
                     .environmentObject(model)
+                    .environmentObject(serviceStatus)
             }
 
             Button {
-                model.isBrowserPresented.toggle()
-                if model.isBrowserPresented { model.onBrowserDrawerOpened() }
+                chrome.isBrowserPresented.toggle()
+                if chrome.isBrowserPresented { model.onBrowserDrawerOpened() }
             } label: {
                 Image(systemName: "globe")
-                    .foregroundStyle(model.isBrowserPresented ? AppTheme.coral : AppTheme.muted)
+                    .foregroundStyle(chrome.isBrowserPresented ? AppTheme.coral : AppTheme.muted)
             }
             .buttonStyle(.plain)
-            .help(model.isBrowserPresented ? "收起浏览器" : "打开浏览器")
+            .help(chrome.isBrowserPresented ? "收起浏览器" : "打开浏览器")
 
             Button {
-                model.isTerminalPresented.toggle()
+                chrome.isTerminalPresented.toggle()
             } label: {
                 Image(systemName: "rectangle.bottomthird.inset.filled")
-                    .foregroundStyle(model.isTerminalPresented ? AppTheme.coral : AppTheme.muted)
+                    .foregroundStyle(chrome.isTerminalPresented ? AppTheme.coral : AppTheme.muted)
             }
             .buttonStyle(.plain)
-            .help(model.isTerminalPresented ? "收起终端" : "打开终端")
+            .help(chrome.isTerminalPresented ? "收起终端" : "打开终端")
 
             Button {
-                model.isInspectorPresented.toggle()
+                chrome.isInspectorPresented.toggle()
             } label: {
                 Image(systemName: "sidebar.trailing")
-                    .foregroundStyle(model.isInspectorPresented ? AppTheme.coral : AppTheme.muted)
+                    .foregroundStyle(chrome.isInspectorPresented ? AppTheme.coral : AppTheme.muted)
                     .overlay(alignment: .topTrailing) {
                         if model.pendingActionCount > 0 {
                             Text("\(model.pendingActionCount)")
@@ -239,11 +245,12 @@ private struct ToolbarView: View {
 }
 
 private struct ServiceStatusPopover: View {
+    @EnvironmentObject private var serviceStatus: ServiceStatusModel
     @EnvironmentObject private var model: AppViewModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(model.serviceHealth) { service in
+            ForEach(serviceStatus.serviceHealth) { service in
                 HStack(spacing: 8) {
                     Circle()
                         .fill(color(for: service.state))
@@ -301,7 +308,6 @@ private struct VoicePresenceView: View {
                         RadialGradient(colors: [AppTheme.coral.opacity(0.72), AppTheme.coral.opacity(0.06)], center: .center, startRadius: 10, endRadius: 86)
                     )
                     .frame(width: 154, height: 154)
-                    .blur(radius: 0.4)
                 WaveLine()
                     .stroke(Color.white.opacity(0.82), lineWidth: 1.4)
                     .frame(width: 118, height: 36)
@@ -335,6 +341,7 @@ private struct WaveLine: Shape {
 }
 
 private struct MessageBubble: View {
+    @EnvironmentObject private var session: ConversationModel
     @EnvironmentObject private var model: AppViewModel
     var message: ChatMessage
     var artifacts: [WebServiceArtifact] = []
@@ -350,7 +357,13 @@ private struct MessageBubble: View {
                     )
                 }
                 if message.role == .assistant {
-                    MarkdownMessageView(content: message.content)
+                    // While this message is still streaming its content grows
+                    // every flush — caching those transient parses would miss
+                    // every time and grow the cache key set unboundedly.
+                    MarkdownMessageView(
+                        content: message.content,
+                        cachesParses: session.streamingAssistantMessageID != message.id
+                    )
                 } else {
                     Text(message.content)
                         .font(.system(size: 14))
@@ -652,16 +665,17 @@ private struct MessageArtifactChip: View {
 }
 
 private struct ComposerView: View {
+    @EnvironmentObject private var session: ConversationModel
     @EnvironmentObject private var model: AppViewModel
     @State private var isFileImporterPresented = false
     @State private var isDropTargeted = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if !model.pendingAttachments.isEmpty {
+            if !session.pendingAttachments.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        ForEach(model.pendingAttachments) { attachment in
+                        ForEach(session.pendingAttachments) { attachment in
                             PendingAttachmentChip(attachment: attachment) {
                                 model.removePendingAttachment(attachment)
                             }
@@ -682,7 +696,7 @@ private struct ComposerView: View {
                 .foregroundStyle(AppTheme.muted)
                 .help("Attach files")
 
-                TextField("Ask anything or give a command...", text: $model.draft, axis: .vertical)
+                TextField("Ask anything or give a command...", text: $session.draft, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1...6)
                     .font(.system(size: 15))
@@ -710,8 +724,8 @@ private struct ComposerView: View {
                 .foregroundStyle(AppTheme.coral)
                 .help(model.connectionState == .listening ? "Stop dictation" : "Start dictation")
 
-                let hasInput = !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    || !model.pendingAttachments.isEmpty
+                let hasInput = !session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || !session.pendingAttachments.isEmpty
                 // While generating, keep a stop button; the send button stays
                 // live so typed text steers the running turn (guided mode).
                 if model.isGenerating {

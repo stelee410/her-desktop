@@ -79,6 +79,42 @@ final class ConversationStoreTests: XCTestCase {
         XCTAssertEqual(try store.loadMessages(id: "conv-x"), [])
     }
 
+    func testCorruptTranscriptIsBackedUpAndDistinctFromEmpty() throws {
+        let store = ConversationStore(cwd: makeRoot("corrupt").path)
+        let url = store.conversationURL(id: "conv-bad")
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("NOT JSON {".utf8).write(to: url)
+
+        let load = store.loadTranscript(id: "conv-bad")
+
+        guard case .corrupt(let backupURL) = load else {
+            return XCTFail("a corrupt file must not be reported as empty/missing, got \(load)")
+        }
+        let backup = try XCTUnwrap(backupURL)
+        XCTAssertEqual(String(data: try Data(contentsOf: backup), encoding: .utf8), "NOT JSON {")
+        // The original stays in place too — nothing was destroyed.
+        XCTAssertEqual(String(data: try Data(contentsOf: url), encoding: .utf8), "NOT JSON {")
+        // Missing is still plain missing.
+        XCTAssertEqual(store.loadTranscript(id: "conv-none"), .missing)
+    }
+
+    func testBootstrapReportsCorruptActiveTranscriptInsteadOfEmpty() throws {
+        let root = makeRoot("corrupt-bootstrap")
+        let store = ConversationStore(cwd: root.path)
+        let now = Date()
+        try store.saveIndex(
+            conversations: [ConversationSummary(id: "a", title: "A", pinned: false, createdAt: now, updatedAt: now)],
+            activeConversationID: "a"
+        )
+        try Data("garbage".utf8).write(to: store.conversationURL(id: "a"))
+
+        let bootstrap = store.bootstrap()
+
+        XCTAssertTrue(bootstrap.activeTranscriptCorrupt)
+        XCTAssertNotNil(bootstrap.corruptTranscriptBackup)
+        XCTAssertTrue(bootstrap.messages.isEmpty)
+    }
+
     func testAutoTitleUsesFirstUserMessageAndTruncates() {
         XCTAssertNil(ConversationStore.autoTitle(from: [ChatMessage(role: .assistant, content: "hi")]))
         XCTAssertEqual(

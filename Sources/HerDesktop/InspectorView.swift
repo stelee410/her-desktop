@@ -362,12 +362,13 @@ private struct ProductReadinessCard: View {
 }
 
 private struct AgentLoopCard: View {
+    @EnvironmentObject private var activityFeed: ActivityFeedModel
     @EnvironmentObject private var model: AppViewModel
 
     private var steps: [AgentLoopStep] {
         AgentLoopSummaryBuilder().build(
-            events: model.interactionEvents,
-            activities: model.capabilityActivities,
+            events: activityFeed.interactionEvents,
+            activities: activityFeed.capabilityActivities,
             pendingApprovals: model.pendingApprovals,
             generatedDrafts: model.generatedPluginDrafts,
             workPlan: model.workPlan,
@@ -376,7 +377,10 @@ private struct AgentLoopCard: View {
     }
 
     var body: some View {
-        Panel(title: "Agent Loop", trailing: activePhase) {
+        // Bind once: `activePhase` re-ran the whole steps builder a 2nd time.
+        let steps = self.steps
+        let activePhase = steps.first(where: \.isActive)?.phase.rawValue ?? "Ready"
+        return Panel(title: "Agent Loop", trailing: activePhase) {
             VStack(spacing: 8) {
                 ForEach(steps) { step in
                     HStack(alignment: .top, spacing: 9) {
@@ -412,10 +416,6 @@ private struct AgentLoopCard: View {
                 }
             }
         }
-    }
-
-    private var activePhase: String {
-        steps.first(where: \.isActive)?.phase.rawValue ?? "Ready"
     }
 
     private func icon(for phase: AgentLoopPhase) -> String {
@@ -526,12 +526,13 @@ struct CredentialStatePill: View {
 }
 
 private struct ServiceHealthCard: View {
+    @EnvironmentObject private var serviceStatus: ServiceStatusModel
     @EnvironmentObject private var model: AppViewModel
 
     var body: some View {
         Panel(title: "Service Health", trailing: healthSummary) {
             VStack(alignment: .leading, spacing: 10) {
-                ForEach(model.serviceHealth) { item in
+                ForEach(serviceStatus.serviceHealth) { item in
                     HStack(spacing: 9) {
                         Image(systemName: icon(for: item.state))
                             .foregroundStyle(color(for: item.state))
@@ -570,10 +571,10 @@ private struct ServiceHealthCard: View {
     }
 
     private var healthSummary: String {
-        let checking = model.serviceHealth.contains { $0.state == .checking }
+        let checking = serviceStatus.serviceHealth.contains { $0.state == .checking }
         if checking { return "Checking" }
-        let online = model.serviceHealth.filter { $0.state == .online }.count
-        return "\(online)/\(model.serviceHealth.count)"
+        let online = serviceStatus.serviceHealth.filter { $0.state == .online }.count
+        return "\(online)/\(serviceStatus.serviceHealth.count)"
     }
 
     private func detail(for item: ServiceHealth) -> String {
@@ -952,11 +953,12 @@ private struct PluginDraftReviewSheet: View {
 }
 
 private struct PluginLifecycleCard: View {
+    @EnvironmentObject private var activityFeed: ActivityFeedModel
     @EnvironmentObject private var model: AppViewModel
 
     var body: some View {
-        Panel(title: "Plugin Timeline", trailing: model.pluginEvents.isEmpty ? "Quiet" : "\(model.pluginEvents.count)") {
-            if model.pluginEvents.isEmpty {
+        Panel(title: "Plugin Timeline", trailing: activityFeed.pluginEvents.isEmpty ? "Quiet" : "\(activityFeed.pluginEvents.count)") {
+            if activityFeed.pluginEvents.isEmpty {
                 HStack(spacing: 8) {
                     Image(systemName: "clock.arrow.circlepath")
                         .foregroundStyle(AppTheme.muted)
@@ -968,7 +970,7 @@ private struct PluginLifecycleCard: View {
                 .padding(.vertical, 4)
             } else {
                 VStack(spacing: 8) {
-                    ForEach(model.pluginEvents) { event in
+                    ForEach(activityFeed.pluginEvents) { event in
                         HStack(alignment: .top, spacing: 9) {
                             Image(systemName: icon(for: event.action))
                                 .foregroundStyle(color(for: event.action))
@@ -1206,11 +1208,12 @@ private struct ApprovalQueueCard: View {
 }
 
 private struct CapabilityActivityCard: View {
+    @EnvironmentObject private var activityFeed: ActivityFeedModel
     @EnvironmentObject private var model: AppViewModel
 
     var body: some View {
-        Panel(title: "Capability Activity", trailing: model.capabilityActivities.isEmpty ? "Idle" : "\(model.capabilityActivities.count)") {
-            if model.capabilityActivities.isEmpty {
+        Panel(title: "Capability Activity", trailing: activityFeed.capabilityActivities.isEmpty ? "Idle" : "\(activityFeed.capabilityActivities.count)") {
+            if activityFeed.capabilityActivities.isEmpty {
                 HStack(spacing: 8) {
                     Image(systemName: "bolt.horizontal.circle")
                         .foregroundStyle(AppTheme.muted)
@@ -1222,7 +1225,7 @@ private struct CapabilityActivityCard: View {
                 .padding(.vertical, 4)
             } else {
                 VStack(spacing: 10) {
-                    ForEach(model.capabilityActivities.prefix(5)) { activity in
+                    ForEach(activityFeed.capabilityActivities.prefix(5)) { activity in
                         VStack(alignment: .leading, spacing: 6) {
                             HStack(spacing: 8) {
                                 Image(systemName: icon(for: activity.status))
@@ -1423,11 +1426,12 @@ private struct WebServiceArtifactRow: View {
 }
 
 private struct InteractionEventsCard: View {
+    @EnvironmentObject private var activityFeed: ActivityFeedModel
     @EnvironmentObject private var model: AppViewModel
 
     var body: some View {
-        Panel(title: "Interaction Events", trailing: model.interactionEvents.isEmpty ? "Idle" : "\(model.interactionEvents.count)") {
-            if model.interactionEvents.isEmpty {
+        Panel(title: "Interaction Events", trailing: activityFeed.interactionEvents.isEmpty ? "Idle" : "\(activityFeed.interactionEvents.count)") {
+            if activityFeed.interactionEvents.isEmpty {
                 HStack(spacing: 8) {
                     Image(systemName: "dot.radiowaves.left.and.right")
                         .foregroundStyle(AppTheme.muted)
@@ -1439,7 +1443,7 @@ private struct InteractionEventsCard: View {
                 .padding(.vertical, 4)
             } else {
                 VStack(spacing: 10) {
-                    ForEach(model.interactionEvents.prefix(6)) { event in
+                    ForEach(activityFeed.interactionEvents.prefix(6)) { event in
                         VStack(alignment: .leading, spacing: 6) {
                             HStack(spacing: 8) {
                                 Image(systemName: icon(for: event))
@@ -1590,12 +1594,13 @@ private struct LocalInboxBridgeCard: View {
 }
 
 private struct AuditTrailCard: View {
+    @EnvironmentObject private var activityFeed: ActivityFeedModel
     @EnvironmentObject private var model: AppViewModel
 
     var body: some View {
-        Panel(title: "Audit Trail", trailing: model.auditEvents.isEmpty ? "Empty" : "\(model.auditEvents.count)") {
+        Panel(title: "Audit Trail", trailing: activityFeed.auditEvents.isEmpty ? "Empty" : "\(activityFeed.auditEvents.count)") {
             VStack(alignment: .leading, spacing: 10) {
-                if model.auditEvents.isEmpty {
+                if activityFeed.auditEvents.isEmpty {
                     HStack(spacing: 8) {
                         Image(systemName: "list.bullet.rectangle")
                             .foregroundStyle(AppTheme.muted)
@@ -1606,7 +1611,7 @@ private struct AuditTrailCard: View {
                     }
                     .padding(.vertical, 4)
                 } else {
-                    ForEach(model.auditEvents.prefix(5)) { event in
+                    ForEach(activityFeed.auditEvents.prefix(5)) { event in
                         VStack(alignment: .leading, spacing: 5) {
                             HStack(spacing: 8) {
                                 Image(systemName: icon(for: event.type))
@@ -1667,6 +1672,7 @@ private struct AuditTrailCard: View {
 }
 
 private struct ActivePlanCard: View {
+    @EnvironmentObject private var serviceStatus: ServiceStatusModel
     @EnvironmentObject private var model: AppViewModel
 
     var body: some View {
@@ -1709,12 +1715,12 @@ private struct ActivePlanCard: View {
     }
 
     private var liveServicesVerified: Bool {
-        let remote = model.serviceHealth.filter { $0.id == "agentllm" || $0.id == "agentmem" }
+        let remote = serviceStatus.serviceHealth.filter { $0.id == "agentllm" || $0.id == "agentmem" }
         return remote.count == 2 && remote.allSatisfy { $0.state == .online }
     }
 
     private var pluginFlowReady: Bool {
-        model.serviceHealth.first { $0.id == "plugins" }?.state == .online
+        serviceStatus.serviceHealth.first { $0.id == "plugins" }?.state == .online
     }
 
     private var memoryReady: Bool {
@@ -1723,12 +1729,12 @@ private struct ActivePlanCard: View {
 }
 
 private struct ConnectedToolsCard: View {
-    @EnvironmentObject private var model: AppViewModel
+    @EnvironmentObject private var serviceStatus: ServiceStatusModel
 
     var body: some View {
-        Panel(title: "Connected Tools", trailing: "\(model.tools.filter(\.enabled).count)/\(model.tools.count)") {
+        Panel(title: "Connected Tools", trailing: "\(serviceStatus.tools.filter(\.enabled).count)/\(serviceStatus.tools.count)") {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 70), spacing: 8)], spacing: 8) {
-                ForEach(model.tools) { tool in
+                ForEach(serviceStatus.tools) { tool in
                     VStack(spacing: 7) {
                         Image(systemName: icon(for: tool.kind))
                             .font(.title3)
@@ -1784,12 +1790,13 @@ private struct ModelRoutingCard: View {
 }
 
 private struct RunningTasksCard: View {
+    @EnvironmentObject private var serviceStatus: ServiceStatusModel
     @EnvironmentObject private var model: AppViewModel
 
     var body: some View {
-        Panel(title: "Running Tasks", trailing: "\(model.runningTasks.count)") {
+        Panel(title: "Running Tasks", trailing: "\(serviceStatus.runningTasks.count)") {
             VStack(spacing: 8) {
-                ForEach(model.runningTasks) { task in
+                ForEach(serviceStatus.runningTasks) { task in
                     VStack(alignment: .leading, spacing: 5) {
                         HStack {
                             Text(task.title)

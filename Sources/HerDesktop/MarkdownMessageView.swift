@@ -29,7 +29,10 @@ enum MarkdownMessageParser {
     // O(messages × size) work per frame that made the whole UI lag.
     nonisolated(unsafe) private static let cache = NSCache<NSString, BlockBox>()
 
-    static func blocks(from content: String) -> [MarkdownBlock] {
+    static func blocks(from content: String, caching: Bool = true) -> [MarkdownBlock] {
+        // A streaming message's content changes every flush; caching those
+        // transient strings would miss every time while flooding the cache.
+        guard caching else { return parseBlocks(content) }
         let key = content as NSString
         if let box = cache.object(forKey: key) { return box.blocks }
         let parsed = parseBlocks(content)
@@ -206,10 +209,12 @@ enum MarkdownMessageParser {
 struct MarkdownMessageView: View {
     var content: String
     var baseSize: CGFloat = 14
+    /// False while the message is still streaming (content changes per flush).
+    var cachesParses: Bool = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            ForEach(MarkdownMessageParser.blocks(from: content)) { block in
+            ForEach(MarkdownMessageParser.blocks(from: content, caching: cachesParses)) { block in
                 blockView(block)
             }
         }

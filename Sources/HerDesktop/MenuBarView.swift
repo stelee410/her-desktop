@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 struct HerMenuBarView: View {
+    @EnvironmentObject private var serviceStatus: ServiceStatusModel
     @EnvironmentObject private var model: AppViewModel
     @Environment(\.openSettings) private var openSettings
     @Environment(\.openWindow) private var openWindow
@@ -99,7 +100,7 @@ struct HerMenuBarView: View {
     }
 
     private var header: some View {
-        let status = PresenceCopy.serviceStatus(model.serviceHealth)
+        let status = PresenceCopy.serviceStatus(serviceStatus.serviceHealth)
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 Image(systemName: status.systemImage)

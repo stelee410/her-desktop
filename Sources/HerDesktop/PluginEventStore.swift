@@ -108,6 +108,6 @@ final class PluginEventStore {
         decoder.dateDecodingStrategy = .iso8601
         return try text
             .split(separator: "\n")
-            .map { try decoder.decode(PluginLifecycleEvent.self, from: Data(String($0).utf8)) }
+            .compactMap { try? decoder.decode(PluginLifecycleEvent.self, from: Data(String($0).utf8)) } // skip corrupt lines
     }
 }

@@ -1,18 +1,40 @@
+import AppKit
 import SwiftUI
+
+/// App-quit teardown. `AppViewModel.deinit` does not reliably run on
+/// termination (the root @StateObject is torn down with the process), so
+/// child processes and loopback listeners must be stopped explicitly here.
+@MainActor
+final class HerAppDelegate: NSObject, NSApplicationDelegate {
+    static weak var viewModel: AppViewModel?
+
+    nonisolated func applicationWillTerminate(_ notification: Notification) {
+        MainActor.assumeIsolated {
+            HerAppDelegate.viewModel?.shutdown()
+        }
+    }
+}
 
 @main
 struct HerDesktopApp: App {
+    @NSApplicationDelegateAdaptor(HerAppDelegate.self) private var appDelegate
     @StateObject private var viewModel: AppViewModel
     @State private var isQuickCapturePresented = false
 
     init() {
-        _viewModel = StateObject(wrappedValue: AppViewModel())
+        let model = AppViewModel()
+        _viewModel = StateObject(wrappedValue: model)
+        HerAppDelegate.viewModel = model
     }
 
     var body: some Scene {
         WindowGroup("Her Desktop", id: "main") {
             RootView()
                 .environmentObject(viewModel)
+                .environmentObject(viewModel.chrome)
+                .environmentObject(viewModel.serviceStatus)
+                .environmentObject(viewModel.activityFeed)
+                .environmentObject(viewModel.conversation)
                 .frame(minWidth: 1180, minHeight: 760)
                 .sheet(isPresented: $isQuickCapturePresented) {
                     QuickCaptureSheet()
@@ -37,8 +59,8 @@ struct HerDesktopApp: App {
                 }
                 .keyboardShortcut("i", modifiers: [.command, .shift])
 
-                Button(viewModel.isInspectorPresented ? "Hide Inspector" : "Show Inspector") {
-                    viewModel.isInspectorPresented.toggle()
+                Button("Toggle Inspector") {
+                    viewModel.chrome.isInspectorPresented.toggle()
                 }
                 .keyboardShortcut("i", modifiers: [.command, .option])
 
@@ -91,6 +113,7 @@ struct HerDesktopApp: App {
         MenuBarExtra("Her", systemImage: menuBarSystemImage) {
             HerMenuBarView()
                 .environmentObject(viewModel)
+                .environmentObject(viewModel.serviceStatus)
         }
     }
 

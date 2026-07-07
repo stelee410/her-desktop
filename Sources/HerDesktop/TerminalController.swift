@@ -98,6 +98,7 @@ struct TerminalHostView: NSViewRepresentable {
 /// The bottom drawer: header with title and close, terminal below.
 struct TerminalDrawer: View {
     @EnvironmentObject private var model: AppViewModel
+    @EnvironmentObject private var chrome: UIChrome
 
     var body: some View {
         VStack(spacing: 0) {
@@ -113,7 +114,7 @@ struct TerminalDrawer: View {
                     .foregroundStyle(AppTheme.muted)
                 Spacer()
                 Button {
-                    model.isTerminalPresented = false
+                    chrome.isTerminalPresented = false
                 } label: {
                     Image(systemName: "chevron.down")
                         .font(.caption)

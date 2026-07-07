@@ -6,7 +6,7 @@ import SwiftUI
 /// prompt or a full TUI like claude.
 extension AppViewModel {
     func openTerminalCapability() -> CapabilityResult {
-        isTerminalPresented = true
+        chrome.isTerminalPresented = true
         terminalBridge.startIfNeeded(workingDirectory: runtimeCwd)
         audit(type: "terminal.opened", summary: "Opened the terminal drawer from the conversation.")
         return CapabilityResult(
@@ -59,7 +59,7 @@ extension AppViewModel {
         }
         // Typing into the terminal always surfaces it, so the user watches
         // exactly what the conversation is doing.
-        isTerminalPresented = true
+        chrome.isTerminalPresented = true
         terminalBridge.startIfNeeded(workingDirectory: runtimeCwd)
         terminalBridge.send(text: payload)
         audit(

@@ -50,7 +50,7 @@ extension AppViewModel {
             arguments: arguments
         )
 
-        if requiresApproval(capabilityID: capabilityID) {
+        if requiresApproval(for: invocation) {
             let (approval, isNew) = enqueueApproval(for: invocation)
             if isNew {
                 messages.append(ChatMessage(
@@ -107,14 +107,29 @@ extension AppViewModel {
         }
     }
 
-    /// Approve this action and auto-approve the same capability for the rest
-    /// of the conversation.
+    /// The key "一直批准" stores and checks. Scoped to the risk boundary, not
+    /// the bare capability ID: `shell.run` spans mkdir…rm…curl, so approving
+    /// one benign command must never silently approve every later one — the
+    /// executed command name is part of the identity.
+    static func autoApprovalKey(capabilityID: String, arguments: [String: Any]) -> String {
+        guard capabilityID == "shell.run" else { return capabilityID }
+        let command = (arguments["command"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return command.isEmpty ? capabilityID : "\(capabilityID):\(command)"
+    }
+
+    /// Approve this action and auto-approve the same action signature for the
+    /// rest of the conversation.
     func approveAlways(_ approval: PendingApproval) async {
-        autoApprovedCapabilities.insert(approval.invocation.capabilityID)
+        let key = Self.autoApprovalKey(
+            capabilityID: approval.invocation.capabilityID,
+            arguments: approval.invocation.arguments
+        )
+        autoApprovedCapabilities.insert(key)
         audit(
             type: "approval.auto_approved_capability",
             summary: "Auto-approving this capability for the conversation.",
-            metadata: ["capabilityID": approval.invocation.capabilityID]
+            metadata: ["capabilityID": approval.invocation.capabilityID, "signature": key]
         )
         await approve(approval)
     }
@@ -337,11 +352,29 @@ extension AppViewModel {
         return object
     }
 
+    /// Argument-aware gate — the one real executions go through.
+    func requiresApproval(for invocation: CapabilityInvocation) -> Bool {
+        // The user chose to auto-approve this action signature for the
+        // conversation (for shell.run that includes the command name).
+        let key = Self.autoApprovalKey(
+            capabilityID: invocation.capabilityID,
+            arguments: invocation.arguments
+        )
+        if autoApprovedCapabilities.contains(key) {
+            return false
+        }
+        return requiresApprovalIgnoringAutoApprovals(capabilityID: invocation.capabilityID)
+    }
+
+    /// Argument-free shape for capability-level checks (settings UI, tests).
     func requiresApproval(capabilityID: String) -> Bool {
-        // The user chose to auto-approve this capability for the conversation.
         if autoApprovedCapabilities.contains(capabilityID) {
             return false
         }
+        return requiresApprovalIgnoringAutoApprovals(capabilityID: capabilityID)
+    }
+
+    private func requiresApprovalIgnoringAutoApprovals(capabilityID: String) -> Bool {
         // A user-granted browsing session lets the agent act without a click
         // per step. The manifest stays approval-required (the safe default);
         // only an explicit, user-flipped session relaxes browser actions.
@@ -534,7 +567,7 @@ extension AppViewModel {
         connectionState = .thinking
         do {
             let catalog = CapabilityToolCatalog.build(from: plugins)
-            let prompt = SystemPromptBuilder(pluginManifests: plugins).build(
+            let prompt = SystemPromptBuilder(pluginManifests: plugins, projectDocs: projectPromptDocs).build(
                 memoryContext: "",
                 activeTaskSummary: activeTaskSummary(),
                 agentLoopSummary: agentLoopSummary(),

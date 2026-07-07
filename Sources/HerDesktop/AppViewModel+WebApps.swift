@@ -41,14 +41,42 @@ extension AppViewModel {
 
     /// Installed apps a message refers to (via capability results or URLs),
     /// used to attach live widget cards in the conversation.
+    /// Memoized per (message, content length, webApps version): this is
+    /// called for every message on every render and the content scan is
+    /// O(apps × contentLength).
     func webAppReferences(for message: ChatMessage) -> [WebAppManifest] {
         guard message.role == .tool || message.role == .assistant, !webApps.isEmpty else {
             return []
         }
-        return webApps.filter { app in
+        if let cached = messageReferenceCache[message.id],
+           cached.contentLength == message.content.count,
+           cached.scanVersion == messageScanVersion,
+           let ids = cached.webAppIDs {
+            return ids.compactMap { id in webApps.first { $0.id == id } }
+        }
+        let referenced = webApps.filter { app in
             message.content.contains("app_id: \(app.id)")
                 || message.content.contains("apps/\(app.id)/")
         }
+        var entry = cacheEntry(for: message)
+        entry.webAppIDs = referenced.map(\.id)
+        messageReferenceCache[message.id] = entry
+        return referenced
+    }
+
+    /// Existing cache slot for this message if still valid, else a fresh one.
+    func cacheEntry(for message: ChatMessage) -> MessageReferenceCacheEntry {
+        if let cached = messageReferenceCache[message.id],
+           cached.contentLength == message.content.count,
+           cached.scanVersion == messageScanVersion {
+            return cached
+        }
+        return MessageReferenceCacheEntry(
+            contentLength: message.content.count,
+            scanVersion: messageScanVersion,
+            webAppIDs: nil,
+            artifactIDs: nil
+        )
     }
 
     /// Live widgets only render inside a recent window of the transcript

@@ -208,21 +208,15 @@ final class BrowserController: ObservableObject, BrowserBridging {
     }
 
     private func runToCompletion(_ executable: String, _ args: [String]) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: executable)
-            proc.arguments = args
-            let pipe = Pipe()
-            proc.standardError = pipe
-            proc.terminationHandler = { finished in
-                if finished.terminationStatus == 0 {
-                    continuation.resume()
-                } else {
-                    let err = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                    continuation.resume(throwing: BrowserError.venvBootstrapFailed(String(err.suffix(300))))
-                }
-            }
-            do { try proc.run() } catch { continuation.resume(throwing: error) }
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: executable)
+        proc.arguments = args
+        // Drains pipes while running: pip's output can exceed the 64 KB pipe
+        // buffer, which used to block the child forever mid-bootstrap.
+        let output = try await ChildProcessRunner.run(proc, timeout: 600)
+        guard output.status == 0 else {
+            let err = String(data: output.stderr, encoding: .utf8) ?? ""
+            throw BrowserError.venvBootstrapFailed(String(err.suffix(300)))
         }
     }
 

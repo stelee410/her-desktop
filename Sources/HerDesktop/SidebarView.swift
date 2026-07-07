@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SidebarView: View {
+    @EnvironmentObject private var session: ConversationModel
     @EnvironmentObject private var model: AppViewModel
     @State private var isConversationListExpanded = true
     @State private var conversationPendingDeletion: ConversationSummary?
@@ -67,11 +68,13 @@ struct SidebarView: View {
     private var conversationListSection: some View {
         DisclosureGroup(isExpanded: $isConversationListExpanded) {
             ScrollView {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(model.sortedConversations) { conversation in
+                // Lazy: only visible rows build; a long history built every
+                // row (with hover/rename state) eagerly.
+                LazyVStack(alignment: .leading, spacing: 2) {
+                    ForEach(session.sortedConversations) { conversation in
                         ConversationListRow(
                             conversation: conversation,
-                            selected: conversation.id == model.activeConversationID,
+                            selected: conversation.id == session.activeConversationID,
                             onSelect: {
                                 model.switchConversation(to: conversation.id)
                                 model.selectedSection = .today

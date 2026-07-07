@@ -78,7 +78,15 @@ final class WebAppProcessManager: @unchecked Sendable {
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = [entryURL.path]
         process.currentDirectoryURL = store.appDirectory(id: app.id)
-        var environment = ProcessInfo.processInfo.environment
+        // Minimal allowlisted environment — NEVER the inherited one. Backends
+        // run LLM-generated code; the parent environment can carry API keys
+        // (HER_AGENT_LLM_API_KEY, OPENAI_API_KEY, AWS_*, …) that generated
+        // code could read and exfiltrate.
+        let inherited = ProcessInfo.processInfo.environment
+        var environment: [String: String] = [:]
+        for key in ["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "TZ"] {
+            environment[key] = inherited[key]
+        }
         environment["PORT"] = String(port)
         environment["HER_WEBAPP_ID"] = app.id
         environment["HER_WEBAPP_DIR"] = store.appDirectory(id: app.id).path

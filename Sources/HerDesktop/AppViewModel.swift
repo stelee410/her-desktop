@@ -5,26 +5,94 @@ import SwiftUI
 @MainActor
 final class AppViewModel: ObservableObject {
     @Published var config: HerAppConfig
-    @Published var messages: [ChatMessage]
     @Published var connectionState: ConnectionState
     @Published var memorySignal: MemorySignal
     @Published var agentProfile: AgentProfile
-    @Published var runningTasks: [RunningTask]
-    @Published var tools: [ToolDescriptor]
-    @Published var serviceHealth: [ServiceHealth]
     @Published var plugins: [PluginManifest]
     @Published var pendingApprovals: [PendingApproval]
     @Published var generatedPluginDrafts: [GeneratedPluginDraft]
-    @Published var pluginEvents: [PluginLifecycleEvent]
-    @Published var capabilityActivities: [CapabilityActivity]
-    @Published var auditEvents: [AuditEvent]
-    @Published var interactionEvents: [InteractionEvent]
-    @Published var webServiceArtifacts: [WebServiceArtifact]
+
+    // MARK: High-frequency state carved into sub-observables (see SubModels.swift)
+
+    /// Service health / tools / running tasks live in their own observable so
+    /// health refreshes don't repaint the whole window. The same-named
+    /// computed passthroughs below keep all internal call sites unchanged;
+    /// only views that display this state observe `serviceStatus`.
+    let serviceStatus = ServiceStatusModel()
+    /// Audit/interaction/capability/plugin feeds — appended on every tool
+    /// step; displayed only by the inspector activity panes and workspaces.
+    let activityFeed = ActivityFeedModel()
+    /// The transcript/composer/conversation list — the hottest write path of
+    /// all (每次流式 flush 都改 messages). Views of the conversation observe
+    /// this; the rest of the window no longer repaints per token.
+    let conversation = ConversationModel()
+
+    var messages: [ChatMessage] {
+        get { conversation.messages }
+        set { conversation.messages = newValue }
+    }
+    var streamingAssistantMessageID: UUID? {
+        get { conversation.streamingAssistantMessageID }
+        set { conversation.streamingAssistantMessageID = newValue }
+    }
+    var isLoadingConversation: Bool {
+        get { conversation.isLoadingConversation }
+        set { conversation.isLoadingConversation = newValue }
+    }
+    var draft: String {
+        get { conversation.draft }
+        set { conversation.draft = newValue }
+    }
+    var pendingAttachments: [MessageAttachment] {
+        get { conversation.pendingAttachments }
+        set { conversation.pendingAttachments = newValue }
+    }
+    var conversations: [ConversationSummary] {
+        get { conversation.conversations }
+        set { conversation.conversations = newValue }
+    }
+    var activeConversationID: String {
+        get { conversation.activeConversationID }
+        set { conversation.activeConversationID = newValue }
+    }
+    var sortedConversations: [ConversationSummary] {
+        conversation.sortedConversations
+    }
+
+    var runningTasks: [RunningTask] {
+        get { serviceStatus.runningTasks }
+        set { serviceStatus.runningTasks = newValue }
+    }
+    var tools: [ToolDescriptor] {
+        get { serviceStatus.tools }
+        set { serviceStatus.tools = newValue }
+    }
+    var serviceHealth: [ServiceHealth] {
+        get { serviceStatus.serviceHealth }
+        set { serviceStatus.serviceHealth = newValue }
+    }
+    var pluginEvents: [PluginLifecycleEvent] {
+        get { activityFeed.pluginEvents }
+        set { activityFeed.pluginEvents = newValue }
+    }
+    var capabilityActivities: [CapabilityActivity] {
+        get { activityFeed.capabilityActivities }
+        set { activityFeed.capabilityActivities = newValue }
+    }
+    var auditEvents: [AuditEvent] {
+        get { activityFeed.auditEvents }
+        set { activityFeed.auditEvents = newValue }
+    }
+    var interactionEvents: [InteractionEvent] {
+        get { activityFeed.interactionEvents }
+        set { activityFeed.interactionEvents = newValue }
+    }
+    @Published var webServiceArtifacts: [WebServiceArtifact] {
+        didSet { messageScanVersion &+= 1 }
+    }
     @Published var dreamContext: DreamPromptContext?
     @Published var workPlan: WorkPlan?
     @Published var mcpDiscoveredTools: [MCPDiscoveredTool]
-    @Published var pendingAttachments: [MessageAttachment]
-    @Published var draft: String
     @Published var dictationTranscript: String
     @Published var lastError: String?
     @Published var localInboxBridgeState: LocalInboxBridgeState
@@ -33,17 +101,38 @@ final class AppViewModel: ObservableObject {
     @Published var pendingCapabilityRunTarget: CapabilityRunTarget?
     @Published var isVibePluginComposerPresented: Bool
     @Published var pendingVibePluginComposerPreset: VibePluginComposerPreset?
-    @Published var conversations: [ConversationSummary]
-    @Published var activeConversationID: String
-    /// True while a switched-to transcript is still decoding off the main
-    /// thread. Saves are suppressed during this window so the transient empty
-    /// state is never persisted over the target's real content.
-    @Published var isLoadingConversation: Bool = false
-    @Published var isInspectorPresented: Bool
-    @Published var webApps: [WebAppManifest]
+    /// Identity of the in-flight transcript load. Any path that sets
+    /// `messages` directly (delete, new conversation) refreshes this token so
+    /// a stale load can neither apply its result nor leave
+    /// `isLoadingConversation` stuck true (which would silently disable all
+    /// saves — see resetConversationScopedState()).
+    var activeTranscriptLoadToken: UUID?
+    /// Presentation-only toggles (inspector + drawers) live in their own small
+    /// observable so flipping them doesn't invalidate every view that observes
+    /// this large view model. See UIChrome.
+    let chrome = UIChrome()
+    /// Loaded once. SystemPromptBuilder's default parameter re-read the
+    /// SOUL/INFINITI docs from disk (6 candidate files) on every single turn.
+    let projectPromptDocs = ProjectPromptLoader.load()
+    @Published var webApps: [WebAppManifest] {
+        didSet { messageScanVersion &+= 1 }
+    }
     @Published var selectedWebAppID: String?
-    @Published var isTerminalPresented: Bool
-    @Published var isBrowserPresented: Bool
+    /// Bumped whenever webApps/webServiceArtifacts change; versions the
+    /// per-message reference caches below.
+    var messageScanVersion: Int = 0
+    /// Memoized per-message content scans (web-app references / artifact
+    /// links). These ran O(apps × contentLength) for EVERY message on EVERY
+    /// render. Keyed by content length: message content only ever grows
+    /// (streaming) or is immutable, so (id, length, version) identifies a scan.
+    var messageReferenceCache: [UUID: MessageReferenceCacheEntry] = [:]
+
+    struct MessageReferenceCacheEntry {
+        var contentLength: Int
+        var scanVersion: Int
+        var webAppIDs: [String]?
+        var artifactIDs: [String]?
+    }
     /// When the user flips the drawer's autonomy toggle, browser side-effect
     /// actions skip per-action approval for the session (still visible +
     /// audited). The agent cannot grant this itself.
@@ -53,8 +142,6 @@ final class AppViewModel: ObservableObject {
     @Published var browserTarget: BrowserTarget
 
     enum BrowserTarget: String, Codable { case sidecar, everyday }
-
-    @Published var streamingAssistantMessageID: UUID?
 
     /// True while a reply is pending but no streamed bubble has appeared yet.
     var isAwaitingAssistantReply: Bool {
@@ -121,11 +208,21 @@ final class AppViewModel: ObservableObject {
     /// Conversation-facing terminal surface; tests inject a fake.
     lazy var terminalBridge: TerminalBridging = terminalControllerInstance
     lazy var terminalControllerInstance = TerminalController()
+    /// Track which lazy child-process owners were actually created, so
+    /// shutdown() can stop them without instantiating unused ones at quit.
+    private var browserControllerCreated = false
+    private var browserExtensionServerCreated = false
     /// Conversation-facing browser surface. The dedicated-profile sidecar
     /// and the everyday-Chrome extension both conform to BrowserBridging, so
     /// capabilities are target-agnostic. Tests set `browserBridgeOverride`.
-    lazy var browserControllerInstance = BrowserController(cwd: runtimeCwd)
-    lazy var browserExtensionServer = BrowserExtensionServer()
+    lazy var browserControllerInstance: BrowserController = {
+        browserControllerCreated = true
+        return BrowserController(cwd: runtimeCwd)
+    }()
+    lazy var browserExtensionServer: BrowserExtensionServer = {
+        browserExtensionServerCreated = true
+        return BrowserExtensionServer()
+    }()
     lazy var extensionBrowserBridge = ExtensionBrowserBridge(server: browserExtensionServer)
     var browserBridgeOverride: BrowserBridging?
     var browserBridge: BrowserBridging {
@@ -181,36 +278,20 @@ final class AppViewModel: ObservableObject {
         self.serviceHealthVerifier = ServiceHealthVerifier(config: loaded, session: urlSession)
         self.conversationContextBuilder = ConversationContextBuilder()
         let conversationBootstrap = conversationStore.bootstrap()
-        self.conversations = conversationBootstrap.conversations
-        self.activeConversationID = conversationBootstrap.activeConversationID
         let loadedPlugins = pluginRegistry.loadPlugins()
         let restoredMessages = conversationBootstrap.messages
         let restoredDrafts = (try? pluginDraftStore.loadAll()) ?? []
         let initialHealth = serviceHealthVerifier.initialSnapshot(pluginCount: loadedPlugins.count)
-        self.serviceHealth = initialHealth
         self.plugins = loadedPlugins
         self.pendingApprovals = []
         self.generatedPluginDrafts = restoredDrafts
-        self.pluginEvents = AppViewModel.recentPluginEvents(from: (try? pluginEventStore.loadAll()) ?? [])
-        self.capabilityActivities = []
-        self.auditEvents = AppViewModel.recentAuditEvents(from: (try? auditStore.loadAll()) ?? [])
-        self.interactionEvents = AppViewModel.recentInteractionEvents(from: (try? inboxEventStore.loadAll()) ?? [])
         self.webServiceArtifacts = (try? webServiceArtifactStore.loadAll()) ?? []
         self.dreamContext = DreamPromptContextLoader.load(cwd: cwd)
         self.workPlan = (try? workPlanStore.load()) ?? nil
         self.mcpDiscoveredTools = []
-        self.pendingAttachments = []
-        self.messages = restoredMessages.isEmpty ? [
-            ChatMessage(role: .assistant, content: loaded.hasLLMKey
-                ? "我在这里。今天想从哪里开始？"
-                : Self.firstRunSetupMessage(config: loaded))
-        ] : restoredMessages
         self.connectionState = loaded.hasLLMKey ? .ready : .offline
         self.memorySignal = .empty
         self.agentProfile = .empty(userID: loaded.userID)
-        self.runningTasks = []
-        self.tools = AppViewModel.tools(from: initialHealth, model: loaded.agentLLMModel)
-        self.draft = ""
         self.dictationTranscript = ""
         self.localInboxBridgeState = LocalInboxBridgeState()
         self.selectedSection = .today
@@ -218,13 +299,30 @@ final class AppViewModel: ObservableObject {
         self.pendingCapabilityRunTarget = nil
         self.isVibePluginComposerPresented = false
         self.pendingVibePluginComposerPreset = nil
-        self.isInspectorPresented = false
-        self.isTerminalPresented = false
-        self.isBrowserPresented = false
         self.browserAutonomyGranted = false
         // Default to the user's everyday Chrome (via the extension): it uses
         // the real logged-in profile and trusted CDP input.
         self.browserTarget = .everyday
+        if conversationBootstrap.activeTranscriptCorrupt {
+            self.lastError = "对话存档无法读取，原文件已备份。新消息会存入全新的存档。"
+        }
+        // Sub-observable state (computed passthroughs need fully-initialized self).
+        serviceStatus.serviceHealth = initialHealth
+        serviceStatus.tools = AppViewModel.tools(from: initialHealth, model: loaded.agentLLMModel)
+        activityFeed.pluginEvents = AppViewModel.recentPluginEvents(from: (try? pluginEventStore.loadAll()) ?? [])
+        activityFeed.auditEvents = AppViewModel.recentAuditEvents(from: (try? auditStore.loadAll()) ?? [])
+        activityFeed.interactionEvents = AppViewModel.recentInteractionEvents(from: (try? inboxEventStore.loadAll()) ?? [])
+        conversation.conversations = conversationBootstrap.conversations
+        conversation.activeConversationID = conversationBootstrap.activeConversationID
+        if conversationBootstrap.activeTranscriptCorrupt {
+            conversation.messages = [Self.corruptTranscriptNotice(backup: conversationBootstrap.corruptTranscriptBackup)]
+        } else {
+            conversation.messages = restoredMessages.isEmpty ? [
+                ChatMessage(role: .assistant, content: loaded.hasLLMKey
+                    ? "我在这里。今天想从哪里开始？"
+                    : Self.firstRunSetupMessage(config: loaded))
+            ] : restoredMessages
+        }
         rebuildRunningTasks()
     }
 
@@ -233,6 +331,23 @@ final class AppViewModel: ObservableObject {
         webAppServer.stop()
         webAppProcessManager.stopAll()
         // BrowserController terminates its sidecar in its own deinit.
+    }
+
+    /// Explicit teardown for app quit. The root @StateObject is not reliably
+    /// released on termination, so `deinit` never runs then — without this,
+    /// node/python backends, the browser sidecar, and loopback listeners
+    /// survive as orphan processes across quits. Called from the app
+    /// delegate's `applicationWillTerminate`.
+    func shutdown() {
+        localInboxBridgeServer.stop()
+        webAppServer.stop()
+        webAppProcessManager.stopAll()
+        if browserControllerCreated {
+            browserControllerInstance.stop()
+        }
+        if browserExtensionServerCreated {
+            browserExtensionServer.stop()
+        }
     }
 
     /// Launch bootstrap in a model-owned task. SwiftUI `.task` cancels its

@@ -4,16 +4,6 @@ import SwiftUI
 
 /// Conversation lifecycle, the send/tool loop, and transcript persistence.
 extension AppViewModel {
-    var sortedConversations: [ConversationSummary] {
-        // Stable creation order (newest first); using a conversation must not
-        // reshuffle the list. Pinned ones still float to the top.
-        conversations.sorted { lhs, rhs in
-            if lhs.pinned != rhs.pinned { return lhs.pinned }
-            if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
-            return lhs.id < rhs.id
-        }
-    }
-
     func newLocalConversation() {
         stopDictation()
         saveSessionSnapshot()
@@ -50,27 +40,60 @@ extension AppViewModel {
         saveSessionSnapshot()
         activeConversationID = id
         resetConversationScopedState()
-        // Decode the target transcript off the main thread so switching is
-        // instant even for long conversations. Do NOT put a placeholder into
-        // `messages` — a save during the load window would persist it over the
-        // real content. A loading flag drives the UI and suppresses saves.
-        isLoadingConversation = true
-        messages = []
-        Task {
-            let loaded = await conversationStore.loadMessagesAsync(id: id)
-            // The user may have switched again before this finished.
-            guard activeConversationID == id else { return }
-            messages = loaded.isEmpty
-                ? [ChatMessage(role: .assistant, content: "新会话已经准备好。我们从哪里开始？")]
-                : loaded
-            isLoadingConversation = false
-        }
+        beginTranscriptLoad(id: id)
         audit(
             type: "session.switch_conversation",
             summary: "Switched to another local conversation.",
             metadata: ["sessionID": id]
         )
         persistConversationIndex()
+    }
+
+    /// Load a transcript off the main thread and install it as `messages`.
+    /// Invariants that keep this path from ever destroying data:
+    /// - No placeholder goes into `messages` while loading; a loading flag
+    ///   drives the UI and `saveSessionSnapshot` refuses to run.
+    /// - A per-load token invalidates stale loads: any path that installs
+    ///   `messages` directly (delete, new conversation) refreshes the token,
+    ///   so an abandoned load can neither apply nor leave the loading flag
+    ///   stuck true (which would silently disable all future saves).
+    /// - A corrupt file is not an empty conversation: the store has already
+    ///   backed it up; we surface that instead of silently starting fresh.
+    func beginTranscriptLoad(id: String) {
+        let token = UUID()
+        activeTranscriptLoadToken = token
+        isLoadingConversation = true
+        messages = []
+        Task {
+            let load = await conversationStore.loadTranscriptAsync(id: id)
+            // The user may have switched again, or another path may have
+            // installed messages and invalidated this load.
+            guard activeTranscriptLoadToken == token, activeConversationID == id else { return }
+            switch load {
+            case .loaded(let loaded) where !loaded.isEmpty:
+                messages = loaded
+            case .loaded, .missing:
+                messages = [ChatMessage(role: .assistant, content: "新会话已经准备好。我们从哪里开始？")]
+            case .corrupt(let backupURL):
+                messages = [Self.corruptTranscriptNotice(backup: backupURL)]
+                lastError = "对话存档无法读取，原文件已备份。"
+                audit(
+                    type: "session.transcript_corrupt",
+                    summary: "A conversation transcript failed to decode; the file was backed up.",
+                    metadata: ["sessionID": id, "backup": backupURL?.path ?? "unavailable"]
+                )
+            }
+            isLoadingConversation = false
+            activeTranscriptLoadToken = nil
+        }
+    }
+
+    static func corruptTranscriptNotice(backup: URL?) -> ChatMessage {
+        let location = backup.map { "\n备份位置：\($0.path)" } ?? ""
+        return ChatMessage(
+            role: .assistant,
+            content: "这段对话的存档文件无法读取（可能已损坏），我把原文件备份好了，没有覆盖。\(location)\n接下来的新消息会保存为全新的存档。"
+        )
     }
 
     func renameConversation(_ id: String, to title: String) {
@@ -107,8 +130,10 @@ extension AppViewModel {
         let transcript: [ChatMessage]
         if id == activeConversationID {
             transcript = messages
+        } else if case .loaded(let loaded) = await conversationStore.loadTranscriptAsync(id: id) {
+            transcript = loaded
         } else {
-            transcript = (try? conversationStore.loadMessages(id: id)) ?? []
+            transcript = []
         }
         if compactingIntoMemory {
             await compactConversationIntoMemory(id: id, title: summary.title, transcript: transcript)
@@ -129,11 +154,8 @@ extension AppViewModel {
         if id == activeConversationID {
             if let next = sortedConversations.first {
                 activeConversationID = next.id
-                let loaded = (try? conversationStore.loadMessages(id: next.id)) ?? []
-                messages = loaded.isEmpty
-                    ? [ChatMessage(role: .assistant, content: "新会话已经准备好。我们从哪里开始？")]
-                    : loaded
                 resetConversationScopedState()
+                beginTranscriptLoad(id: next.id)
                 persistConversationIndex()
             } else {
                 newLocalConversation()
@@ -148,9 +170,16 @@ extension AppViewModel {
         capabilityActivities = []
         pendingAttachments = []
         autoApprovedCapabilities = []
+        messageReferenceCache = [:]
         draft = ""
         dictationTranscript = ""
         lastError = nil
+        // Invalidate any in-flight transcript load. Without this, a load
+        // abandoned by delete/new-conversation would leave
+        // `isLoadingConversation` stuck true and every future save would be a
+        // silent no-op (all edits lost on quit).
+        activeTranscriptLoadToken = nil
+        isLoadingConversation = false
         connectionState = config.hasLLMKey ? .ready : .offline
         rebuildRunningTasks()
     }
@@ -166,10 +195,26 @@ extension AppViewModel {
         // Called for every message on every render; skip the content scan
         // entirely when there are no artifacts (the common case).
         guard !webServiceArtifacts.isEmpty, message.role != .user else { return [] }
+        // Memoized per (message, content length, artifacts version) — the
+        // line-by-line extractor scan is too heavy to repeat per render.
+        if let cached = messageReferenceCache[message.id],
+           cached.contentLength == message.content.count,
+           cached.scanVersion == messageScanVersion,
+           let ids = cached.artifactIDs {
+            return ids.compactMap { id in webServiceArtifacts.first { $0.id == id } }
+        }
         let manifestPaths = WebServiceArtifactReferenceExtractor.manifestPaths(in: message.content)
-        guard !manifestPaths.isEmpty else { return [] }
-        let wanted = Set(manifestPaths.map(Self.standardizedFilePath))
-        return webServiceArtifacts.filter { wanted.contains(Self.standardizedFilePath($0.manifestPath)) }
+        let matched: [WebServiceArtifact]
+        if manifestPaths.isEmpty {
+            matched = []
+        } else {
+            let wanted = Set(manifestPaths.map(Self.standardizedFilePath))
+            matched = webServiceArtifacts.filter { wanted.contains(Self.standardizedFilePath($0.manifestPath)) }
+        }
+        var entry = cacheEntry(for: message)
+        entry.artifactIDs = matched.map(\.id)
+        messageReferenceCache[message.id] = entry
+        return matched
     }
 
     func sendDraft() async {
@@ -253,7 +298,7 @@ extension AppViewModel {
         do {
             await refreshAgentMemTurnSignals()
             let memContext = await retrieveMemory(for: userInput)
-            let prompt = SystemPromptBuilder(pluginManifests: plugins).build(
+            let prompt = SystemPromptBuilder(pluginManifests: plugins, projectDocs: projectPromptDocs).build(
                 memoryContext: memContext,
                 activeTaskSummary: activeTaskSummary(),
                 agentLoopSummary: agentLoopSummary(),
@@ -511,7 +556,7 @@ extension AppViewModel {
             capabilityID: capabilityID,
             arguments: parseArguments(toolCall.function.arguments)
         )
-        if requiresApproval(capabilityID: capabilityID) {
+        if requiresApproval(for: invocation) {
             let (approval, isNew) = enqueueApproval(for: invocation)
             if isNew {
                 messages.append(ChatMessage(
@@ -567,7 +612,18 @@ extension AppViewModel {
         guard let index = conversations.firstIndex(where: { $0.id == activeConversationID }) else { return }
         // Encoding a long transcript (many large tool results) is heavy, so
         // write it off the main thread — this used to beachball on switch.
-        conversationStore.enqueueSave(messages, id: activeConversationID)
+        // A failed background save is silent data loss; surface it.
+        let failedID = activeConversationID
+        conversationStore.enqueueSave(messages, id: activeConversationID) { error in
+            Task { @MainActor [weak self] in
+                self?.lastError = "对话未能保存：\(error.localizedDescription)"
+                self?.audit(
+                    type: "session.save_failed",
+                    summary: "A background transcript save failed.",
+                    metadata: ["sessionID": failedID, "error": error.localizedDescription]
+                )
+            }
+        }
         conversations[index].updatedAt = Date()
         if conversations[index].title == ConversationStore.defaultTitle || conversations[index].title.isEmpty,
            let autoTitle = ConversationStore.autoTitle(from: messages) {

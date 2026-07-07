@@ -61,8 +61,11 @@ final class AuditEventStore {
         let text = try String(contentsOf: auditURL, encoding: .utf8)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return try text
+        // Skip malformed lines instead of throwing: append is not atomic, so
+        // one truncated line (crash mid-write) must not make the entire audit
+        // history unreadable — it is the forensic record for approvals.
+        return text
             .split(separator: "\n")
-            .map { try decoder.decode(AuditEvent.self, from: Data(String($0).utf8)) }
+            .compactMap { try? decoder.decode(AuditEvent.self, from: Data(String($0).utf8)) }
     }
 }

@@ -1130,45 +1130,24 @@ final class CapabilityExecutor {
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = args
         process.currentDirectoryURL = workingDirectory
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.standardOutput = stdout
-        process.standardError = stderr
 
-        let startedAt = Date()
         do {
-            let status = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Int32, Error>) in
-                process.terminationHandler = { finished in
-                    continuation.resume(returning: finished.terminationStatus)
-                }
-                do {
-                    try process.run()
-                } catch {
-                    continuation.resume(throwing: error)
-                    return
-                }
-                DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
-                    if process.isRunning {
-                        process.terminate()
-                    }
-                }
-            }
-            let timedOut = status == 15 && Date().timeIntervalSince(startedAt) >= timeout - 0.1
+            let output = try await ChildProcessRunner.run(process, timeout: timeout)
             let stdoutText = SecretRedactor.redact(
-                String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "",
+                String(data: output.stdout, encoding: .utf8) ?? "",
                 config: config
             )
             let stderrText = SecretRedactor.redact(
-                String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "",
+                String(data: output.stderr, encoding: .utf8) ?? "",
                 config: config
             )
             return CapabilityResult(
-                title: timedOut ? "Shell Command Timed Out" : "Shell Command Result",
+                title: output.timedOut ? "Shell Command Timed Out" : "Shell Command Result",
                 content: """
                 command: \(commandName) \(args.joined(separator: " "))
                 working_directory: \(workingDirectory.path)
-                exit_status: \(status)
-                timed_out: \(timedOut)
+                exit_status: \(output.status)
+                timed_out: \(output.timedOut)
 
                 stdout:
                 \(String(stdoutText.prefix(6_000)))
@@ -1251,45 +1230,24 @@ final class CapabilityExecutor {
         process.executableURL = commandURL
         process.arguments = arguments
         process.currentDirectoryURL = workingDirectory
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.standardOutput = stdout
-        process.standardError = stderr
 
-        let startedAt = Date()
         do {
-            let status = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Int32, Error>) in
-                process.terminationHandler = { finished in
-                    continuation.resume(returning: finished.terminationStatus)
-                }
-                do {
-                    try process.run()
-                } catch {
-                    continuation.resume(throwing: error)
-                    return
-                }
-                DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
-                    if process.isRunning {
-                        process.terminate()
-                    }
-                }
-            }
-            let timedOut = status == 15 && Date().timeIntervalSince(startedAt) >= timeout - 0.1
+            let output = try await ChildProcessRunner.run(process, timeout: timeout)
             let stdoutText = SecretRedactor.redact(
-                String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "",
+                String(data: output.stdout, encoding: .utf8) ?? "",
                 config: config
             )
             let stderrText = SecretRedactor.redact(
-                String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "",
+                String(data: output.stderr, encoding: .utf8) ?? "",
                 config: config
             )
             return CapabilityResult(
-                title: timedOut ? "Command Timed Out" : "Command Result",
+                title: output.timedOut ? "Command Timed Out" : "Command Result",
                 content: """
                 command: \(commandURL.path)
                 working_directory: \(workingDirectory.path)
-                exit_status: \(status)
-                timed_out: \(timedOut)
+                exit_status: \(output.status)
+                timed_out: \(output.timedOut)
 
                 stdout:
                 \(String(stdoutText.prefix(6_000)))
@@ -2042,10 +2000,15 @@ final class CapabilityExecutor {
             .replacingOccurrences(of: "{{user_id}}", with: config.userID)
     }
 
+    /// Compiled once — building an NSRegularExpression per call is wasteful
+    /// on the tool-loop hot path.
+    nonisolated(unsafe) private static let jsonTokenRegex = try? NSRegularExpression(
+        pattern: #"\{\{json:([A-Za-z0-9_\-]+)(?:\|([^}]+))?\}\}"#
+    )
+
     private func renderTemplateTokens(in template: String, arguments: [String: Any]) -> String {
         var rendered = template
-        let pattern = #"\{\{json:([A-Za-z0-9_\-]+)(?:\|([^}]+))?\}\}"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return rendered }
+        guard let regex = Self.jsonTokenRegex else { return rendered }
         let matches = regex.matches(in: rendered, range: NSRange(rendered.startIndex..., in: rendered)).reversed()
         for match in matches {
             guard let fullRange = Range(match.range(at: 0), in: rendered),
@@ -2335,11 +2298,14 @@ final class CapabilityExecutor {
 }
 
 extension JSONEncoder {
-    static var pretty: JSONEncoder {
+    /// Built once — `static var` allocated and configured a fresh encoder on
+    /// every access. JSONEncoder is stateless across encode() calls, so
+    /// sharing is safe.
+    nonisolated(unsafe) static let pretty: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return encoder
-    }
+    }()
 }
 
 private extension String {

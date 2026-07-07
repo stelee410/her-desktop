@@ -199,10 +199,15 @@ struct DreamReflectionBuilder {
         String(format: "%.2f", value)
     }
 
-    private func isoString(_ date: Date) -> String {
+    // Built once; ISO8601DateFormatter construction is not cheap.
+    nonisolated(unsafe) private static let isoFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
-        return formatter.string(from: date)
+        return formatter
+    }()
+
+    private func isoString(_ date: Date) -> String {
+        Self.isoFormatter.string(from: date)
     }
 }
 

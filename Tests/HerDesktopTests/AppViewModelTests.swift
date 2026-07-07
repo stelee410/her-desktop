@@ -851,6 +851,76 @@ final class AppViewModelTests: XCTestCase {
                       "the target transcript must survive a save during its load")
     }
 
+    func testSwitchToCorruptTranscriptSurfacesBackupInsteadOfSilentEmpty() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-corrupt-switch-\(UUID().uuidString)", isDirectory: true)
+        // Prepare on disk BEFORE the model exists: "a" is active and valid,
+        // "b" is corrupt.
+        let store = ConversationStore(cwd: root.path)
+        let now = Date()
+        try store.saveIndex(
+            conversations: [
+                ConversationSummary(id: "a", title: "A", pinned: false, createdAt: now, updatedAt: now),
+                ConversationSummary(id: "b", title: "B", pinned: false, createdAt: now, updatedAt: now)
+            ],
+            activeConversationID: "a"
+        )
+        try store.saveMessages([ChatMessage(role: .user, content: "alive")], id: "a")
+        try Data("BROKEN {".utf8).write(to: store.conversationURL(id: "b"))
+
+        let model = AppViewModel(cwd: root.path)
+        model.switchConversation(to: "b")
+        for _ in 0..<100 where model.isLoadingConversation {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+
+        // Corruption is surfaced, not conflated with an empty conversation…
+        XCTAssertTrue(model.messages.first?.content.contains("无法读取") == true)
+        XCTAssertTrue(model.auditEvents.contains { $0.type == "session.transcript_corrupt" })
+        // …and the original bytes survive in a backup no later save can touch.
+        let backups = try FileManager.default
+            .contentsOfDirectory(atPath: store.directoryURL.path)
+            .filter { $0.contains(".corrupt-") }
+        XCTAssertFalse(backups.isEmpty)
+        let backupData = try Data(contentsOf: store.directoryURL.appendingPathComponent(backups[0]))
+        XCTAssertEqual(String(data: backupData, encoding: .utf8), "BROKEN {")
+    }
+
+    func testDeleteActiveConversationMidLoadDoesNotDisableSaves() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-delete-midload-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(cwd: root.path)
+        let first = model.activeConversationID
+        model.messages.append(ChatMessage(role: .user, content: "keep me"))
+        model.saveSessionSnapshot()
+        model.newLocalConversation()
+
+        // Enter the load window for `first`, then delete it before the load
+        // completes. This used to strand isLoadingConversation == true,
+        // turning every later save into a silent no-op.
+        model.switchConversation(to: first)
+        XCTAssertTrue(model.isLoadingConversation)
+        await model.deleteConversation(first, compactingIntoMemory: false)
+
+        for _ in 0..<100 where model.isLoadingConversation {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertFalse(model.isLoadingConversation, "an abandoned load must not leave saves disabled")
+
+        // Saves must work again: edit and verify it lands on disk.
+        model.messages.append(ChatMessage(role: .user, content: "after delete"))
+        model.saveSessionSnapshot()
+        let activeID = model.activeConversationID
+        let checkStore = ConversationStore(cwd: root.path)
+        var persisted = false
+        for _ in 0..<100 where !persisted {
+            persisted = ((try? checkStore.loadMessages(id: activeID)) ?? [])
+                .contains { $0.content == "after delete" }
+            if !persisted { try? await Task.sleep(nanoseconds: 20_000_000) }
+        }
+        XCTAssertTrue(persisted, "saves after the aborted load must persist")
+    }
+
     func testConversationOrderIsStableWhenUsed() {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-order-\(UUID().uuidString)", isDirectory: true)
@@ -888,6 +958,37 @@ final class AppViewModelTests: XCTestCase {
         model.newLocalConversation()
         XCTAssertTrue(model.autoApprovedCapabilities.isEmpty)
         XCTAssertTrue(model.requiresApproval(capabilityID: "browser.navigate"))
+    }
+
+    func testShellRunAutoApprovalIsScopedToTheCommandName() async {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-shell-scope-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(cwd: root.path)
+
+        func invocation(_ command: String) -> CapabilityInvocation {
+            CapabilityInvocation(
+                toolCallID: UUID().uuidString,
+                functionName: "shell_run",
+                capabilityID: "shell.run",
+                arguments: ["command": command, "args": ["x"]]
+            )
+        }
+
+        // "一直批准" one benign mkdir…
+        let key = AppViewModel.autoApprovalKey(
+            capabilityID: "shell.run",
+            arguments: ["command": "mkdir"]
+        )
+        model.autoApprovedCapabilities.insert(key)
+
+        // …must only cover mkdir, never every later shell.run.
+        XCTAssertFalse(model.requiresApproval(for: invocation("mkdir")))
+        XCTAssertTrue(model.requiresApproval(for: invocation("rm")),
+                      "approving mkdir must not silently approve rm")
+        XCTAssertTrue(model.requiresApproval(for: invocation("curl")),
+                      "approving mkdir must not silently approve curl")
+        // The bare capability ID also stays gated.
+        XCTAssertTrue(model.requiresApproval(capabilityID: "shell.run"))
     }
 
     func testTypingWhileGeneratingSteersInsteadOfStartingNewTurn() {
@@ -963,6 +1064,10 @@ final class AppViewModelTests: XCTestCase {
 
         XCTAssertEqual(model.conversations.count, 1)
         XCTAssertEqual(model.activeConversationID, firstID)
+        // The remaining conversation's transcript loads off the main thread.
+        for _ in 0..<100 where !model.messages.contains(where: { $0.content == "keep me" }) {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
         XCTAssertTrue(model.messages.contains { $0.content == "keep me" })
         XCTAssertFalse(FileManager.default.fileExists(
             atPath: ConversationStore(cwd: root.path).conversationURL(id: secondID).path
@@ -1176,7 +1281,7 @@ final class AppViewModelTests: XCTestCase {
             toolCallID: "t1", functionName: "terminal_open", capabilityID: "terminal.open", arguments: [:]
         ))
         XCTAssertEqual(opened.title, "Terminal Opened")
-        XCTAssertTrue(model.isTerminalPresented)
+        XCTAssertTrue(model.chrome.isTerminalPresented)
         XCTAssertTrue(fake.isRunning)
         XCTAssertTrue(opened.content.contains("her %"))
 
@@ -1259,7 +1364,7 @@ final class AppViewModelTests: XCTestCase {
             toolCallID: "b1", functionName: "browser_open", capabilityID: "browser.open", arguments: [:]
         ))
         XCTAssertEqual(opened.title, "Browser Opened")
-        XCTAssertTrue(model.isBrowserPresented)
+        XCTAssertTrue(model.chrome.isBrowserPresented)
         XCTAssertTrue(fake.isRunning)
 
         let nav = await model.executeCapabilityInvocation(CapabilityInvocation(
