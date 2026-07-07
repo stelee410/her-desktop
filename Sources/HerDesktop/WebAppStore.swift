@@ -26,6 +26,10 @@ struct WebAppManifest: Identifiable, Codable, Equatable {
     /// Optional for backward compatibility with manifests written before
     /// pinning existed; use `isPinned`.
     var pinned: Bool?
+    /// Set when this app was materialized from an installed plugin package
+    /// (webapp adapter kind); reinstalling that plugin updates this app
+    /// instead of creating a duplicate.
+    var sourcePluginID: String?
 
     var isPinned: Bool { pinned ?? false }
 
@@ -39,6 +43,7 @@ struct WebAppManifest: Identifiable, Codable, Equatable {
         case runtime
         case widget
         case pinned
+        case sourcePluginID = "source_plugin_id"
     }
 }
 
@@ -250,6 +255,50 @@ final class WebAppStore: @unchecked Sendable {
         try fileManager.createDirectory(at: backendDirectory(id: id), withIntermediateDirectories: true)
         try Data(code.utf8).write(to: backendDirectory(id: id).appendingPathComponent(fileName), options: .atomic)
         return WebAppRuntime(type: type, entry: "backend/\(fileName)")
+    }
+
+    /// Create-or-update the web app materialized from an installed plugin
+    /// package (webapp adapter kind). Keyed by sourcePluginID so a plugin
+    /// update refreshes its app instead of stacking duplicates.
+    @discardableResult
+    func installFromPlugin(
+        pluginID: String,
+        name: String,
+        description: String,
+        html: String,
+        backendType: String? = nil,
+        backendCode: String? = nil,
+        widgetHTML: String? = nil,
+        llmsTxt: String? = nil,
+        now: Date = Date()
+    ) throws -> WebAppManifest {
+        if let existing = loadAll().first(where: { $0.sourcePluginID == pluginID }) {
+            return try update(
+                id: existing.id,
+                html: html,
+                name: name,
+                description: description,
+                backendType: backendType,
+                backendCode: backendCode,
+                widgetHTML: widgetHTML,
+                llmsTxt: llmsTxt,
+                now: now
+            )
+        }
+        var manifest = try create(
+            name: name,
+            description: description,
+            html: html,
+            backendType: backendType,
+            backendCode: backendCode,
+            widgetHTML: widgetHTML,
+            llmsTxt: llmsTxt,
+            idHint: pluginID.replacingOccurrences(of: "local.", with: ""),
+            now: now
+        )
+        manifest.sourcePluginID = pluginID
+        try save(manifest)
+        return manifest
     }
 
     @discardableResult

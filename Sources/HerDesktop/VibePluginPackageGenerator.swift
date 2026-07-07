@@ -107,7 +107,7 @@ struct VibePluginPackagePromptBuilder {
               {
                 "id": "local.kebab-case-name.run",
                 "title": "Run Human Name",
-                "kind": "skill | webservice | mcp | command | native",
+                "kind": "skill | webservice | mcp | command | native | webapp",
                 "invocation": "local.kebab-case-name.run",
                 "requiresApproval": true,
                 "description": "What this capability does",
@@ -119,7 +119,7 @@ struct VibePluginPackagePromptBuilder {
                   "required": ["request"]
                 },
                 "adapter": {
-                  "type": "skill | webservice | mcp | command | native",
+                  "type": "skill | webservice | mcp | command | native | webapp",
                   "url": "https://example.com/run",
                   "method": "POST",
                   "methodName": "tools/call",
@@ -161,6 +161,7 @@ struct VibePluginPackagePromptBuilder {
         - If MCP discovered input schema JSON is provided, adapt it into the capability inputSchema using only supported field types: string, number, integer, boolean, and string enums.
         - For command plugins, include adapter {"type":"command","command":"/absolute/path/or/workspace-relative-tool","arguments":["{{request}}"],"timeoutSeconds":20}; never use shell strings.
         - Command plugins must require approval. Keep commands fixed and arguments templated; use {{request}}, {{arguments_json}}, or {{field_name}} placeholders.
+        - For webapp plugins (a runnable mini web app), use kind/adapter {"type":"webapp"} and ship the app as package files: "webapp/index.html" (required), optional "webapp/widget.html" (compact widget), optional "webapp/server.js" (node backend) or "webapp/server.py" (python backend), optional "webapp/llms.txt". On install Her Desktop materializes these into its local web app runtime; invoking the capability opens the app. The page can call fetch('api/query', {method:'POST', body:JSON.stringify({sql, params})}) for its own SQLite, or fetch('backend/...') when a backend file exists.
         - For custom native plugins, declare the adapter contract but do not claim it can execute until Her Desktop has an active executor.
         - Capabilities touching files, shell, network, identity, calendar, notifications, or money should require approval.
         - Do not include API keys, secrets, user private data, or placeholders that look like real credentials.
@@ -505,7 +506,7 @@ struct PluginPackageValidator {
         }
     }
 
-    private let allowedKinds: Set<String> = ["skill", "webservice", "mcp", "command", "native"]
+    private let allowedKinds: Set<String> = ["skill", "webservice", "mcp", "command", "native", "webapp"]
 
     func validate(_ package: PluginPackage, existingPluginIDs: [String] = []) throws {
         let manifest = package.manifest
@@ -532,6 +533,12 @@ struct PluginPackageValidator {
         }
         for file in package.files {
             try validateFilePath(file.path)
+        }
+        let hasWebAppCapability = manifest.capabilities.contains {
+            ($0.adapter?.type ?? $0.kind) == "webapp"
+        }
+        if hasWebAppCapability, !package.files.contains(where: { $0.path == "webapp/index.html" }) {
+            throw ValidationError.missingField("webapp/index.html (required by the webapp capability)")
         }
         try validateNoSecretMaterial(package)
     }
@@ -692,6 +699,11 @@ struct PluginPackageValidator {
             if let toolName = adapter.toolName, !toolName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 try validateMCPToolName(toolName)
             }
+        case "webapp":
+            // The app itself ships as package files (webapp/index.html …);
+            // the adapter carries no endpoint. Presence of the entry file is
+            // checked at the package level in validate(_:existingPluginIDs:).
+            break
         case "command":
             guard let command = adapter.command, !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw ValidationError.invalidAdapter("command adapter requires command")

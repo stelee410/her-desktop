@@ -102,8 +102,7 @@ final class SystemPromptBuilderTests: XCTestCase {
         XCTAssertTrue(prompt.contains("typed memory/profile state"))
         XCTAssertTrue(prompt.contains("fixed executable paths"))
         XCTAssertTrue(prompt.contains("no shell strings"))
-        XCTAssertTrue(prompt.contains("Use `inbox.capture`"))
-        XCTAssertTrue(prompt.contains("Use `plugin.remove`"))
+        XCTAssertTrue(prompt.contains("is its authoritative usage guidance"))
         XCTAssertTrue(prompt.contains("durable AgentMem writeback"))
         XCTAssertTrue(prompt.contains("local session id stable"))
         XCTAssertTrue(prompt.contains("SOUL carries persona"))
@@ -115,22 +114,6 @@ final class SystemPromptBuilderTests: XCTestCase {
         XCTAssertTrue(prompt.contains("AgentMem retrieval is per-turn context"))
         XCTAssertTrue(prompt.contains("no secret material in generated artifacts"))
         XCTAssertTrue(prompt.contains("Live or voice modes should be shorter"))
-        XCTAssertTrue(prompt.contains("Use `workspace.writeTextFile`"))
-        XCTAssertTrue(prompt.contains("Use `workspace.replaceText`"))
-        XCTAssertTrue(prompt.contains("Use `product.diagnostics`"))
-        XCTAssertTrue(prompt.contains("Use `product.exportDiagnostics`"))
-        XCTAssertTrue(prompt.contains("reuse the returned `plugin.draft arguments`"))
-        XCTAssertTrue(prompt.contains("Use `plugin.listDrafts`"))
-        XCTAssertTrue(prompt.contains("Use `plugin.listInstalled`"))
-        XCTAssertTrue(prompt.contains("Use `plugin.inspect`"))
-        XCTAssertTrue(prompt.contains("Use `plugin.readFile`"))
-        XCTAssertTrue(prompt.contains("call `plugin.draft` with update_plugin_id"))
-        XCTAssertTrue(prompt.contains("install_immediately=true"))
-        XCTAssertTrue(prompt.contains("Use `plugin.stagePackage`"))
-        XCTAssertTrue(prompt.contains("Use `plugin.installDraft`"))
-        XCTAssertTrue(prompt.contains("exact plugin_id and draft_id"))
-        XCTAssertTrue(prompt.contains("Use `plugin.discardDraft`"))
-        XCTAssertTrue(prompt.contains("Use `plugin.export`"))
         XCTAssertTrue(prompt.contains("plugin.draft, plugin.stagePackage, plugin.listDrafts, plugin.listInstalled, plugin.inspect, plugin.readFile, plugin.installDraft, plugin.discardDraft, plugin.install, plugin.export, and plugin.remove"))
         XCTAssertTrue(prompt.contains("Dream Context"))
         XCTAssertTrue(prompt.contains("compressed context from the companion/dream runtime"))
@@ -140,6 +123,23 @@ final class SystemPromptBuilderTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Observe -> Plan -> Act -> Reflect"))
         XCTAssertTrue(prompt.contains("Use it to avoid duplicate work"))
         XCTAssertTrue(prompt.contains("Plan: Needs approval"))
+    }
+
+    func testPromptRendersUsageHintsFromBuiltinManifests() {
+        // Per-capability "when to use" guidance now comes from each
+        // manifest's usageHint (single source of truth), rendered as
+        // "Use when:" lines — not hand-maintained prose in the builder.
+        let builtins = PluginRegistry(config: .empty).loadPlugins()
+        let prompt = SystemPromptBuilder(
+            pluginManifests: builtins,
+            projectDocs: ProjectPromptDocs(soul: "s", project: "p")
+        ).build(memoryContext: "", activeTaskSummary: "")
+
+        XCTAssertTrue(prompt.contains("Use when:"))
+        XCTAssertTrue(prompt.contains("remind, notify, nudge, or alert"))
+        XCTAssertTrue(prompt.contains("never remove built-in plugins, and wait for the approval flow."))
+        XCTAssertTrue(prompt.contains("install_immediately=true"))
+        XCTAssertTrue(prompt.contains("do not treat staging as installation"))
     }
 
     func testPromptIncludesExplicitPromptDocumentSources() {

@@ -1,212 +1,214 @@
 {
-  "author" : "Her",
-  "capabilities" : [
+  "author": "Her",
+  "capabilities": [
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "id" : "workspace.inspect",
-      "inputSchema" : {
-        "properties" : {
-          "max_files" : {
-            "description" : "Maximum number of workspace files to summarize.",
-            "type" : "integer"
+      "id": "workspace.inspect",
+      "inputSchema": {
+        "properties": {
+          "max_files": {
+            "description": "Maximum number of workspace files to summarize.",
+            "type": "integer"
           }
         },
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "workspace.inspect",
-      "kind" : "native",
-      "requiresApproval" : false,
-      "title" : "Inspect workspace"
+      "invocation": "workspace.inspect",
+      "kind": "native",
+      "requiresApproval": false,
+      "title": "Inspect workspace"
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Search workspace file names and approved UTF-8 file contents.",
-      "id" : "workspace.search",
-      "inputSchema" : {
-        "properties" : {
-          "include_content" : {
-            "description" : "Whether to search UTF-8 file contents in addition to file names.",
-            "type" : "boolean"
+      "description": "Search workspace file names and approved UTF-8 file contents.",
+      "id": "workspace.search",
+      "inputSchema": {
+        "properties": {
+          "include_content": {
+            "description": "Whether to search UTF-8 file contents in addition to file names.",
+            "type": "boolean"
           },
-          "max_file_bytes" : {
-            "description" : "Maximum file size to read when include_content is true.",
-            "type" : "integer"
+          "max_file_bytes": {
+            "description": "Maximum file size to read when include_content is true.",
+            "type": "integer"
           },
-          "max_results" : {
-            "description" : "Maximum number of matching files to return.",
-            "type" : "integer"
+          "max_results": {
+            "description": "Maximum number of matching files to return.",
+            "type": "integer"
           },
-          "query" : {
-            "description" : "Case-insensitive text to search for in file names and UTF-8 content.",
-            "type" : "string"
+          "query": {
+            "description": "Case-insensitive text to search for in file names and UTF-8 content.",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "query"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "workspace.search",
-      "kind" : "native",
-      "requiresApproval" : true,
-      "title" : "Search workspace"
+      "invocation": "workspace.search",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Search workspace"
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Write an approved UTF-8 text file inside the current workspace.",
-      "id" : "workspace.writeTextFile",
-      "inputSchema" : {
-        "properties" : {
-          "content" : {
-            "description" : "UTF-8 text content to write.",
-            "type" : "string"
+      "description": "Write an approved UTF-8 text file inside the current workspace.",
+      "id": "workspace.writeTextFile",
+      "inputSchema": {
+        "properties": {
+          "content": {
+            "description": "UTF-8 text content to write.",
+            "type": "string"
           },
-          "create_parent_directories" : {
-            "description" : "Whether to create missing parent directories inside the workspace.",
-            "type" : "boolean"
+          "create_parent_directories": {
+            "description": "Whether to create missing parent directories inside the workspace.",
+            "type": "boolean"
           },
-          "overwrite" : {
-            "description" : "Whether to replace an existing file after explicit confirmation.",
-            "type" : "boolean"
+          "overwrite": {
+            "description": "Whether to replace an existing file after explicit confirmation.",
+            "type": "boolean"
           },
-          "path" : {
-            "description" : "Workspace-relative path, or an absolute path inside the current workspace.",
-            "type" : "string"
+          "path": {
+            "description": "Workspace-relative path, or an absolute path inside the current workspace.",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "path",
           "content"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "workspace.writeTextFile",
-      "kind" : "native",
-      "requiresApproval" : true,
-      "title" : "Write text file"
+      "invocation": "workspace.writeTextFile",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Write text file",
+      "usageHint": "the user asks you to create or update a UTF-8 text artifact inside the current workspace; request approval before writing and report only the executor result."
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Replace exact text inside an approved UTF-8 workspace file.",
-      "id" : "workspace.replaceText",
-      "inputSchema" : {
-        "properties" : {
-          "expected_replacements" : {
-            "description" : "Optional exact occurrence count required before editing.",
-            "type" : "integer"
+      "description": "Replace exact text inside an approved UTF-8 workspace file.",
+      "id": "workspace.replaceText",
+      "inputSchema": {
+        "properties": {
+          "expected_replacements": {
+            "description": "Optional exact occurrence count required before editing.",
+            "type": "integer"
           },
-          "path" : {
-            "description" : "Workspace-relative path, or an absolute path inside the current workspace.",
-            "type" : "string"
+          "path": {
+            "description": "Workspace-relative path, or an absolute path inside the current workspace.",
+            "type": "string"
           },
-          "replace_all" : {
-            "description" : "Whether to replace every occurrence instead of only the first.",
-            "type" : "boolean"
+          "replace_all": {
+            "description": "Whether to replace every occurrence instead of only the first.",
+            "type": "boolean"
           },
-          "replacement" : {
-            "description" : "Replacement text. May be empty to delete the search text.",
-            "type" : "string"
+          "replacement": {
+            "description": "Replacement text. May be empty to delete the search text.",
+            "type": "string"
           },
-          "search" : {
-            "description" : "Exact text to find in the UTF-8 file.",
-            "type" : "string"
+          "search": {
+            "description": "Exact text to find in the UTF-8 file.",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "path",
           "search",
           "replacement"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "workspace.replaceText",
-      "kind" : "native",
-      "requiresApproval" : true,
-      "title" : "Replace text"
+      "invocation": "workspace.replaceText",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Replace text",
+      "usageHint": "exact, approved edits to an existing UTF-8 workspace file are needed; prefer expected_replacements when the intended occurrence count is known."
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Save the current actionable work plan into Her Desktop state.",
-      "id" : "workspace.plan",
-      "inputSchema" : {
-        "properties" : {
-          "goal" : {
-            "description" : "Concrete outcome this plan should make true.",
-            "type" : "string"
+      "description": "Save the current actionable work plan into Her Desktop state.",
+      "id": "workspace.plan",
+      "inputSchema": {
+        "properties": {
+          "goal": {
+            "description": "Concrete outcome this plan should make true.",
+            "type": "string"
           },
-          "request" : {
-            "description" : "Fallback planning request when a structured goal is not available.",
-            "type" : "string"
+          "request": {
+            "description": "Fallback planning request when a structured goal is not available.",
+            "type": "string"
           },
-          "risks" : {
-            "description" : "Known risks, trust concerns, or implementation cautions.",
-            "items" : {
-              "type" : "string"
+          "risks": {
+            "description": "Known risks, trust concerns, or implementation cautions.",
+            "items": {
+              "type": "string"
             },
-            "type" : "array"
+            "type": "array"
           },
-          "steps" : {
-            "description" : "Ordered plan steps. Each item can include title, status, and detail.",
-            "items" : {
-              "properties" : {
-                "detail" : {
-                  "description" : "Optional evidence, scope, or implementation note.",
-                  "type" : "string"
+          "steps": {
+            "description": "Ordered plan steps. Each item can include title, status, and detail.",
+            "items": {
+              "properties": {
+                "detail": {
+                  "description": "Optional evidence, scope, or implementation note.",
+                  "type": "string"
                 },
-                "status" : {
-                  "description" : "Current step state.",
-                  "enum" : [
+                "status": {
+                  "description": "Current step state.",
+                  "enum": [
                     "pending",
                     "in_progress",
                     "done",
                     "blocked"
                   ],
-                  "type" : "string"
+                  "type": "string"
                 },
-                "title" : {
-                  "description" : "Short testable step.",
-                  "type" : "string"
+                "title": {
+                  "description": "Short testable step.",
+                  "type": "string"
                 }
               },
-              "required" : [
+              "required": [
                 "title"
               ],
-              "type" : "object"
+              "type": "object"
             },
-            "type" : "array"
+            "type": "array"
           },
-          "verification" : {
-            "description" : "Commands, UI checks, or service checks that should prove the plan.",
-            "items" : {
-              "type" : "string"
+          "verification": {
+            "description": "Commands, UI checks, or service checks that should prove the plan.",
+            "items": {
+              "type": "string"
             },
-            "type" : "array"
+            "type": "array"
           }
         },
-        "required" : [
+        "required": [
           "goal"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "workspace.plan",
-      "kind" : "native",
-      "requiresApproval" : false,
-      "title" : "Save work plan"
+      "invocation": "workspace.plan",
+      "kind": "native",
+      "requiresApproval": false,
+      "title": "Save work plan"
     }
   ],
-  "description" : "Read local context, summarize files, write or edit approved text artifacts, and prepare work plans with explicit approval.",
-  "id" : "builtin.workspace",
-  "name" : "Workspace",
-  "systemPromptAddendum" : "Workspace actions require user approval before file mutation or shell execution.",
-  "version" : "0.1.0"
+  "description": "Read local context, summarize files, write or edit approved text artifacts, and prepare work plans with explicit approval.",
+  "id": "builtin.workspace",
+  "name": "Workspace",
+  "systemPromptAddendum": "Workspace actions require user approval before file mutation or shell execution.",
+  "version": "0.1.0"
 }

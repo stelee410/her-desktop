@@ -91,14 +91,20 @@ extension AppViewModel {
             rebuildRunningTasks()
             focusInstalledPlugin(draft.manifest.id)
             prepareInstalledCapabilityRun(for: draft.manifest)
+            // A webapp-kind plugin ships a runnable app; materialize it now.
+            let webAppLine = materializePluginWebApp(package: draft.package)
+            var content = pluginInstalledContent(
+                package: draft.package,
+                source: source,
+                title: title,
+                verb: verb
+            )
+            if let webAppLine {
+                content += "\n\(webAppLine)"
+            }
             return CapabilityResult(
                 title: title,
-                content: pluginInstalledContent(
-                    package: draft.package,
-                    source: source,
-                    title: title,
-                    verb: verb
-                ),
+                content: content,
                 requiresUserApproval: false
             )
         } catch {
@@ -1699,6 +1705,8 @@ extension AppViewModel {
         rebuildRunningTasks()
         focusInstalledPlugin(documented.manifest.id)
         prepareInstalledCapabilityRun(for: documented.manifest)
+        // A webapp-kind plugin ships a runnable app; materialize it now.
+        materializePluginWebApp(package: documented)
     }
 
     func focusInstalledPlugin(_ pluginID: String) {

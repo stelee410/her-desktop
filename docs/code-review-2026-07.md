@@ -1,7 +1,8 @@
 # Her Desktop — 全面代码 Review（2026-07）
 
 > **进度（2026-07-07）**：批次 1（止血）✅ 全部完成；批次 2（性能）✅ 全部完成（含 P0 状态拆分、P2 的 audit/index 异步写盘）；批次 3 ✅ A3 管线去重、E3a/E3b 类型化、A1/E1 Handler 注册表（三套分发表已收敛）、E2 删除双份 schema、A4b 视图分离、A4d/A4f 种子缝；批次 4 ✅ S3 网络收紧（Host 校验/去通配 CORS/常数时间比较/Referrer-Policy）、E4c manifest schemaVersion。
-> **待做**：E4a webapp adapter kind、E4b MCPClient、E4d usageHint、A2 AgentTurnRunner、A4c AppEnvironment（后两项是纯内部大重构，风险最高，安排为最后独立执行）。A4a presentationHint 有意暂缓：当前"能力打开抽屉"是刻意的产品行为，等出现无头调用方（inbox 后台执行）再引入意图机制。
+> **批次 4 补充完成**：✅ E4d usageHint（"何时使用"指引移入 manifest，SystemPromptBuilder 手写 prose 精简为 kind 级不变式）；✅ E4a webapp adapter kind（vibe coding 可产出可运行的 webapp 插件：validator/生成器提示词/draft 管线支持 webapp kind，安装时物化到 webapp 运行时（按 sourcePluginID 更新不重复），调用能力即打开 app，端到端测试覆盖）；✅ E4b MCPClient（会话感知 actor：每 bridge 一次 initialize 握手（容错，纯 JSON-RPC bridge 不受影响）+ tools/list 缓存，executeMCP 走共享客户端）。
+> **有意保留（各自独立会话执行）**：A2 AgentTurnRunner + A4c AppEnvironment——纯内部结构重构；P0 拆分已消除其性能动机、fake-LLM 测试已覆盖循环，剩余收益为结构纯度而风险集中在流式/steering 核心链路，不宜在长会话尾部执行。E4b 的"动态工具目录"需要先决定 MCP 服务器注册的配置界面（产品决策）。A4a presentationHint 等出现无头调用方（inbox 后台执行）再引入。stdio MCP 传输可在 MCPClient 同一接口后补充。
 
 > 覆盖五个维度：**架构与分层、可扩展性、健壮性与代码质量、安全与数据安全、性能**。
 > 性能维度上一轮已单独成文（[performance-optimization-plan.md](performance-optimization-plan.md)），本文只收录其结论摘要，不重复展开。

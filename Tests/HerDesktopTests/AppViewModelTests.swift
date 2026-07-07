@@ -2456,6 +2456,87 @@ final class AppViewModelTests: XCTestCase {
         })
     }
 
+    func testWebAppPluginInstallMaterializesRunnableApp() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-webapp-plugin-\(UUID().uuidString)", isDirectory: true)
+        let cwd = root.appendingPathComponent("workspace", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.pluginDirectory = root.appendingPathComponent("plugins", isDirectory: true).path
+
+        // A vibe-coded webapp plugin: manifest declares kind "webapp"; the
+        // app itself ships as package files under webapp/.
+        let manifest = PluginManifest(
+            id: "local.tiny-counter",
+            name: "Tiny Counter",
+            version: "0.1.0",
+            description: "A tiny counter app.",
+            author: "Vibe coded",
+            systemPromptAddendum: nil,
+            capabilities: [
+                .init(
+                    id: "local.tiny-counter.open",
+                    title: "Open Tiny Counter",
+                    kind: "webapp",
+                    invocation: "local.tiny-counter.open",
+                    requiresApproval: false,
+                    adapter: .init(type: "webapp")
+                )
+            ]
+        )
+        let package = PluginPackage(manifest: manifest, files: [
+            .init(path: "README.md", content: "# Tiny Counter"),
+            .init(path: "SKILL.md", content: "# Usage"),
+            .init(path: "webapp/index.html", content: "<html><body>counter</body></html>"),
+            .init(path: "webapp/widget.html", content: "<html><body>mini</body></html>")
+        ])
+
+        // The validator accepts the webapp kind and requires the entry file.
+        XCTAssertNoThrow(try PluginPackageValidator().validate(package))
+        var broken = package
+        broken.files.removeAll { $0.path == "webapp/index.html" }
+        XCTAssertThrowsError(try PluginPackageValidator().validate(broken))
+
+        // Install the draft → the app is materialized into the runtime.
+        let model = AppViewModel(config: config, cwd: cwd.path)
+        let draft = GeneratedPluginDraft(package: package, source: "test")
+        model.generatedPluginDrafts = [draft]
+        let result = await model.installGeneratedPluginDraftResult(
+            draft, source: "test", eventSource: "test", summary: "test draft"
+        )
+        XCTAssertEqual(result.title, "Plugin Installed")
+        XCTAssertTrue(result.content.contains("webapp: materialized app_id:"))
+
+        let app = try XCTUnwrap(model.webApps.first { $0.sourcePluginID == "local.tiny-counter" })
+        XCTAssertEqual(app.name, "Tiny Counter")
+        XCTAssertNotNil(app.widget, "widget.html should materialize as a widget")
+
+        // Invoking the capability opens the app.
+        let open = await model.executeCapabilityInvocation(CapabilityInvocation(
+            toolCallID: "t1",
+            functionName: "local_tiny_counter_open",
+            capabilityID: "local.tiny-counter.open",
+            arguments: [:]
+        ))
+        XCTAssertEqual(open.title, "Web App Opened")
+        XCTAssertEqual(open.outcome, .ok)
+        XCTAssertEqual(model.selectedWebAppID, app.id)
+
+        // Reinstalling (plugin update) refreshes the same app, no duplicate.
+        var updated = package
+        updated.files = updated.files.map {
+            $0.path == "webapp/index.html"
+                ? .init(path: $0.path, content: "<html><body>counter v2</body></html>")
+                : $0
+        }
+        let draft2 = GeneratedPluginDraft(package: updated, source: "test")
+        model.generatedPluginDrafts = [draft2]
+        _ = await model.installGeneratedPluginDraftResult(
+            draft2, source: "test", eventSource: "test", summary: "test draft"
+        )
+        let matching = model.webApps.filter { $0.sourcePluginID == "local.tiny-counter" }
+        XCTAssertEqual(matching.count, 1, "plugin update must refresh the app, not duplicate it")
+    }
+
     func testPluginListInstalledCapabilityReportsLocalPluginActions() async throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-list-installed-plugins-capability-\(UUID().uuidString)", isDirectory: true)

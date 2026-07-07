@@ -903,25 +903,20 @@ final class CapabilityExecutor {
             )
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 20
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        for (key, value) in adapter.headers ?? [:] {
-            request.setValue(value, forHTTPHeaderField: key)
-        }
-
-        let body: [String: Any] = [
-            "jsonrpc": "2.0",
-            "id": invocation.toolCallID,
-            "method": methodName,
-            "params": mcpParams(adapter: adapter, methodName: methodName, arguments: invocation.arguments)
-        ]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
-
         do {
-            let (data, response) = try await urlSession.data(for: request)
-            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            // Session-aware client: the MCP initialize handshake runs once
+            // per bridge (tolerantly — plain JSON-RPC bridges still work),
+            // instead of a bare per-call POST with no lifecycle.
+            let params = mcpParams(adapter: adapter, methodName: methodName, arguments: invocation.arguments)
+            let paramsJSON = (try? JSONSerialization.data(withJSONObject: params, options: [.sortedKeys])) ?? Data("{}".utf8)
+            let (data, status) = try await MCPClient.shared.call(
+                method: methodName,
+                paramsJSON: paramsJSON,
+                requestID: invocation.toolCallID,
+                url: url,
+                headers: adapter.headers ?? [:],
+                urlSession: urlSession
+            )
             let body = SecretRedactor.redact(
                 String(data: Data(data.prefix(6_000)), encoding: .utf8) ?? "\(data.count) bytes",
                 config: config
@@ -1710,6 +1705,8 @@ final class CapabilityExecutor {
             description = "User input passed into the fixed command template."
         case "native":
             description = "Request for the native macOS adapter."
+        case "webapp":
+            description = "Optional note; invoking this capability opens the packaged web app."
         default:
             description = "User request for this capability."
         }
@@ -1826,6 +1823,11 @@ final class CapabilityExecutor {
             )
         case "native":
             return .init(type: "native")
+        case "webapp":
+            // The app ships as package files (webapp/index.html …); no
+            // adapter endpoint. Install materializes it into the web app
+            // runtime; invocation opens it.
+            return .init(type: "webapp")
         default:
             return nil
         }

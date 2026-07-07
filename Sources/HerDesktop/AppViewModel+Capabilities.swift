@@ -247,6 +247,12 @@ extension AppViewModel {
         if let handler = Self.appCapabilityHandlers[invocation.capabilityID] {
             return await handler(self, invocation)
         }
+        // Installed plugins with a webapp adapter open their materialized app
+        // (needs app state: web app store + workspace navigation).
+        if let capability = pluginRegistry.capability(id: invocation.capabilityID, in: plugins),
+           (capability.adapter?.type ?? capability.kind) == "webapp" {
+            return openPluginWebAppCapability(capability: capability)
+        }
         return await capabilityExecutor.execute(invocation)
     }
 

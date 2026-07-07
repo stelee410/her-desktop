@@ -1,123 +1,125 @@
 {
-  "author" : "Her",
-  "capabilities" : [
+  "author": "Her",
+  "capabilities": [
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Schedule a local macOS notification/reminder.",
-      "id" : "native.notify",
-      "inputSchema" : {
-        "properties" : {
-          "body" : {
-            "description" : "Notification body text.",
-            "type" : "string"
+      "description": "Schedule a local macOS notification/reminder.",
+      "id": "native.notify",
+      "inputSchema": {
+        "properties": {
+          "body": {
+            "description": "Notification body text.",
+            "type": "string"
           },
-          "delay_seconds" : {
-            "description" : "Delay before delivery. Use 1 for immediate notifications.",
-            "type" : "number"
+          "delay_seconds": {
+            "description": "Delay before delivery. Use 1 for immediate notifications.",
+            "type": "number"
           },
-          "title" : {
-            "description" : "Short notification title.",
-            "type" : "string"
+          "title": {
+            "description": "Short notification title.",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "title",
           "body"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "native.notify",
-      "kind" : "native",
-      "requiresApproval" : true,
-      "title" : "Schedule notification"
+      "invocation": "native.notify",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Schedule notification",
+      "usageHint": "the user asks Her to remind, notify, nudge, or alert them with a local Mac notification."
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Read a local UTF-8 text file into the conversation after user approval.",
-      "id" : "native.readTextFile",
-      "inputSchema" : {
-        "properties" : {
-          "max_chars" : {
-            "description" : "Maximum characters to return.",
-            "type" : "integer"
+      "description": "Read a local UTF-8 text file into the conversation after user approval.",
+      "id": "native.readTextFile",
+      "inputSchema": {
+        "properties": {
+          "max_chars": {
+            "description": "Maximum characters to return.",
+            "type": "integer"
           },
-          "path" : {
-            "description" : "Absolute path, ~/ path, or path relative to the current workspace.",
-            "type" : "string"
+          "path": {
+            "description": "Absolute path, ~/ path, or path relative to the current workspace.",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "path"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "native.readTextFile",
-      "kind" : "native",
-      "requiresApproval" : true,
-      "title" : "Read text file"
+      "invocation": "native.readTextFile",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Read text file",
+      "usageHint": "the user asks you to inspect a local text file path; summarize the intended read before requesting approval."
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Speak text aloud through macOS speech synthesis after user approval.",
-      "id" : "native.speak",
-      "inputSchema" : {
-        "properties" : {
-          "text" : {
-            "description" : "Text to speak aloud through macOS speech synthesis.",
-            "type" : "string"
+      "description": "Speak text aloud through macOS speech synthesis after user approval.",
+      "id": "native.speak",
+      "inputSchema": {
+        "properties": {
+          "text": {
+            "description": "Text to speak aloud through macOS speech synthesis.",
+            "type": "string"
           },
-          "voice" : {
-            "description" : "Optional AVSpeechSynthesisVoice identifier.",
-            "type" : "string"
+          "voice": {
+            "description": "Optional AVSpeechSynthesisVoice identifier.",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "text"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "native.speak",
-      "kind" : "native",
-      "requiresApproval" : true,
-      "title" : "Speak aloud"
+      "invocation": "native.speak",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Speak aloud"
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Inspect a user-imported attachment under .her/attachments, extracting text from UTF-8 and PDF files or metadata from images.",
-      "id" : "native.inspectAttachment",
-      "inputSchema" : {
-        "properties" : {
-          "max_chars" : {
-            "description" : "Maximum extracted text characters to return.",
-            "type" : "integer"
+      "description": "Inspect a user-imported attachment under .her/attachments, extracting text from UTF-8 and PDF files or metadata from images.",
+      "id": "native.inspectAttachment",
+      "inputSchema": {
+        "properties": {
+          "max_chars": {
+            "description": "Maximum extracted text characters to return.",
+            "type": "integer"
           },
-          "path" : {
-            "description" : "Stored attachment path from .her/attachments, or a filename inside that directory.",
-            "type" : "string"
+          "path": {
+            "description": "Stored attachment path from .her/attachments, or a filename inside that directory.",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "path"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "native.inspectAttachment",
-      "kind" : "native",
-      "requiresApproval" : true,
-      "title" : "Inspect attachment"
+      "invocation": "native.inspectAttachment",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Inspect attachment"
     }
   ],
-  "description" : "Mac-native actions exposed through the same plugin capability contract as external extensions.",
-  "id" : "builtin.native-macos",
-  "name" : "Native macOS",
-  "systemPromptAddendum" : "Native macOS actions require explicit user approval before side effects or local file access.",
-  "version" : "0.1.0"
+  "description": "Mac-native actions exposed through the same plugin capability contract as external extensions.",
+  "id": "builtin.native-macos",
+  "name": "Native macOS",
+  "systemPromptAddendum": "Native macOS actions require explicit user approval before side effects or local file access.",
+  "version": "0.1.0"
 }

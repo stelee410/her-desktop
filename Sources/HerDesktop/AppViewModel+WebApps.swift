@@ -39,6 +39,95 @@ extension AppViewModel {
         return webAppServer.url(for: id, page: widget.entry)
     }
 
+    /// Materialize a plugin package's `webapp/*` files into the local web
+    /// app runtime (webapp adapter kind). Called after a successful plugin
+    /// install; keyed by plugin id, so plugin updates refresh the app.
+    /// Returns a status line for the install result, or nil when the package
+    /// declares no webapp capability.
+    @discardableResult
+    func materializePluginWebApp(package: PluginPackage) -> String? {
+        let hasWebAppCapability = package.manifest.capabilities.contains {
+            ($0.adapter?.type ?? $0.kind) == "webapp"
+        }
+        guard hasWebAppCapability else { return nil }
+        let files = Dictionary(uniqueKeysWithValues: package.files.map { ($0.path, $0.content) })
+        guard let html = files["webapp/index.html"], !html.isEmpty else {
+            return "webapp: package declares a webapp capability but webapp/index.html is missing."
+        }
+        let backendType: String?
+        let backendCode: String?
+        if let node = files["webapp/server.js"], !node.isEmpty {
+            backendType = "node"
+            backendCode = node
+        } else if let python = files["webapp/server.py"] ?? files["webapp/backend.py"], !python.isEmpty {
+            backendType = "python"
+            backendCode = python
+        } else {
+            backendType = nil
+            backendCode = nil
+        }
+        do {
+            let manifest = try webAppStore.installFromPlugin(
+                pluginID: package.manifest.id,
+                name: package.manifest.name,
+                description: package.manifest.description,
+                html: html,
+                backendType: backendType,
+                backendCode: backendCode,
+                widgetHTML: files["webapp/widget.html"],
+                llmsTxt: files["webapp/llms.txt"]
+            )
+            refreshWebApps()
+            audit(
+                type: "webapp.installed_from_plugin",
+                summary: "Materialized web app \(manifest.name) from plugin \(package.manifest.id).",
+                metadata: ["appID": manifest.id, "pluginID": package.manifest.id]
+            )
+            let url = webAppURL(manifest.id)?.absoluteString ?? "unavailable"
+            return "webapp: materialized app_id: \(manifest.id) (\(url)); invoke the plugin's webapp capability to open it."
+        } catch {
+            audit(
+                type: "webapp.install_from_plugin_failed",
+                summary: error.localizedDescription,
+                metadata: ["pluginID": package.manifest.id]
+            )
+            return "webapp: failed to materialize the packaged app — \(error.localizedDescription)"
+        }
+    }
+
+    /// Executes a plugin's webapp-kind capability: opens the materialized
+    /// app (self-healing if it is missing but the package is installed).
+    func openPluginWebAppCapability(capability: PluginManifest.Capability) -> CapabilityResult {
+        let pluginID = pluginRegistry.manifest(containing: capability.id, in: plugins)?.id
+        var app = webApps.first { $0.sourcePluginID != nil && $0.sourcePluginID == pluginID }
+        if app == nil, let pluginID,
+           let package = try? pluginRegistry.package(pluginID: pluginID) {
+            _ = materializePluginWebApp(package: package)
+            app = webApps.first { $0.sourcePluginID == pluginID }
+        }
+        guard let app else {
+            return CapabilityResult(
+                title: "Web App Missing",
+                content: "No materialized web app was found for capability \(capability.id). Reinstall the plugin to materialize its packaged app.",
+                requiresUserApproval: false,
+                outcome: .failed("app not materialized")
+            )
+        }
+        openWebApp(app.id)
+        let url = webAppURL(app.id)?.absoluteString ?? "unavailable"
+        return CapabilityResult(
+            title: "Web App Opened",
+            content: """
+            app_id: \(app.id)
+            name: \(app.name)
+            url: \(url)
+            The app is now open in the Apps workspace.
+            """,
+            requiresUserApproval: false,
+            outcome: .ok
+        )
+    }
+
     /// Installed apps a message refers to (via capability results or URLs),
     /// used to attach live widget cards in the conversation.
     /// Memoized per (message, content length, webApps version): this is

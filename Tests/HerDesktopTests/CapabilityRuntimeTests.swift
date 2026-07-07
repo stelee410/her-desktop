@@ -1884,6 +1884,9 @@ final class CapabilityRuntimeTests: XCTestCase {
         )
         try registry.install(manifest: manifest)
 
+        // The session-aware client performs the MCP lifecycle handshake
+        // (initialize → notifications/initialized) before the tool call, so
+        // the stub sees up to three requests; the tool call is the last.
         let session = mockSession { request in
             XCTAssertEqual(request.httpMethod, "POST")
             XCTAssertEqual(request.url?.absoluteString, "http://localhost:8765/jsonrpc")
@@ -1891,19 +1894,29 @@ final class CapabilityRuntimeTests: XCTestCase {
             let body = try XCTUnwrap(Self.bodyData(from: request))
             let object = try JSONSerialization.jsonObject(with: body) as? [String: Any]
             XCTAssertEqual(object?["jsonrpc"] as? String, "2.0")
-            XCTAssertEqual(object?["id"] as? String, "call_mcp")
-            XCTAssertEqual(object?["method"] as? String, "tools/call")
-            let params = object?["params"] as? [String: Any]
-            XCTAssertEqual(params?["name"] as? String, "research.summarize")
-            let arguments = params?["arguments"] as? [String: Any]
-            XCTAssertEqual(arguments?["request"] as? String, "summarize")
+            let method = object?["method"] as? String
             let response = HTTPURLResponse(
                 url: request.url!,
                 statusCode: 200,
                 httpVersion: nil,
                 headerFields: nil
             )!
-            return (response, Data(#"{"jsonrpc":"2.0","result":{"ok":true}}"#.utf8))
+            switch method {
+            case "initialize":
+                return (response, Data(#"{"jsonrpc":"2.0","result":{"protocolVersion":"2025-03-26"}}"#.utf8))
+            case "notifications/initialized":
+                return (response, Data(#"{}"#.utf8))
+            case "tools/call":
+                XCTAssertEqual(object?["id"] as? String, "call_mcp")
+                let params = object?["params"] as? [String: Any]
+                XCTAssertEqual(params?["name"] as? String, "research.summarize")
+                let arguments = params?["arguments"] as? [String: Any]
+                XCTAssertEqual(arguments?["request"] as? String, "summarize")
+                return (response, Data(#"{"jsonrpc":"2.0","result":{"ok":true}}"#.utf8))
+            default:
+                XCTFail("unexpected JSON-RPC method \(method ?? "nil")")
+                return (response, Data(#"{}"#.utf8))
+            }
         }
         let executor = CapabilityExecutor(registry: registry, urlSession: session)
 

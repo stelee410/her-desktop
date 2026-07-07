@@ -1,54 +1,55 @@
 {
-  "author" : "Her",
-  "capabilities" : [
+  "author": "Her",
+  "capabilities": [
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Capture an incoming external message from Oyii, WeChat, Discord, browser, email, or another bridge as a normalized Her interaction event.",
-      "id" : "inbox.capture",
-      "inputSchema" : {
-        "properties" : {
-          "attachment_paths" : {
-            "description" : "Optional local file paths from the bridge host, one path per line when run from Plugin Library.",
-            "type" : "string"
+      "description": "Capture an incoming external message from Oyii, WeChat, Discord, browser, email, or another bridge as a normalized Her interaction event.",
+      "id": "inbox.capture",
+      "inputSchema": {
+        "properties": {
+          "attachment_paths": {
+            "description": "Optional local file paths from the bridge host, one path per line when run from Plugin Library.",
+            "type": "string"
           },
-          "received_at" : {
-            "description" : "Optional original timestamp from the external system.",
-            "type" : "string"
+          "received_at": {
+            "description": "Optional original timestamp from the external system.",
+            "type": "string"
           },
-          "sender" : {
-            "description" : "Human-readable sender or origin.",
-            "type" : "string"
+          "sender": {
+            "description": "Human-readable sender or origin.",
+            "type": "string"
           },
-          "source" : {
-            "description" : "Inbox or bridge source, such as oyii, wechat, discord, browser, or email.",
-            "type" : "string"
+          "source": {
+            "description": "Inbox or bridge source, such as oyii, wechat, discord, browser, or email.",
+            "type": "string"
           },
-          "text" : {
-            "description" : "External message body to capture.",
-            "type" : "string"
+          "text": {
+            "description": "External message body to capture.",
+            "type": "string"
           },
-          "url" : {
-            "description" : "Optional source URL or conversation URL.",
-            "type" : "string"
+          "url": {
+            "description": "Optional source URL or conversation URL.",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "source",
           "text"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "inbox.capture",
-      "kind" : "native",
-      "requiresApproval" : false,
-      "title" : "Capture external inbox event"
+      "invocation": "inbox.capture",
+      "kind": "native",
+      "requiresApproval": false,
+      "title": "Capture external inbox event",
+      "usageHint": "normalizing incoming Oyii, WeChat, Discord, browser, email, or other bridge messages as data; do not claim an external reply was sent unless a separate approved sender capability reports success."
     }
   ],
-  "description" : "Normalizes external inbox and bridge messages into Her Desktop's interaction event bus.",
-  "id" : "builtin.external-inbox",
-  "name" : "External Inbox",
-  "systemPromptAddendum" : "Use External Inbox only to capture incoming external messages as data. Do not reply to the external service unless a separate approved sender capability exists.",
-  "version" : "0.1.0"
+  "description": "Normalizes external inbox and bridge messages into Her Desktop's interaction event bus.",
+  "id": "builtin.external-inbox",
+  "name": "External Inbox",
+  "systemPromptAddendum": "Use External Inbox only to capture incoming external messages as data. Do not reply to the external service unless a separate approved sender capability exists.",
+  "version": "0.1.0"
 }

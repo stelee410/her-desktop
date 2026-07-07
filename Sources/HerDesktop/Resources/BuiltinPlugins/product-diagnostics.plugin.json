@@ -1,45 +1,47 @@
 {
-  "author" : "Her",
-  "capabilities" : [
+  "author": "Her",
+  "capabilities": [
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Return a read-only product readiness and runtime diagnostics snapshot without exposing secrets.",
-      "id" : "product.diagnostics",
-      "inputSchema" : {
-        "properties" : {},
-        "type" : "object"
+      "description": "Return a read-only product readiness and runtime diagnostics snapshot without exposing secrets.",
+      "id": "product.diagnostics",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
       },
-      "invocation" : "product.diagnostics",
-      "kind" : "native",
-      "requiresApproval" : false,
-      "title" : "Inspect product diagnostics"
+      "invocation": "product.diagnostics",
+      "kind": "native",
+      "requiresApproval": false,
+      "title": "Inspect product diagnostics",
+      "usageHint": "the user asks whether Her Desktop is ready, healthy, configured, missing setup, or safe to extend; read-only app state, must not reveal secrets."
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Write a local Markdown product diagnostics report after approval without exposing API keys or Memory keys.",
-      "id" : "product.exportDiagnostics",
-      "inputSchema" : {
-        "properties" : {
-          "filename" : {
-            "description" : "Optional Markdown filename for the diagnostics report.",
-            "type" : "string"
+      "description": "Write a local Markdown product diagnostics report after approval without exposing API keys or Memory keys.",
+      "id": "product.exportDiagnostics",
+      "inputSchema": {
+        "properties": {
+          "filename": {
+            "description": "Optional Markdown filename for the diagnostics report.",
+            "type": "string"
           }
         },
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "product.exportDiagnostics",
-      "kind" : "native",
-      "requiresApproval" : true,
-      "title" : "Export product diagnostics"
+      "invocation": "product.exportDiagnostics",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Export product diagnostics",
+      "usageHint": "the user asks to save, export, share, hand off, or review a durable readiness/diagnostics report; writes a local Markdown artifact after approval, must not reveal secrets."
     }
   ],
-  "description" : "Surfaces product readiness, service health, plugin runtime state, and continuity signals through the plugin contract.",
-  "id" : "builtin.product-diagnostics",
-  "name" : "Product Diagnostics",
-  "systemPromptAddendum" : "Use product.diagnostics when the user asks whether Her Desktop is ready, configured, healthy, missing setup, or safe to extend. Use product.exportDiagnostics when the user asks to export, save, share, or hand off a diagnostics/readiness report. Never reveal API keys or Memory keys.",
-  "version" : "0.1.0"
+  "description": "Surfaces product readiness, service health, plugin runtime state, and continuity signals through the plugin contract.",
+  "id": "builtin.product-diagnostics",
+  "name": "Product Diagnostics",
+  "systemPromptAddendum": "Use product.diagnostics when the user asks whether Her Desktop is ready, configured, healthy, missing setup, or safe to extend. Use product.exportDiagnostics when the user asks to export, save, share, or hand off a diagnostics/readiness report. Never reveal API keys or Memory keys.",
+  "version": "0.1.0"
 }

@@ -726,6 +726,10 @@ struct PluginManifest: Identifiable, Codable, Equatable {
         var invocation: String
         var requiresApproval: Bool
         var description: String? = nil
+        /// When-to-use guidance rendered into the system prompt. Lives in the
+        /// manifest (single source of truth) instead of hand-maintained prose
+        /// in SystemPromptBuilder that went stale when capabilities changed.
+        var usageHint: String? = nil
         var inputSchema: [String: JSONValue]? = nil
         var adapter: CapabilityAdapter? = nil
     }
