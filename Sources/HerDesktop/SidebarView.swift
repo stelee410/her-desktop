@@ -58,7 +58,10 @@ struct SidebarView: View {
             .padding(.bottom, 18)
         }
         .padding(.horizontal, 18)
-        .background(.ultraThinMaterial)
+        // A solid tint instead of .ultraThinMaterial: the blur re-sampled the
+        // whole sidebar on every re-render and every animation frame, which was
+        // the main source of sidebar/open-close lag.
+        .background(Color(red: 0.95, green: 0.96, blue: 0.95))
     }
 
     private var conversationListSection: some View {
