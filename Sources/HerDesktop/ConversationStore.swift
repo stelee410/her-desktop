@@ -32,12 +32,18 @@ struct ConversationIndexFileV1: Codable, Equatable {
 /// one JSON file per conversation plus an `index.json` with titles, pin
 /// state, and the active conversation. A legacy single `.her/session.json`
 /// is migrated into the first conversation on first load.
-final class ConversationStore {
+/// Holds only immutable config; its path-scoped file operations are safe to
+/// run off the main actor so encode/decode of large transcripts doesn't block
+/// the UI.
+final class ConversationStore: @unchecked Sendable {
     static let defaultTitle = "新对话"
 
     private let cwd: String
     private let fileManager: FileManager
     private let legacySessionStore: SessionStore
+    /// All off-main transcript I/O runs here so saves and loads stay FIFO —
+    /// a switch-away save always lands before a later switch-back load.
+    private let ioQueue = DispatchQueue(label: "HerDesktop.ConversationStore.io", qos: .userInitiated)
 
     init(
         cwd: String = FileManager.default.currentDirectoryPath,
@@ -125,6 +131,20 @@ final class ConversationStore {
         let file = try Self.decoder().decode(SessionFileV1.self, from: data)
         guard file.version == 1 else { return [] }
         return legacySessionStore.sanitize(file.messages)
+    }
+
+    /// Serialized off-main save (fire-and-forget); ordered against loadAsync.
+    func enqueueSave(_ messages: [ChatMessage], id: String) {
+        ioQueue.async { [self] in try? saveMessages(messages, id: id) }
+    }
+
+    /// Serialized off-main load; runs after any queued save for the same id.
+    func loadMessagesAsync(id: String) async -> [ChatMessage] {
+        await withCheckedContinuation { continuation in
+            ioQueue.async { [self] in
+                continuation.resume(returning: (try? loadMessages(id: id)) ?? [])
+            }
+        }
     }
 
     func saveMessages(_ messages: [ChatMessage], id: String) throws {

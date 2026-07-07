@@ -43,19 +43,21 @@ extension AppViewModel {
     func switchConversation(to id: String) {
         guard id != activeConversationID, conversations.contains(where: { $0.id == id }) else { return }
         stopDictation()
+        stopCurrentTurn()
         saveSessionSnapshot()
-        let loaded: [ChatMessage]
-        do {
-            loaded = try conversationStore.loadMessages(id: id)
-        } catch {
-            lastError = "Could not open the conversation: \(error.localizedDescription)"
-            return
-        }
         activeConversationID = id
-        messages = loaded.isEmpty
-            ? [ChatMessage(role: .assistant, content: "新会话已经准备好。我们从哪里开始？")]
-            : loaded
         resetConversationScopedState()
+        // Decode the target transcript off the main thread so switching is
+        // instant even for long conversations; show a brief placeholder.
+        messages = [ChatMessage(role: .assistant, content: "正在打开对话…")]
+        Task {
+            let loaded = await conversationStore.loadMessagesAsync(id: id)
+            // The user may have switched again before this finished.
+            guard activeConversationID == id else { return }
+            messages = loaded.isEmpty
+                ? [ChatMessage(role: .assistant, content: "新会话已经准备好。我们从哪里开始？")]
+                : loaded
+        }
         audit(
             type: "session.switch_conversation",
             summary: "Switched to another local conversation.",
@@ -168,26 +170,55 @@ extension AppViewModel {
         await send(text, attachments: attachments)
     }
 
-    /// Start a turn as a cancellable, model-owned task so the composer can
-    /// stop it. The view calls this instead of awaiting sendDraft directly.
+    /// The composer's submit action. While a turn is generating, the typed
+    /// message steers the running turn (Codex-style) instead of being blocked;
+    /// otherwise it starts a fresh turn. Either way the message appears in the
+    /// transcript immediately.
     func submitDraft() {
-        guard !isGenerating else { return }
-        currentTurnTask?.cancel()
-        currentTurnTask = Task { [self] in await sendDraft() }
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let attachments = pendingAttachments
+        guard !text.isEmpty || !attachments.isEmpty else { return }
+        draft = ""
+        pendingAttachments = []
+        if isGenerating {
+            enqueueSteering(text, attachments: attachments)
+        } else {
+            currentTurnTask = Task { [self] in await runTurn(text, attachments: attachments) }
+        }
+    }
+
+    /// Add a mid-turn instruction: show it now and queue it so the running
+    /// tool loop picks it up at its next round.
+    private func enqueueSteering(_ text: String, attachments: [MessageAttachment]) {
+        let normalized = interactionEventBus.userMessage(text: text, attachments: attachments)
+        recordInteractionEvent(normalized.event)
+        messages.append(ChatMessage(role: .user, content: normalized.displayText, attachments: attachments))
+        steeringQueue.append(normalized.contextText)
+        audit(type: "conversation.steered", summary: "User steered the running turn.")
+        saveSessionSnapshot()
     }
 
     /// Stop the in-flight turn. Cancellation propagates through the LLM
-    /// stream; send()'s catch keeps any partial reply and returns to ready.
+    /// stream; the catch keeps any partial reply and returns to ready.
     func stopCurrentTurn() {
         currentTurnTask?.cancel()
         currentTurnTask = nil
+        steeringQueue.removeAll()
+    }
+
+    /// One full user turn plus any follow-ups from steering that arrived after
+    /// the loop's last injection point (so nothing the user typed is dropped).
+    private func runTurn(_ text: String, attachments: [MessageAttachment]) async {
+        await send(text, attachments: attachments)
+        while !Task.isCancelled, messages.last?.role == .user {
+            await runGeneration()
+        }
     }
 
     func send(_ text: String, attachments: [MessageAttachment] = []) async {
         if await saveInlineAgentLLMKeyIfPresent(text: text, attachments: attachments) {
             return
         }
-
         let normalized = interactionEventBus.userMessage(text: text, attachments: attachments)
         recordInteractionEvent(normalized.event)
         messages.append(ChatMessage(role: .user, content: normalized.displayText, attachments: attachments))
@@ -198,12 +229,19 @@ extension AppViewModel {
             saveSessionSnapshot()
             return
         }
+        await runGeneration()
+    }
+
+    /// Generate an assistant reply for the current transcript (which already
+    /// ends with the user message[s] to answer). Factored out so steering
+    /// follow-ups can regenerate without re-appending a user message.
+    private func runGeneration() async {
         connectionState = .thinking
         lastError = nil
-
+        let userInput = messages.last(where: { $0.role == .user })?.content ?? ""
         do {
             await refreshAgentMemTurnSignals()
-            let memContext = await retrieveMemory(for: normalized.contextText)
+            let memContext = await retrieveMemory(for: userInput)
             let prompt = SystemPromptBuilder(pluginManifests: plugins).build(
                 memoryContext: memContext,
                 activeTaskSummary: activeTaskSummary(),
@@ -213,8 +251,9 @@ extension AppViewModel {
             )
             let catalog = CapabilityToolCatalog.build(from: plugins)
             var llmMessages = conversationContextBuilder.build(systemPrompt: prompt, messages: messages)
-            // An autonomous browsing session needs many chained actions
-            // (read → click → read → type …), so widen the tool budget.
+            // This build already reflects the transcript, so drop any stale
+            // steering; new mid-turn steering will be injected per round.
+            steeringQueue.removeAll()
             let rounds = browserAutonomyGranted ? 20 : 5
             let reply = try await runAgentToolLoop(llmMessages: &llmMessages, catalog: catalog, maxToolRounds: rounds)
             let final: String
@@ -228,7 +267,7 @@ extension AppViewModel {
             deliverAssistantReply(final)
             connectionState = .ready
             saveSessionSnapshot()
-            Task { await persistTurnMemory(userInput: normalized.contextText, agentResponse: final, attachments: attachments) }
+            Task { await persistTurnMemory(userInput: userInput, agentResponse: final) }
             Task { await speakAssistantReplyIfEnabled(final) }
         } catch is CancellationError {
             handleTurnCancelled()
@@ -251,6 +290,7 @@ extension AppViewModel {
     private func handleTurnCancelled() {
         flushStreamBuffer()
         finalizeStreamedToolRoundNarration()
+        steeringQueue.removeAll()
         connectionState = .ready
         lastError = nil
         saveSessionSnapshot()
@@ -323,6 +363,13 @@ extension AppViewModel {
     ) async throws -> String {
         var currentCatalog = catalog
         for round in 0...maxToolRounds {
+            // Guided mode: fold in any instructions the user typed while this
+            // turn was running, so the model course-corrects at this round.
+            if !steeringQueue.isEmpty {
+                for steer in steeringQueue { llmMessages.append(.user(steer)) }
+                steeringQueue.removeAll()
+                finalizeStreamedToolRoundNarration()
+            }
             streamingAssistantMessageID = nil
             let message = try await agentLLM.chat(
                 messages: llmMessages,
@@ -504,11 +551,9 @@ extension AppViewModel {
         // A conversation being deleted is no longer in the index; skip the
         // write so its transcript file is not recreated.
         guard let index = conversations.firstIndex(where: { $0.id == activeConversationID }) else { return }
-        do {
-            try conversationStore.saveMessages(messages, id: activeConversationID)
-        } catch {
-            lastError = "Could not save local session: \(error.localizedDescription)"
-        }
+        // Encoding a long transcript (many large tool results) is heavy, so
+        // write it off the main thread — this used to beachball on switch.
+        conversationStore.enqueueSave(messages, id: activeConversationID)
         conversations[index].updatedAt = Date()
         if conversations[index].title == ConversationStore.defaultTitle || conversations[index].title.isEmpty,
            let autoTitle = ConversationStore.autoTitle(from: messages) {

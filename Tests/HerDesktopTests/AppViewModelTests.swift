@@ -807,7 +807,7 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.auditEvents.contains { $0.type == "session.new_conversation" })
     }
 
-    func testSwitchConversationRestoresStoredTranscript() {
+    func testSwitchConversationRestoresStoredTranscript() async {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-switch-conversation-\(UUID().uuidString)", isDirectory: true)
         let model = AppViewModel(cwd: root.path)
@@ -819,9 +819,31 @@ final class AppViewModelTests: XCTestCase {
         model.switchConversation(to: firstID)
 
         XCTAssertEqual(model.activeConversationID, firstID)
+        // The transcript loads off the main thread; wait for it.
+        for _ in 0..<100 where !model.messages.contains(where: { $0.content == "first conversation turn" }) {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
         XCTAssertTrue(model.messages.contains { $0.content == "first conversation turn" })
         XCTAssertFalse(model.messages.contains { $0.content == "second conversation turn" })
         XCTAssertTrue(model.auditEvents.contains { $0.type == "session.switch_conversation" })
+    }
+
+    func testTypingWhileGeneratingSteersInsteadOfStartingNewTurn() {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-steer-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(cwd: root.path)
+        model.connectionState = .thinking
+        XCTAssertTrue(model.isGenerating)
+
+        model.draft = "actually, focus on the pricing page"
+        model.submitDraft()
+
+        XCTAssertEqual(model.draft, "")
+        XCTAssertEqual(model.messages.last?.content, "actually, focus on the pricing page",
+                       "the steering message appears in the transcript immediately")
+        XCTAssertTrue(model.steeringQueue.contains("actually, focus on the pricing page"),
+                      "it is queued for the running tool loop to pick up")
+        XCTAssertTrue(model.auditEvents.contains { $0.type == "conversation.steered" })
     }
 
     func testRenameConversationUpdatesTitleAndPersists() {

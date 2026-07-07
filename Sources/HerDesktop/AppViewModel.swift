@@ -94,6 +94,9 @@ final class AppViewModel: ObservableObject {
     /// The in-flight conversation turn, so the composer's stop button can
     /// cancel generation.
     var currentTurnTask: Task<Void, Never>?
+    /// Messages typed while a turn is generating; the running tool loop drains
+    /// these each round to steer itself (Codex-style guided mode).
+    var steeringQueue: [String] = []
     /// Streaming deltas are buffered and flushed to `messages` on a short
     /// debounce, so the UI updates ~14x/sec instead of once per token
     /// (which re-rendered the whole window and made typing/scrolling lag).

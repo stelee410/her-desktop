@@ -684,12 +684,16 @@ private struct ComposerView: View {
                 .foregroundStyle(AppTheme.coral)
                 .help(model.connectionState == .listening ? "Stop dictation" : "Start dictation")
 
+                let hasInput = !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || !model.pendingAttachments.isEmpty
+                // While generating, keep a stop button; the send button stays
+                // live so typed text steers the running turn (guided mode).
                 if model.isGenerating {
                     Button {
                         model.stopCurrentTurn()
                     } label: {
                         Image(systemName: "stop.fill")
-                            .font(.system(size: 14, weight: .bold))
+                            .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(.white)
                             .frame(width: 34, height: 34)
                             .background(AppTheme.ink)
@@ -698,21 +702,21 @@ private struct ComposerView: View {
                     .buttonStyle(.plain)
                     .keyboardShortcut(".", modifiers: [.command])
                     .help("停止生成（⌘.）")
-                } else {
-                    Button {
-                        model.submitDraft()
-                    } label: {
-                        Image(systemName: "arrow.up")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                            .frame(width: 34, height: 34)
-                            .background(AppTheme.coral)
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .keyboardShortcut(.return, modifiers: [.command])
-                    .disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && model.pendingAttachments.isEmpty)
                 }
+                Button {
+                    model.submitDraft()
+                } label: {
+                    Image(systemName: model.isGenerating ? "arrow.up.message" : "arrow.up")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(hasInput ? AppTheme.coral : AppTheme.coral.opacity(0.4))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.return, modifiers: [.command])
+                .disabled(!hasInput)
+                .help(model.isGenerating ? "发送以引导当前对话" : "发送")
             }
             if model.connectionState == .listening, !model.dictationTranscript.isEmpty {
                 Label(model.dictationTranscript, systemImage: "waveform")
