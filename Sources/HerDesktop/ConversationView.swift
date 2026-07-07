@@ -7,16 +7,12 @@ struct ConversationView: View {
     @EnvironmentObject private var model: AppViewModel
 
     var body: some View {
-        // Build the readiness summary once per body pass — it aggregates 8
-        // published inputs and was being computed here AND inside the strip.
-        let readiness = model.productReadinessSummary
         VStack(spacing: 0) {
             ToolbarView()
-            if !readiness.isReadyForCoreWork {
-                LaunchReadinessStrip(summary: readiness)
-                    .padding(.horizontal, 54)
-                    .padding(.top, 12)
-            }
+            // In its own subview: ConversationView re-renders per stream
+            // flush (~14 Hz), and computing the readiness summary inline ran
+            // the whole 9-item builder on every token.
+            ReadinessStripContainer()
             ScrollViewReader { proxy in
                 ScrollView {
                     // Lazy so only visible bubbles render — a plain VStack
@@ -77,6 +73,25 @@ struct ConversationView: View {
             ComposerView()
                 .padding(.horizontal, 54)
                 .padding(.bottom, 24)
+        }
+    }
+}
+
+/// Isolates the readiness computation from the streaming-hot
+/// ConversationView: this container does NOT observe ConversationModel, so
+/// the 9-item builder runs only when model/service state publishes —
+/// (config/plugins/health changes), not per token. Observing serviceStatus
+/// here also fixes readiness going stale after a health refresh.
+private struct ReadinessStripContainer: View {
+    @EnvironmentObject private var model: AppViewModel
+    @EnvironmentObject private var serviceStatus: ServiceStatusModel
+
+    var body: some View {
+        let readiness = model.productReadinessSummary
+        if !readiness.isReadyForCoreWork {
+            LaunchReadinessStrip(summary: readiness)
+                .padding(.horizontal, 54)
+                .padding(.top, 12)
         }
     }
 }

@@ -244,13 +244,13 @@ final class CapabilityExecutor {
 
     func execute(_ invocation: CapabilityInvocation) async -> CapabilityResult {
         switch invocation.capabilityID {
-        case "workspace.inspect":
+        case CapabilityID.workspaceInspect:
             return inspectWorkspace(arguments: invocation.arguments)
-        case "workspace.search":
+        case CapabilityID.workspaceSearch:
             return searchWorkspace(arguments: invocation.arguments)
-        case "workspace.writeTextFile":
+        case CapabilityID.workspaceWriteTextFile:
             return writeWorkspaceTextFile(arguments: invocation.arguments)
-        case "workspace.replaceText":
+        case CapabilityID.workspaceReplaceText:
             return replaceWorkspaceText(arguments: invocation.arguments)
         // NOTE: app-state capabilities (plugin.listDrafts/installDraft/…,
         // product.*, workspace.plan, webapp.*, terminal.*, browser.*) are NOT
@@ -258,31 +258,31 @@ final class CapabilityExecutor {
         // before this executor is reached; the placeholder cases that used to
         // shadow them here were dead code that could silently mask a missed
         // registration.
-        case "plugin.draft":
+        case CapabilityID.pluginDraft:
             return draftPlugin(arguments: invocation.arguments)
-        case "plugin.install":
+        case CapabilityID.pluginInstall:
             return installPlugin(arguments: invocation.arguments)
-        case "plugin.remove":
+        case CapabilityID.pluginRemove:
             return removePlugin(arguments: invocation.arguments)
-        case "native.notify":
+        case CapabilityID.nativeNotify:
             return await executeNativeNotification(arguments: invocation.arguments)
-        case "native.readTextFile":
+        case CapabilityID.nativeReadTextFile:
             return executeNativeReadTextFile(arguments: invocation.arguments)
-        case "native.speak":
+        case CapabilityID.nativeSpeak:
             return await executeNativeSpeak(arguments: invocation.arguments)
-        case "native.inspectAttachment":
+        case CapabilityID.nativeInspectAttachment:
             return executeNativeInspectAttachment(arguments: invocation.arguments)
-        case "shell.inspect":
+        case CapabilityID.shellInspect:
             return await executeLocalShell(invocation: invocation, readOnly: true)
-        case "shell.run":
+        case CapabilityID.shellRun:
             return await executeLocalShell(invocation: invocation, readOnly: false)
-        case "inbox.capture":
+        case CapabilityID.inboxCapture:
             return executeInboxCapture(arguments: invocation.arguments)
-        case "agentmem.query":
+        case CapabilityID.agentmemQuery:
             return await executeAgentMemQuery(arguments: invocation.arguments)
-        case "agentmem.add":
+        case CapabilityID.agentmemAdd:
             return await executeAgentMemAdd(arguments: invocation.arguments)
-        case "mcp.discover":
+        case CapabilityID.mcpDiscover:
             return await executeMCPToolDiscovery(arguments: invocation.arguments)
         default:
             return await executeDeclaredCapability(invocation)

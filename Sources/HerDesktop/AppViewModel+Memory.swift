@@ -214,6 +214,21 @@ extension AppViewModel {
         }
     }
 
+    /// Shared flatten for summary writebacks: one line per message, newlines
+    /// collapsed, user lines capped at 700 chars / assistant at 500.
+    static func durableCandidateLines(from recent: some Collection<ChatMessage>) -> (user: [String], assistant: [String]) {
+        func flatten(_ message: ChatMessage, cap: Int) -> String {
+            let content = message.content
+                .replacingOccurrences(of: "\n", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return "- \(String(content.prefix(cap)))"
+        }
+        return (
+            user: recent.filter { $0.role == .user }.map { flatten($0, cap: 700) },
+            assistant: recent.filter { $0.role == .assistant }.map { flatten($0, cap: 500) }
+        )
+    }
+
     func sessionMemorySummary(maxMessages: Int = 8) -> String? {
         let visibleMessages = messages.filter { message in
             message.role == .user || message.role == .assistant
@@ -222,19 +237,7 @@ extension AppViewModel {
         let userCount = visible.filter { $0.role == .user }.count
         let assistantCount = visible.filter { $0.role == .assistant }.count
         guard userCount >= 3, assistantCount >= 3 else { return nil }
-        let recent = visible.suffix(maxMessages)
-        let userLines = recent.filter { $0.role == .user }.map { message in
-            let content = message.content
-                .replacingOccurrences(of: "\n", with: " ")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            return "- \(String(content.prefix(700)))"
-        }
-        let assistantLines = recent.filter { $0.role == .assistant }.map { message in
-            let content = message.content
-                .replacingOccurrences(of: "\n", with: " ")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            return "- \(String(content.prefix(500)))"
-        }
+        let (userLines, assistantLines) = Self.durableCandidateLines(from: visible.suffix(maxMessages))
         return """
         Her Desktop session summary.
 

@@ -70,11 +70,14 @@ struct PluginLifecycleEvent: Codable, Equatable, Identifiable {
 
 final class PluginEventStore {
     private let cwd: String
-    private let fileManager: FileManager
+    private let store: JSONLStore<PluginLifecycleEvent>
 
     init(cwd: String = FileManager.default.currentDirectoryPath, fileManager: FileManager = .default) {
         self.cwd = cwd
-        self.fileManager = fileManager
+        self.store = JSONLStore(
+            url: HerWorkspacePaths.pluginEventsPath(cwd: cwd),
+            fileManager: fileManager
+        )
     }
 
     var eventsURL: URL {
@@ -82,32 +85,10 @@ final class PluginEventStore {
     }
 
     func append(_ event: PluginLifecycleEvent) throws {
-        try fileManager.createDirectory(at: eventsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        var data = try encoder.encode(event)
-        data.append(0x0A)
-
-        if fileManager.fileExists(atPath: eventsURL.path) {
-            let handle = try FileHandle(forWritingTo: eventsURL)
-            defer { try? handle.close() }
-            try handle.seekToEnd()
-            try handle.write(contentsOf: data)
-        } else {
-            try data.write(to: eventsURL, options: .atomic)
-        }
+        try store.append(event)
     }
 
     func loadAll() throws -> [PluginLifecycleEvent] {
-        guard fileManager.fileExists(atPath: eventsURL.path) else {
-            return []
-        }
-        let text = try String(contentsOf: eventsURL, encoding: .utf8)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try text
-            .split(separator: "\n")
-            .compactMap { try? decoder.decode(PluginLifecycleEvent.self, from: Data(String($0).utf8)) } // skip corrupt lines
+        try store.loadAll()
     }
 }

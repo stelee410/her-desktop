@@ -717,13 +717,7 @@ extension AppViewModel {
     }
 
     func fallbackCompactSummary(from visible: [ChatMessage], title: String, maxMessages: Int = 12) -> String {
-        let recent = visible.suffix(maxMessages)
-        let userLines = recent.filter { $0.role == .user }.map { message in
-            "- \(String(message.content.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines).prefix(700)))"
-        }
-        let assistantLines = recent.filter { $0.role == .assistant }.map { message in
-            "- \(String(message.content.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines).prefix(500)))"
-        }
+        let (userLines, assistantLines) = Self.durableCandidateLines(from: visible.suffix(maxMessages))
         return """
         Her Desktop conversation compact (deleted conversation "\(title)").
 

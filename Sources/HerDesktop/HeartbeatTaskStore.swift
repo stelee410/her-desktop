@@ -176,13 +176,7 @@ final class HeartbeatTaskStore {
     }
 
     private func backUpUnreadableFile() {
-        let stamp = Int(Date().timeIntervalSince1970)
-        let backup = fileURL.deletingPathExtension()
-            .appendingPathExtension("corrupt-\(stamp)")
-            .appendingPathExtension("json")
-        if !fileManager.fileExists(atPath: backup.path) {
-            try? fileManager.copyItem(at: fileURL, to: backup)
-        }
+        fileManager.backUpSiblingFile(at: fileURL, suffix: "corrupt-\(Int(Date().timeIntervalSince1970))")
     }
 
     nonisolated(unsafe) static let displayFormatter: DateFormatter = {

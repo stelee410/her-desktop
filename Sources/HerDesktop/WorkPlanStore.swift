@@ -30,11 +30,7 @@ final class WorkPlanStore {
         guard file.version == 1 else {
             // Unknown (future) format: preserve a copy before a later save()
             // can overwrite it, instead of silently discarding the user's plan.
-            let backup = planURL.deletingPathExtension()
-                .appendingPathExtension("v\(file.version).bak.json")
-            if !fileManager.fileExists(atPath: backup.path) {
-                try? fileManager.copyItem(at: planURL, to: backup)
-            }
+            fileManager.backUpSiblingFile(at: planURL, suffix: "v\(file.version).bak")
             return nil
         }
         return file.plan

@@ -31,21 +31,23 @@ protocol AuditRecording: AnyObject {
     func audit(type: String, summary: String, metadata: [String: String])
 }
 
-/// Immutable config only; file appends run on the internal serial queue so
-/// they are ordered and off the main thread.
+/// Composes a JSONLStore for the raw file work and adds the serial-queue
+/// seam: audit fires on every user message and every tool step, so appends
+/// are ordered and kept off the main thread.
 final class AuditEventStore: @unchecked Sendable {
     private let cwd: String
-    private let fileManager: FileManager
+    private let store: JSONLStore<AuditEvent>
     private let ioQueue = DispatchQueue(label: "HerDesktop.AuditEventStore.io", qos: .utility)
 
     init(cwd: String = FileManager.default.currentDirectoryPath, fileManager: FileManager = .default) {
         self.cwd = cwd
-        self.fileManager = fileManager
+        self.store = JSONLStore(
+            url: HerWorkspacePaths.logsDirectory(cwd: cwd).appendingPathComponent("audit.jsonl"),
+            fileManager: fileManager
+        )
     }
 
-    /// Serialized off-main append. Audit fires on every user message and
-    /// every tool step; the synchronous open/seek/write used to run on the
-    /// main actor each time.
+    /// Serialized off-main append.
     func enqueueAppend(_ event: AuditEvent, onFailure: (@Sendable (Error) -> Void)? = nil) {
         ioQueue.async { [self] in
             do {
@@ -61,28 +63,9 @@ final class AuditEventStore: @unchecked Sendable {
         ioQueue.sync {}
     }
 
-    /// Reads only the tail of the (unbounded, append-only) log — enough for
-    /// the recent-events feed without decoding years of history at startup.
+    /// Tail read for the recent-events feed (audit.jsonl is unbounded).
     func loadRecent(maxBytes: Int = 131_072) throws -> [AuditEvent] {
-        guard fileManager.fileExists(atPath: auditURL.path) else {
-            return []
-        }
-        let handle = try FileHandle(forReadingFrom: auditURL)
-        defer { try? handle.close() }
-        let size = (try? handle.seekToEnd()) ?? 0
-        let start = size > UInt64(maxBytes) ? size - UInt64(maxBytes) : 0
-        try handle.seek(toOffset: start)
-        let data = (try? handle.readToEnd()) ?? Data()
-        var text = String(data: data, encoding: .utf8) ?? ""
-        if start > 0, let firstNewline = text.firstIndex(of: "\n") {
-            // Drop the first (probably partial) line of a mid-file read.
-            text = String(text[text.index(after: firstNewline)...])
-        }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return text
-            .split(separator: "\n")
-            .compactMap { try? decoder.decode(AuditEvent.self, from: Data(String($0).utf8)) }
+        try store.loadRecent(maxBytes: maxBytes)
     }
 
     var auditURL: URL {
@@ -91,35 +74,10 @@ final class AuditEventStore: @unchecked Sendable {
     }
 
     func append(_ event: AuditEvent) throws {
-        try fileManager.createDirectory(at: auditURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        var data = try encoder.encode(event)
-        data.append(0x0A)
-
-        if fileManager.fileExists(atPath: auditURL.path) {
-            let handle = try FileHandle(forWritingTo: auditURL)
-            defer { try? handle.close() }
-            try handle.seekToEnd()
-            try handle.write(contentsOf: data)
-        } else {
-            try data.write(to: auditURL, options: .atomic)
-        }
+        try store.append(event)
     }
 
     func loadAll() throws -> [AuditEvent] {
-        guard fileManager.fileExists(atPath: auditURL.path) else {
-            return []
-        }
-        let text = try String(contentsOf: auditURL, encoding: .utf8)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        // Skip malformed lines instead of throwing: append is not atomic, so
-        // one truncated line (crash mid-write) must not make the entire audit
-        // history unreadable — it is the forensic record for approvals.
-        return text
-            .split(separator: "\n")
-            .compactMap { try? decoder.decode(AuditEvent.self, from: Data(String($0).utf8)) }
+        try store.loadAll()
     }
 }

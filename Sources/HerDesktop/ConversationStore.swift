@@ -234,17 +234,7 @@ final class ConversationStore: @unchecked Sendable {
     }
 
     private func backUpUnreadableFile(at url: URL) -> URL? {
-        let stamp = Int(Date().timeIntervalSince1970)
-        let backup = url.deletingPathExtension()
-            .appendingPathExtension("corrupt-\(stamp)")
-            .appendingPathExtension("json")
-        if fileManager.fileExists(atPath: backup.path) { return backup }
-        do {
-            try fileManager.copyItem(at: url, to: backup)
-            return backup
-        } catch {
-            return nil
-        }
+        fileManager.backUpSiblingFile(at: url, suffix: "corrupt-\(Int(Date().timeIntervalSince1970))")
     }
 
     /// Serialized off-main save; ordered against loadAsync. Failures are

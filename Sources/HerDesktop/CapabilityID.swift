@@ -49,6 +49,12 @@ enum CapabilityID {
     static let pluginExport = "plugin.export"
     static let pluginStagePackage = "plugin.stagePackage"
 
+    // Workspace
+    static let workspaceInspect = "workspace.inspect"
+    static let workspaceSearch = "workspace.search"
+    static let workspaceWriteTextFile = "workspace.writeTextFile"
+    static let workspaceReplaceText = "workspace.replaceText"
+
     // Heartbeat / scheduled tasks
     static let scheduleCreate = "schedule.create"
     static let scheduleList = "schedule.list"

@@ -87,7 +87,9 @@ extension AppViewModel {
         }
     }
 
-    struct CapabilityRunOutcome {
+    /// What runInvocation hands back. (Named to stay clearly apart from
+    /// `CapabilityOutcome`, the ok/failed enum inside CapabilityResult.)
+    struct InvocationOutcome {
         var result: CapabilityResult
         var pluginDraft: PluginDraftCapture?
     }
@@ -103,7 +105,7 @@ extension AppViewModel {
         activityID: UUID,
         approved: Bool,
         postToConversation: Bool = true
-    ) async -> CapabilityRunOutcome {
+    ) async -> InvocationOutcome {
         let result = await executeCapabilityInvocation(invocation)
         finishCapabilityActivity(activityID, result: result)
         refreshWebServiceArtifacts()
@@ -136,7 +138,7 @@ extension AppViewModel {
             } ?? result
             await persistCapabilityMemory(invocation: invocation, result: memoryResult, approved: approved)
         }
-        return CapabilityRunOutcome(result: result, pluginDraft: pluginDraft)
+        return InvocationOutcome(result: result, pluginDraft: pluginDraft)
     }
 
     /// The key "一直批准" stores and checks. Scoped to the risk boundary, not
