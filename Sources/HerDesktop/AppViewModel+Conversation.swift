@@ -147,6 +147,7 @@ extension AppViewModel {
         pendingApprovals = []
         capabilityActivities = []
         pendingAttachments = []
+        autoApprovedCapabilities = []
         draft = ""
         dictationTranscript = ""
         lastError = nil

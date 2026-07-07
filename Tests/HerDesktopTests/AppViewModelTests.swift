@@ -871,6 +871,25 @@ final class AppViewModelTests: XCTestCase {
                        "using a conversation must not reorder the list")
     }
 
+    func testAutoApprovedCapabilitySkipsApprovalUntilConversationChanges() {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-always-approve-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(cwd: root.path)
+
+        XCTAssertTrue(model.requiresApproval(capabilityID: "browser.navigate"))
+        // "一直批准" adds the capability to the conversation grant set.
+        model.autoApprovedCapabilities.insert("browser.navigate")
+
+        XCTAssertFalse(model.requiresApproval(capabilityID: "browser.navigate"),
+                       "auto-approved for the rest of the conversation")
+        XCTAssertTrue(model.requiresApproval(capabilityID: "browser.click"),
+                      "only the granted capability is auto-approved")
+        // Switching / starting a conversation clears the grant.
+        model.newLocalConversation()
+        XCTAssertTrue(model.autoApprovedCapabilities.isEmpty)
+        XCTAssertTrue(model.requiresApproval(capabilityID: "browser.navigate"))
+    }
+
     func testTypingWhileGeneratingSteersInsteadOfStartingNewTurn() {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-steer-\(UUID().uuidString)", isDirectory: true)

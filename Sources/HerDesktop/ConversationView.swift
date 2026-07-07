@@ -487,6 +487,20 @@ private struct ApprovalActionRow: View {
                 .disabled(isExecuting)
 
                 Button {
+                    isExecuting = true
+                    Task {
+                        await model.approveAlways(approval)
+                        isExecuting = false
+                    }
+                } label: {
+                    Label("一直批准", systemImage: "checkmark.circle.badge.questionmark")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(isExecuting)
+                .help("本对话中自动批准这类操作（\(approval.invocation.capabilityID)）")
+
+                Button {
                     model.reject(approval)
                 } label: {
                     Label("拒绝", systemImage: "xmark.circle")

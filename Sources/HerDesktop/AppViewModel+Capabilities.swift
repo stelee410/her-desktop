@@ -107,6 +107,18 @@ extension AppViewModel {
         }
     }
 
+    /// Approve this action and auto-approve the same capability for the rest
+    /// of the conversation.
+    func approveAlways(_ approval: PendingApproval) async {
+        autoApprovedCapabilities.insert(approval.invocation.capabilityID)
+        audit(
+            type: "approval.auto_approved_capability",
+            summary: "Auto-approving this capability for the conversation.",
+            metadata: ["capabilityID": approval.invocation.capabilityID]
+        )
+        await approve(approval)
+    }
+
     func approve(_ approval: PendingApproval) async {
         pendingApprovals.removeAll { $0.id == approval.id }
         recordInteractionEvent(interactionEventBus.event(
@@ -326,6 +338,10 @@ extension AppViewModel {
     }
 
     func requiresApproval(capabilityID: String) -> Bool {
+        // The user chose to auto-approve this capability for the conversation.
+        if autoApprovedCapabilities.contains(capabilityID) {
+            return false
+        }
         // A user-granted browsing session lets the agent act without a click
         // per step. The manifest stays approval-required (the safe default);
         // only an explicit, user-flipped session relaxes browser actions.

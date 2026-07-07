@@ -65,6 +65,9 @@ final class AppViewModel: ObservableObject {
     var pendingActionCount: Int {
         pendingApprovals.count + generatedPluginDrafts.count
     }
+    /// Capabilities the user chose to auto-approve for the rest of this
+    /// conversation ("一直批准"); cleared when the conversation changes.
+    @Published var autoApprovedCapabilities: Set<String> = []
 
     var agentMem: AgentMemClient
     var agentLLM: any AgentLLMChatting
