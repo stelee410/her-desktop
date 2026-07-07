@@ -163,6 +163,9 @@ extension AppViewModel {
     }
 
     func webServiceArtifacts(for message: ChatMessage) -> [WebServiceArtifact] {
+        // Called for every message on every render; skip the content scan
+        // entirely when there are no artifacts (the common case).
+        guard !webServiceArtifacts.isEmpty, message.role != .user else { return [] }
         let manifestPaths = WebServiceArtifactReferenceExtractor.manifestPaths(in: message.content)
         guard !manifestPaths.isEmpty else { return [] }
         let wanted = Set(manifestPaths.map(Self.standardizedFilePath))

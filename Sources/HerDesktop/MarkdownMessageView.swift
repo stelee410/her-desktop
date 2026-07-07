@@ -23,7 +23,21 @@ enum MarkdownBlock: Equatable, Identifiable {
 }
 
 enum MarkdownMessageParser {
+    private final class BlockBox { let blocks: [MarkdownBlock]; init(_ b: [MarkdownBlock]) { blocks = b } }
+    // Parsing is pure and message content is immutable, so cache by content.
+    // Without this, every SwiftUI re-render re-parsed every visible message —
+    // O(messages × size) work per frame that made the whole UI lag.
+    nonisolated(unsafe) private static let cache = NSCache<NSString, BlockBox>()
+
     static func blocks(from content: String) -> [MarkdownBlock] {
+        let key = content as NSString
+        if let box = cache.object(forKey: key) { return box.blocks }
+        let parsed = parseBlocks(content)
+        cache.setObject(BlockBox(parsed), forKey: key)
+        return parsed
+    }
+
+    private static func parseBlocks(_ content: String) -> [MarkdownBlock] {
         var blocks: [MarkdownBlock] = []
         var paragraph: [String] = []
         var bullets: [String] = []
@@ -143,11 +157,18 @@ enum MarkdownMessageParser {
         return blocks
     }
 
+    private final class AttrBox { let value: AttributedString; init(_ v: AttributedString) { value = v } }
+    nonisolated(unsafe) private static let inlineCache = NSCache<NSString, AttrBox>()
+
     static func inlineAttributed(_ text: String) -> AttributedString {
+        let key = text as NSString
+        if let box = inlineCache.object(forKey: key) { return box.value }
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .inlineOnlyPreservingWhitespace
         )
-        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
+        let value = (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
+        inlineCache.setObject(AttrBox(value), forKey: key)
+        return value
     }
 
     private static func headingBlock(from line: String) -> MarkdownBlock? {

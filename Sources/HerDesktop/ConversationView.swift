@@ -15,7 +15,9 @@ struct ConversationView: View {
             }
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(spacing: 22) {
+                    // Lazy so only visible bubbles render — a plain VStack
+                    // built and re-rendered every message in a long transcript.
+                    LazyVStack(spacing: 22) {
                         VoicePresenceView()
                             .padding(.top, 34)
 
