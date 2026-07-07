@@ -57,7 +57,7 @@
 
 ### 第一梯队:把"自治"做实(建议顺序执行,三件事互相咬合)
 
-**R1. 后台工作会话(Job 模型)——分水岭之作**
+**R1. 后台工作会话(Job 模型)——分水岭之作** ✅ 已完成(2026-07-08,`AppViewModel+Jobs.swift`):AgentJob 状态机 + 串行 worker(让路给用户回合)+ 轮数预算 + 审批即停排队 + 单一结果卡片 + Inspector 进程列表。A2 的无头回合循环随之落地(job 的非流式内核循环)。剩余:job 的 token 级记账等 R2。
 - 新增 `AgentJob`:id、来源(heartbeat/inbox/user)、独立的消息上下文、状态机(queued/running/done/failed)、日志、预算。
 - heartbeat 的 prompt 任务和未来的事件任务都跑在 job 里,**不再打进用户正在看的对话**;job 完成后向主对话投递一张结果卡片(可展开看完整过程)。
 - 实现关键:这正是做 A2(AgentTurnRunner 抽取)的时机——job 需要一个不依赖 ConversationView 的回合执行器。**不要提前抽,让 job 的真实需求逼出接口。**
