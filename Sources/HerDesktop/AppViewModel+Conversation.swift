@@ -5,9 +5,12 @@ import SwiftUI
 /// Conversation lifecycle, the send/tool loop, and transcript persistence.
 extension AppViewModel {
     var sortedConversations: [ConversationSummary] {
+        // Stable creation order (newest first); using a conversation must not
+        // reshuffle the list. Pinned ones still float to the top.
         conversations.sorted { lhs, rhs in
             if lhs.pinned != rhs.pinned { return lhs.pinned }
-            return lhs.updatedAt > rhs.updatedAt
+            if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
+            return lhs.id < rhs.id
         }
     }
 

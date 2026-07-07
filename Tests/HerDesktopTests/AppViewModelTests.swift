@@ -828,6 +828,26 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertTrue(model.auditEvents.contains { $0.type == "session.switch_conversation" })
     }
 
+    func testConversationOrderIsStableWhenUsed() {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-order-\(UUID().uuidString)", isDirectory: true)
+        let model = AppViewModel(cwd: root.path)
+        model.newLocalConversation()
+        model.newLocalConversation()
+        XCTAssertEqual(model.conversations.count, 3)
+
+        let before = model.sortedConversations.map(\.id)
+        // "Using" the active conversation bumps its updatedAt; the list must
+        // keep its creation order rather than jump this one to the top.
+        model.messages.append(ChatMessage(role: .user, content: "hi"))
+        model.saveSessionSnapshot()
+        model.messages.append(ChatMessage(role: .user, content: "again"))
+        model.saveSessionSnapshot()
+
+        XCTAssertEqual(model.sortedConversations.map(\.id), before,
+                       "using a conversation must not reorder the list")
+    }
+
     func testTypingWhileGeneratingSteersInsteadOfStartingNewTurn() {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-steer-\(UUID().uuidString)", isDirectory: true)
