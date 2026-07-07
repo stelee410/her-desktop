@@ -630,9 +630,56 @@ final class CapabilityExecutor {
         }
     }
 
+    /// Builds SKILL.md. For a skill capability this content IS what the skill
+    /// adapter returns to the model at runtime, so the model-authored
+    /// `instructions` (the concrete, ordered steps) lead the document. Without
+    /// them a skill is just boilerplate that tells the model nothing.
+    private func skillDocument(
+        name: String,
+        description: String,
+        instructions: String,
+        capabilityID: String,
+        kind: String,
+        requiresApproval: Bool,
+        existingContextBlock: String
+    ) -> String {
+        let instructionsBlock = instructions.isEmpty
+            ? """
+            ## Instructions
+
+            (No steps were provided. Regenerate this skill with an `instructions` argument that lists the exact, ordered actions to perform — including which capabilities to call — so invoking the skill actually drives the task.)
+            """
+            : """
+            ## Instructions
+
+            When this skill is invoked, actually perform these steps (call the referenced capabilities); do not merely restate them:
+
+            \(instructions)
+            """
+        return """
+        # \(name)
+
+        \(description)
+
+        \(instructionsBlock)
+
+        ## Capability
+
+        - id: \(capabilityID)
+        - kind: \(kind)
+        - approval required: \(requiresApproval)
+        \(existingContextBlock)
+
+        ## Runtime Notes
+
+        This package was created through Her Desktop vibe coding. Keep the behavior narrow, inspect user intent before acting, and ask for explicit approval before side effects.
+        """
+    }
+
     private func draftPlugin(arguments: [String: Any]) -> CapabilityResult {
         let name = clean(arguments["name"] as? String, fallback: "New Plugin")
         let description = clean(arguments["description"] as? String, fallback: "A conversationally generated extension.")
+        let instructions = clean(arguments["instructions"] as? String, fallback: "")
         let kind = clean(arguments["capability_kind"] as? String, fallback: "skill")
         let effectiveKind = kind.lowercased()
         let requestedApproval = arguments["requires_approval"] as? Bool ?? true
@@ -688,22 +735,15 @@ final class CapabilityExecutor {
             files: [
                 .init(
                     path: "SKILL.md",
-                    content: """
-                    # \(name)
-
-                    \(description)
-
-                    ## Capability
-
-                    - id: \(capabilityID)
-                    - kind: \(kind)
-                    - approval required: \(requiresApproval)
-                    \(existingContextBlock)
-
-                    ## Runtime Notes
-
-                    This package was created through Her Desktop vibe coding. Keep the behavior narrow, inspect user intent before acting, and ask for explicit approval before side effects.
-                    """
+                    content: skillDocument(
+                        name: name,
+                        description: description,
+                        instructions: instructions,
+                        capabilityID: capabilityID,
+                        kind: kind,
+                        requiresApproval: requiresApproval,
+                        existingContextBlock: existingContextBlock
+                    )
                 )
             ]
         ))

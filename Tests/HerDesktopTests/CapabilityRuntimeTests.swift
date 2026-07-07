@@ -256,6 +256,32 @@ final class CapabilityRuntimeTests: XCTestCase {
     }
 
     @MainActor
+    func testDraftSkillEmbedsModelProvidedInstructions() async throws {
+        let executor = CapabilityExecutor(registry: PluginRegistry(config: .empty))
+        let steps = "1. browser.open\n2. browser.navigate to x.com/compose/post\n3. click the composer, then browser.type the text\n4. click Post"
+
+        let result = await executor.execute(CapabilityInvocation(
+            toolCallID: "c", functionName: "plugin_draft", capabilityID: "plugin.draft",
+            arguments: ["name": "Post to X", "description": "Post a tweet", "capability_kind": "skill",
+                        "instructions": steps]
+        ))
+        let package = try JSONDecoder().decode(PluginPackage.self, from: XCTUnwrap(result.content.data(using: .utf8)))
+        let skill = try XCTUnwrap(package.files.first { $0.path == "SKILL.md" }?.content)
+        XCTAssertTrue(skill.contains("## Instructions"), "skill should have an Instructions section")
+        XCTAssertTrue(skill.contains("browser.navigate to x.com/compose/post"), "the model's steps must be embedded verbatim")
+        XCTAssertTrue(skill.contains("click Post"))
+
+        // Without instructions, the skill flags that steps are missing.
+        let bare = await executor.execute(CapabilityInvocation(
+            toolCallID: "c2", functionName: "plugin_draft", capabilityID: "plugin.draft",
+            arguments: ["name": "Empty", "description": "no steps", "capability_kind": "skill"]
+        ))
+        let barePackage = try JSONDecoder().decode(PluginPackage.self, from: XCTUnwrap(bare.content.data(using: .utf8)))
+        let bareSkill = try XCTUnwrap(barePackage.files.first { $0.path == "SKILL.md" }?.content)
+        XCTAssertTrue(bareSkill.contains("No steps were provided"))
+    }
+
+    @MainActor
     func testDraftPluginCanTargetExistingLocalPluginForReplacementPackage() async throws {
         let registry = PluginRegistry(config: .empty)
         let executor = CapabilityExecutor(registry: registry)

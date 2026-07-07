@@ -23,7 +23,7 @@ If the user asks to remove an installed local extension, use the approved `plugi
 
 ## Adapter Contract
 
-- `skill`: include `SKILL.md` with narrow usage instructions.
+- `skill`: pass a concrete `instructions` argument to `plugin.draft` — the exact, ordered steps to perform when the skill runs, naming the capabilities to call (e.g. `browser.open` → `browser.navigate` → `browser.read` → `browser.click` → `browser.type`) and any gotchas learned from doing the task. This text becomes `SKILL.md` and is exactly what the model reads at run time, so write it as an actionable procedure you could follow blindly, not a summary. A skill without real `instructions` is useless — it just restates the goal. If you just did the task successfully in this conversation, capture those working steps verbatim.
 - `webservice`: declare method, URL, optional headers, and body template. Use runtime placeholders for secrets.
   - The URL may embed input arguments as `{param}` path or query placeholders, e.g. `https://wttr.in/{city}?format=j1`. The runtime replaces each placeholder with the percent-encoded argument value (Chinese and spaces are safe) at execution time.
   - For GET, any arguments not consumed by a URL placeholder are appended as query parameters automatically; put an argument in the path only via a placeholder.

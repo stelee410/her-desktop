@@ -1,359 +1,359 @@
 {
-  "author" : "Her",
-  "capabilities" : [
+  "author": "Her",
+  "capabilities": [
     {
-      "adapter" : {
-        "skillFile" : "vibe-plugin-creator.SKILL.md",
-        "type" : "skill"
+      "adapter": {
+        "skillFile": "vibe-plugin-creator.SKILL.md",
+        "type": "skill"
       },
-      "id" : "plugin.draft",
-      "inputSchema" : {
-        "properties" : {
-          "capability_kind" : {
-            "description" : "Adapter kind for the generated capability.",
-            "enum" : [
+      "id": "plugin.draft",
+      "inputSchema": {
+        "properties": {
+          "capability_kind": {
+            "description": "Adapter kind for the generated capability.",
+            "enum": [
               "skill",
               "mcp",
               "webservice",
               "native",
               "command"
             ],
-            "type" : "string"
+            "type": "string"
           },
-          "command" : {
-            "description" : "Optional command executable path for command capabilities.",
-            "type" : "string"
+          "command": {
+            "description": "Optional command executable path for command capabilities.",
+            "type": "string"
           },
-          "command_arguments" : {
-            "description" : "Optional fixed argument templates for command capabilities, one per line.",
-            "type" : "string"
+          "command_arguments": {
+            "description": "Optional fixed argument templates for command capabilities, one per line.",
+            "type": "string"
           },
-          "description" : {
-            "description" : "What the plugin should do.",
-            "type" : "string"
+          "description": {
+            "description": "What the plugin should do.",
+            "type": "string"
           },
-          "existing_package_context" : {
-            "description" : "Optional context copied from plugin.inspect or plugin.readFile to preserve useful behavior while updating.",
-            "type" : "string"
+          "existing_package_context": {
+            "description": "Optional context copied from plugin.inspect or plugin.readFile to preserve useful behavior while updating.",
+            "type": "string"
           },
-          "install_immediately" : {
-            "description" : "When true, stage the generated draft and queue plugin.installDraft approval immediately instead of waiting for a separate install request.",
-            "type" : "boolean"
+          "install_immediately": {
+            "description": "When true, stage the generated draft and queue plugin.installDraft approval immediately instead of waiting for a separate install request.",
+            "type": "boolean"
           },
-          "method" : {
-            "description" : "Optional HTTP method for webservice capabilities.",
-            "enum" : [
+          "instructions": {
+            "description": "For skill capabilities: the concrete, ordered steps to perform when the skill is invoked, naming the exact capabilities to call (e.g. browser.open, browser.navigate, browser.click, browser.type). This text becomes SKILL.md and is what the model reads at run time — write it as an actionable procedure, not a summary. Required for skill kind.",
+            "type": "string"
+          },
+          "mcp_input_schema_json": {
+            "description": "Optional raw MCP input schema JSON from mcp.discover; supported fields become native plugin form inputs.",
+            "type": "string"
+          },
+          "method": {
+            "description": "Optional HTTP method for webservice capabilities.",
+            "enum": [
               "GET",
               "POST"
             ],
-            "type" : "string"
+            "type": "string"
           },
-          "method_name" : {
-            "description" : "Optional JSON-RPC method name for MCP bridge capabilities.",
-            "type" : "string"
+          "method_name": {
+            "description": "Optional JSON-RPC method name for MCP bridge capabilities.",
+            "type": "string"
           },
-          "mcp_input_schema_json" : {
-            "description" : "Optional raw MCP input schema JSON from mcp.discover; supported fields become native plugin form inputs.",
-            "type" : "string"
+          "name": {
+            "description": "Human-readable plugin name.",
+            "type": "string"
           },
-          "name" : {
-            "description" : "Human-readable plugin name.",
-            "type" : "string"
+          "requires_approval": {
+            "description": "Whether the generated capability should ask before execution.",
+            "type": "boolean"
           },
-          "requires_approval" : {
-            "description" : "Whether the generated capability should ask before execution.",
-            "type" : "boolean"
+          "tool_name": {
+            "description": "Optional MCP tool name when method_name is tools/call.",
+            "type": "string"
           },
-          "tool_name" : {
-            "description" : "Optional MCP tool name when method_name is tools/call.",
-            "type" : "string"
+          "update_plugin_id": {
+            "description": "Optional installed local plugin id to update, such as local.example. When set, draft a complete replacement package using this exact id.",
+            "type": "string"
           },
-          "update_plugin_id" : {
-            "description" : "Optional installed local plugin id to update, such as local.example. When set, draft a complete replacement package using this exact id.",
-            "type" : "string"
-          },
-          "url" : {
-            "description" : "Optional web service endpoint or local MCP bridge URL.",
-            "type" : "string"
+          "url": {
+            "description": "Optional web service endpoint or local MCP bridge URL.",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "name",
           "description"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "plugin.draft",
-      "kind" : "skill",
-      "requiresApproval" : false,
-      "title" : "Draft plugin manifest"
+      "invocation": "plugin.draft",
+      "kind": "skill",
+      "requiresApproval": false,
+      "title": "Draft plugin manifest"
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Inspect an installed local plugin package without exposing full file contents.",
-      "id" : "plugin.inspect",
-      "inputSchema" : {
-        "properties" : {
-          "plugin_id" : {
-            "description" : "Installed local plugin id to inspect, such as local.example.",
-            "type" : "string"
+      "description": "Inspect an installed local plugin package without exposing full file contents.",
+      "id": "plugin.inspect",
+      "inputSchema": {
+        "properties": {
+          "plugin_id": {
+            "description": "Installed local plugin id to inspect, such as local.example.",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "plugin_id"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "plugin.inspect",
-      "kind" : "native",
-      "requiresApproval" : false,
-      "title" : "Inspect local plugin"
+      "invocation": "plugin.inspect",
+      "kind": "native",
+      "requiresApproval": false,
+      "title": "Inspect local plugin"
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Read a UTF-8 text file from an installed local plugin package after explicit user approval.",
-      "id" : "plugin.readFile",
-      "inputSchema" : {
-        "properties" : {
-          "max_characters" : {
-            "description" : "Maximum characters to return.",
-            "type" : "integer"
+      "description": "Read a UTF-8 text file from an installed local plugin package after explicit user approval.",
+      "id": "plugin.readFile",
+      "inputSchema": {
+        "properties": {
+          "max_characters": {
+            "description": "Maximum characters to return.",
+            "type": "integer"
           },
-          "path" : {
-            "description" : "Relative UTF-8 text file path inside the plugin package, such as SKILL.md or README.md.",
-            "type" : "string"
+          "path": {
+            "description": "Relative UTF-8 text file path inside the plugin package, such as SKILL.md or README.md.",
+            "type": "string"
           },
-          "plugin_id" : {
-            "description" : "Installed local plugin id to read from, such as local.example.",
-            "type" : "string"
+          "plugin_id": {
+            "description": "Installed local plugin id to read from, such as local.example.",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "plugin_id",
           "path"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "plugin.readFile",
-      "kind" : "native",
-      "requiresApproval" : true,
-      "title" : "Read local plugin file"
+      "invocation": "plugin.readFile",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Read local plugin file"
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "List installed local plugins with follow-up export and removal arguments.",
-      "id" : "plugin.listInstalled",
-      "inputSchema" : {
-        "properties" : {
-        },
-        "required" : [
-        ],
-        "type" : "object"
+      "description": "List installed local plugins with follow-up export and removal arguments.",
+      "id": "plugin.listInstalled",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
       },
-      "invocation" : "plugin.listInstalled",
-      "kind" : "native",
-      "requiresApproval" : false,
-      "title" : "List installed local plugins"
+      "invocation": "plugin.listInstalled",
+      "kind": "native",
+      "requiresApproval": false,
+      "title": "List installed local plugins"
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Stage a PluginPackage JSON object into the generated review queue.",
-      "id" : "plugin.stagePackage",
-      "inputSchema" : {
-        "properties" : {
-          "package_json" : {
-            "description" : "Complete PluginPackage JSON object to validate and stage for review.",
-            "type" : "string"
+      "description": "Stage a PluginPackage JSON object into the generated review queue.",
+      "id": "plugin.stagePackage",
+      "inputSchema": {
+        "properties": {
+          "package_json": {
+            "description": "Complete PluginPackage JSON object to validate and stage for review.",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "package_json"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "plugin.stagePackage",
-      "kind" : "native",
-      "requiresApproval" : false,
-      "title" : "Stage plugin package"
+      "invocation": "plugin.stagePackage",
+      "kind": "native",
+      "requiresApproval": false,
+      "title": "Stage plugin package"
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Export an installed local plugin package into the workspace after explicit user approval.",
-      "id" : "plugin.export",
-      "inputSchema" : {
-        "properties" : {
-          "confirmed" : {
-            "description" : "True only after the user explicitly confirms export.",
-            "type" : "boolean"
+      "description": "Export an installed local plugin package into the workspace after explicit user approval.",
+      "id": "plugin.export",
+      "inputSchema": {
+        "properties": {
+          "confirmed": {
+            "description": "True only after the user explicitly confirms export.",
+            "type": "boolean"
           },
-          "plugin_id" : {
-            "description" : "Installed local plugin id to export, such as local.example.",
-            "type" : "string"
+          "plugin_id": {
+            "description": "Installed local plugin id to export, such as local.example.",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "plugin_id",
           "confirmed"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "plugin.export",
-      "kind" : "native",
-      "requiresApproval" : true,
-      "title" : "Export local plugin"
+      "invocation": "plugin.export",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Export local plugin"
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "List generated plugin drafts waiting in Her Desktop's local review queue.",
-      "id" : "plugin.listDrafts",
-      "inputSchema" : {
-        "properties" : {
-        },
-        "required" : [
-        ],
-        "type" : "object"
+      "description": "List generated plugin drafts waiting in Her Desktop's local review queue.",
+      "id": "plugin.listDrafts",
+      "inputSchema": {
+        "properties": {},
+        "required": [],
+        "type": "object"
       },
-      "invocation" : "plugin.listDrafts",
-      "kind" : "native",
-      "requiresApproval" : false,
-      "title" : "List staged plugin drafts"
+      "invocation": "plugin.listDrafts",
+      "kind": "native",
+      "requiresApproval": false,
+      "title": "List staged plugin drafts"
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "id" : "plugin.install",
-      "inputSchema" : {
-        "properties" : {
-          "confirmed" : {
-            "description" : "True only after the user explicitly confirms installation.",
-            "type" : "boolean"
+      "id": "plugin.install",
+      "inputSchema": {
+        "properties": {
+          "confirmed": {
+            "description": "True only after the user explicitly confirms installation.",
+            "type": "boolean"
           },
-          "manifest_json" : {
-            "description" : "A complete plugin manifest JSON object.",
-            "type" : "string"
+          "manifest_json": {
+            "description": "A complete plugin manifest JSON object.",
+            "type": "string"
           },
-          "package_json" : {
-            "description" : "Preferred: a PluginPackage JSON object with manifest and files.",
-            "type" : "string"
+          "package_json": {
+            "description": "Preferred: a PluginPackage JSON object with manifest and files.",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "confirmed"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "plugin.install",
-      "kind" : "native",
-      "requiresApproval" : true,
-      "title" : "Install generated plugin"
+      "invocation": "plugin.install",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Install generated plugin"
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Install a generated plugin draft already staged in Her Desktop after explicit user approval.",
-      "id" : "plugin.installDraft",
-      "inputSchema" : {
-        "properties" : {
-          "confirmed" : {
-            "description" : "True only after the user explicitly confirms installing the staged draft.",
-            "type" : "boolean"
+      "description": "Install a generated plugin draft already staged in Her Desktop after explicit user approval.",
+      "id": "plugin.installDraft",
+      "inputSchema": {
+        "properties": {
+          "confirmed": {
+            "description": "True only after the user explicitly confirms installing the staged draft.",
+            "type": "boolean"
           },
-          "draft_id" : {
-            "description" : "Generated draft UUID to install. Optional alternative to plugin_id.",
-            "type" : "string"
+          "draft_id": {
+            "description": "Generated draft UUID to install. Optional alternative to plugin_id.",
+            "type": "string"
           },
-          "plugin_id" : {
-            "description" : "Generated draft plugin id to install, such as local.example. Optional when exactly one draft is waiting.",
-            "type" : "string"
+          "plugin_id": {
+            "description": "Generated draft plugin id to install, such as local.example. Optional when exactly one draft is waiting.",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "confirmed"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "plugin.installDraft",
-      "kind" : "native",
-      "requiresApproval" : true,
-      "title" : "Install staged plugin draft"
+      "invocation": "plugin.installDraft",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Install staged plugin draft"
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Discard a generated plugin draft already staged in Her Desktop after explicit user approval.",
-      "id" : "plugin.discardDraft",
-      "inputSchema" : {
-        "properties" : {
-          "confirmed" : {
-            "description" : "True only after the user explicitly confirms discarding the staged draft.",
-            "type" : "boolean"
+      "description": "Discard a generated plugin draft already staged in Her Desktop after explicit user approval.",
+      "id": "plugin.discardDraft",
+      "inputSchema": {
+        "properties": {
+          "confirmed": {
+            "description": "True only after the user explicitly confirms discarding the staged draft.",
+            "type": "boolean"
           },
-          "draft_id" : {
-            "description" : "Generated draft UUID to discard. Optional alternative to plugin_id.",
-            "type" : "string"
+          "draft_id": {
+            "description": "Generated draft UUID to discard. Optional alternative to plugin_id.",
+            "type": "string"
           },
-          "plugin_id" : {
-            "description" : "Generated draft plugin id to discard, such as local.example. Optional when exactly one draft is waiting.",
-            "type" : "string"
+          "plugin_id": {
+            "description": "Generated draft plugin id to discard, such as local.example. Optional when exactly one draft is waiting.",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "confirmed"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "plugin.discardDraft",
-      "kind" : "native",
-      "requiresApproval" : true,
-      "title" : "Discard staged plugin draft"
+      "invocation": "plugin.discardDraft",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Discard staged plugin draft"
     },
     {
-      "adapter" : {
-        "type" : "native"
+      "adapter": {
+        "type": "native"
       },
-      "description" : "Remove an installed local plugin after explicit user approval.",
-      "id" : "plugin.remove",
-      "inputSchema" : {
-        "properties" : {
-          "confirmed" : {
-            "description" : "True only after the user explicitly confirms removal.",
-            "type" : "boolean"
+      "description": "Remove an installed local plugin after explicit user approval.",
+      "id": "plugin.remove",
+      "inputSchema": {
+        "properties": {
+          "confirmed": {
+            "description": "True only after the user explicitly confirms removal.",
+            "type": "boolean"
           },
-          "plugin_id" : {
-            "description" : "Installed local plugin id to remove, such as local.example.",
-            "type" : "string"
+          "plugin_id": {
+            "description": "Installed local plugin id to remove, such as local.example.",
+            "type": "string"
           }
         },
-        "required" : [
+        "required": [
           "plugin_id",
           "confirmed"
         ],
-        "type" : "object"
+        "type": "object"
       },
-      "invocation" : "plugin.remove",
-      "kind" : "native",
-      "requiresApproval" : true,
-      "title" : "Remove local plugin"
+      "invocation": "plugin.remove",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "Remove local plugin"
     }
   ],
-  "description" : "Turns a conversational extension idea into a plugin manifest and installable capability package.",
-  "id" : "builtin.vibe-plugin-creator",
-  "name" : "Vibe Plugin Creator",
-  "systemPromptAddendum" : "For plugin creation, produce a small manifest first, then implementation files after approval.",
-  "version" : "0.1.0"
+  "description": "Turns a conversational extension idea into a plugin manifest and installable capability package.",
+  "id": "builtin.vibe-plugin-creator",
+  "name": "Vibe Plugin Creator",
+  "systemPromptAddendum": "For plugin creation, produce a small manifest first, then implementation files after approval.",
+  "version": "0.1.0"
 }
