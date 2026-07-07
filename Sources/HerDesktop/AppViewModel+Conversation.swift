@@ -168,6 +168,21 @@ extension AppViewModel {
         await send(text, attachments: attachments)
     }
 
+    /// Start a turn as a cancellable, model-owned task so the composer can
+    /// stop it. The view calls this instead of awaiting sendDraft directly.
+    func submitDraft() {
+        guard !isGenerating else { return }
+        currentTurnTask?.cancel()
+        currentTurnTask = Task { [self] in await sendDraft() }
+    }
+
+    /// Stop the in-flight turn. Cancellation propagates through the LLM
+    /// stream; send()'s catch keeps any partial reply and returns to ready.
+    func stopCurrentTurn() {
+        currentTurnTask?.cancel()
+        currentTurnTask = nil
+    }
+
     func send(_ text: String, attachments: [MessageAttachment] = []) async {
         if await saveInlineAgentLLMKeyIfPresent(text: text, attachments: attachments) {
             return
@@ -215,13 +230,30 @@ extension AppViewModel {
             saveSessionSnapshot()
             Task { await persistTurnMemory(userInput: normalized.contextText, agentResponse: final, attachments: attachments) }
             Task { await speakAssistantReplyIfEnabled(final) }
+        } catch is CancellationError {
+            handleTurnCancelled()
+        } catch let error as URLError where error.code == .cancelled {
+            handleTurnCancelled()
         } catch {
+            if Task.isCancelled {
+                handleTurnCancelled()
+                return
+            }
             discardEmptyStreamedAssistantMessage()
             connectionState = .error
             lastError = error.localizedDescription
             messages.append(ChatMessage(role: .assistant, content: conversationalRecoveryMessage(for: error)))
             saveSessionSnapshot()
         }
+    }
+
+    /// User stopped generation: keep whatever streamed so far, no error.
+    private func handleTurnCancelled() {
+        flushStreamBuffer()
+        finalizeStreamedToolRoundNarration()
+        connectionState = .ready
+        lastError = nil
+        saveSessionSnapshot()
     }
 
     func attachFiles(_ urls: [URL]) {
@@ -337,17 +369,33 @@ extension AppViewModel {
             messages.append(message)
             streamingAssistantMessageID = message.id
         }
-        guard let id = streamingAssistantMessageID,
-              let index = messages.firstIndex(where: { $0.id == id }) else { return }
+        // Buffer the delta; a debounced flush applies it to `messages` so the
+        // whole UI re-renders at most ~14x/sec instead of once per token.
         switch event {
         case .reasoningDelta(let delta):
-            messages[index].reasoning += delta
+            streamBufferReasoning += delta
         case .contentDelta(let delta):
-            messages[index].content += delta
+            streamBufferContent += delta
+        }
+        guard streamFlushTimer == nil else { return }
+        streamFlushTimer = Timer.scheduledTimer(withTimeInterval: 0.07, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.flushStreamBuffer() }
         }
     }
 
+    func flushStreamBuffer() {
+        streamFlushTimer?.invalidate()
+        streamFlushTimer = nil
+        guard !streamBufferContent.isEmpty || !streamBufferReasoning.isEmpty else { return }
+        defer { streamBufferContent = ""; streamBufferReasoning = "" }
+        guard let id = streamingAssistantMessageID,
+              let index = messages.firstIndex(where: { $0.id == id }) else { return }
+        if !streamBufferReasoning.isEmpty { messages[index].reasoning += streamBufferReasoning }
+        if !streamBufferContent.isEmpty { messages[index].content += streamBufferContent }
+    }
+
     func finalizeStreamedAssistantReply(with message: AgentLLMChatResponse.Choice.Message) -> String {
+        flushStreamBuffer()
         let reply = message.content?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if let id = streamingAssistantMessageID,
            let index = messages.firstIndex(where: { $0.id == id }) {
@@ -357,6 +405,7 @@ extension AppViewModel {
     }
 
     func finalizeStreamedToolRoundNarration() {
+        flushStreamBuffer()
         defer { streamingAssistantMessageID = nil }
         guard let id = streamingAssistantMessageID,
               let index = messages.firstIndex(where: { $0.id == id }) else { return }
@@ -370,6 +419,8 @@ extension AppViewModel {
     /// Routes the final reply into the live streamed bubble when one exists,
     /// otherwise appends a fresh assistant message.
     func deliverAssistantReply(_ final: String) {
+        streamFlushTimer?.invalidate(); streamFlushTimer = nil
+        streamBufferContent = ""; streamBufferReasoning = ""
         defer { streamingAssistantMessageID = nil }
         if let id = streamingAssistantMessageID,
            let index = messages.firstIndex(where: { $0.id == id }) {
@@ -381,6 +432,8 @@ extension AppViewModel {
     }
 
     func discardEmptyStreamedAssistantMessage() {
+        streamFlushTimer?.invalidate(); streamFlushTimer = nil
+        streamBufferContent = ""; streamBufferReasoning = ""
         defer { streamingAssistantMessageID = nil }
         guard let id = streamingAssistantMessageID,
               let index = messages.firstIndex(where: { $0.id == id }),

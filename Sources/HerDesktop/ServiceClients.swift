@@ -674,6 +674,11 @@ final class AgentLLMClient: AgentLLMChatting {
             do {
                 return try await session.bytes(for: request)
             } catch {
+                // A cancelled turn (composer stop button) must propagate at
+                // once, not retry.
+                if Task.isCancelled || (error as? URLError)?.code == .cancelled {
+                    throw error
+                }
                 lastError = error
                 if attempt < attempts {
                     try? await Task.sleep(nanoseconds: UInt64(attempt) * 250_000_000)

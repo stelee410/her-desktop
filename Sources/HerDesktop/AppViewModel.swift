@@ -91,6 +91,20 @@ final class AppViewModel: ObservableObject {
     var dictationBaseText = ""
     var didBootstrapRuntime = false
     var bootstrapTask: Task<Void, Never>?
+    /// The in-flight conversation turn, so the composer's stop button can
+    /// cancel generation.
+    var currentTurnTask: Task<Void, Never>?
+    /// Streaming deltas are buffered and flushed to `messages` on a short
+    /// debounce, so the UI updates ~14x/sec instead of once per token
+    /// (which re-rendered the whole window and made typing/scrolling lag).
+    var streamBufferContent = ""
+    var streamBufferReasoning = ""
+    var streamFlushTimer: Timer?
+
+    /// True while a turn is generating and can be stopped.
+    var isGenerating: Bool {
+        connectionState == .thinking || connectionState == .working
+    }
     /// finish_reason of the most recent model reply in the tool loop,
     /// used to explain empty replies (e.g. output truncated at "length").
     var lastAssistantFinishReason: String?

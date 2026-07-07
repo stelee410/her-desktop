@@ -670,7 +670,7 @@ private struct ComposerView: View {
                             insertLineBreakInFocusedEditor()
                             return .handled
                         }
-                        Task { await model.sendDraft() }
+                        model.submitDraft()
                         return .handled
                     }
 
@@ -684,19 +684,35 @@ private struct ComposerView: View {
                 .foregroundStyle(AppTheme.coral)
                 .help(model.connectionState == .listening ? "Stop dictation" : "Start dictation")
 
-                Button {
-                    Task { await model.sendDraft() }
-                } label: {
-                    Image(systemName: "arrow.up")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                        .background(AppTheme.coral)
-                        .clipShape(Circle())
+                if model.isGenerating {
+                    Button {
+                        model.stopCurrentTurn()
+                    } label: {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 34, height: 34)
+                            .background(AppTheme.ink)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(".", modifiers: [.command])
+                    .help("停止生成（⌘.）")
+                } else {
+                    Button {
+                        model.submitDraft()
+                    } label: {
+                        Image(systemName: "arrow.up")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .frame(width: 34, height: 34)
+                            .background(AppTheme.coral)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.return, modifiers: [.command])
+                    .disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && model.pendingAttachments.isEmpty)
                 }
-                .buttonStyle(.plain)
-                .keyboardShortcut(.return, modifiers: [.command])
-                .disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && model.pendingAttachments.isEmpty)
             }
             if model.connectionState == .listening, !model.dictationTranscript.isEmpty {
                 Label(model.dictationTranscript, systemImage: "waveform")
