@@ -115,7 +115,8 @@ extension AppViewModel {
                 invocation.arguments,
                 keys: ["install_immediately", "installImmediately"],
                 fallback: false
-            )
+            ),
+            postToConversation: postToConversation
         )
         captureInstalledPluginIfNeeded(invocation: invocation, result: result, approved: approved)
         captureRemovedPluginIfNeeded(invocation: invocation, result: result, approved: approved)

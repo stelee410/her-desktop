@@ -934,6 +934,9 @@ final class CapabilityExecutor {
                 requiresUserApproval: false
             )
         } catch {
+            // Drop the cached session so a bridge that comes up later gets a
+            // fresh handshake instead of a permanently-poisoned cache.
+            await MCPClient.shared.reset(url: url)
             return CapabilityResult(
                 title: "MCP Bridge Failed",
                 content: SecretRedactor.redact(error, config: config),

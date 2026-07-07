@@ -167,10 +167,12 @@ extension AppViewModel {
                             saveSessionSnapshot()
                         }
                         appendJobLog(jobID, "待审批: \(capabilityID)")
+                        // Honest copy: approving runs THAT action standalone;
+                        // the job itself does not resume its remaining plan.
                         finishJob(
                             jobID,
                             state: .needsApproval,
-                            result: "任务在需要你批准的操作(\(capabilityID))处停住了。批准后我会继续执行该操作。"
+                            result: "任务在需要你批准的操作(\(capabilityID))处停住了。批准后该操作会单独执行；如需继续整个任务，请重新发起。"
                         )
                         return
                     }
@@ -236,8 +238,20 @@ extension AppViewModel {
         }
         let steps = job.log.isEmpty ? "" : "\n\n步骤:\n" + job.log.map { "- \($0)" }.joined(separator: "\n")
         let body = job.result ?? job.failureReason ?? ""
-        messages.append(ChatMessage(role: .tool, content: "\(header)\n\(body)\(steps)"))
-        saveSessionSnapshot()
+        let card = ChatMessage(role: .tool, content: "\(header)\n\(body)\(steps)")
+        Task { @MainActor [weak self] in
+            // A card appended while a switched-to transcript is still decoding
+            // would be clobbered by the load completion (`messages = loaded`).
+            // Wait out the load window (bounded) before delivering.
+            var waited = 0
+            while self?.isLoadingConversation == true, waited < 100 {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                waited += 1
+            }
+            guard let self else { return }
+            self.messages.append(card)
+            self.saveSessionSnapshot()
+        }
         if case .heartbeat = job.source {
             Task { [notificationScheduler] in
                 _ = try? await notificationScheduler.schedule(

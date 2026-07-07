@@ -38,10 +38,19 @@ extension AppViewModel {
     /// One heartbeat: fire every due task, reschedule, persist. Prompt tasks
     /// enqueue background jobs (which themselves yield to an in-flight user
     /// turn), so firing is safe at any time.
+    ///
+    /// Snapshot-then-relookup: `fire` suspends on the main actor (`await`),
+    /// during which schedule.create/cancel can mutate `heartbeatTasks` —
+    /// iterating live indices across that suspension crashed on a stale
+    /// index. IDs stay valid; indices don't.
     func heartbeatTick(now: Date = Date()) async {
         guard !heartbeatTasks.isEmpty else { return }
-        for index in heartbeatTasks.indices {
-            guard heartbeatTasks[index].isDue(at: now) else { continue }
+        let dueIDs = heartbeatTasks.filter { $0.isDue(at: now) }.map(\.id)
+        guard !dueIDs.isEmpty else { return }
+        for id in dueIDs {
+            // Re-look-up after each await; the task may have been cancelled.
+            guard let index = heartbeatTasks.firstIndex(where: { $0.id == id }),
+                  heartbeatTasks[index].isDue(at: now) else { continue }
             var task = heartbeatTasks[index]
             task.lastFiredAt = now
             if case .once = task.schedule {
@@ -50,6 +59,8 @@ extension AppViewModel {
             heartbeatTasks[index] = task
             await fire(task)
         }
+        // Only when something actually fired — an unconditional persist here
+        // rewrote an identical heartbeat.json on the main actor every 30s.
         persistHeartbeatTasks()
     }
 

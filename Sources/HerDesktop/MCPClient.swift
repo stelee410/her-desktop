@@ -90,6 +90,11 @@ actor MCPClient {
     func ensureInitialized(url: URL, headers: [String: String], urlSession: URLSession) async {
         let key = url.absoluteString
         if sessions[key]?.handshakeAttempted == true { return }
+        // Mark BEFORE the first await: actors release isolation across
+        // suspension, so a reentrant call during the handshake POST would
+        // otherwise start a second full handshake (strict MCP servers reject
+        // a duplicate initialize).
+        sessions[key] = SessionState(handshakeAttempted: true)
         var state = SessionState(handshakeAttempted: true)
         defer { sessions[key] = state }
 

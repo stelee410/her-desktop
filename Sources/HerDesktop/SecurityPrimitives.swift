@@ -20,13 +20,17 @@ enum SecurityPrimitives {
     /// loopback listeners with the attacker's domain in Host — reject it.
     static func isLoopbackHost(_ host: String?) -> Bool {
         guard var host = host?.lowercased() else { return false }
-        // Strip an optional port ("127.0.0.1:8799", "[::1]:8799").
+        // Strip an optional port ("127.0.0.1:8799", "[::1]:8799"). A bare
+        // unbracketed IPv6 ("::1") contains multiple colons and carries no
+        // port — stripping at the last colon would mangle it, so only strip
+        // when there is exactly one colon.
         if host.hasPrefix("[") {
             host = String(host.dropFirst())
             if let end = host.firstIndex(of: "]") {
                 host = String(host[..<end])
             }
-        } else if let colon = host.lastIndex(of: ":") {
+        } else if host.filter({ $0 == ":" }).count == 1,
+                  let colon = host.lastIndex(of: ":") {
             host = String(host[..<colon])
         }
         return host == "127.0.0.1" || host == "localhost" || host == "::1"

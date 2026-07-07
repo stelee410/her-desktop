@@ -55,6 +55,23 @@ final class AgentJobTests: XCTestCase {
         }
     }
 
+    /// Result cards are delivered asynchronously (they wait out a transcript
+    /// load window); poll for the card instead of asserting immediately.
+    private func waitForCard(
+        _ model: AppViewModel,
+        containing text: String,
+        timeout: TimeInterval = 5
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if model.messages.contains(where: { $0.content.contains(text) }) {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return false
+    }
+
     private func plainReply(_ text: String) -> AgentLLMChatResponse.Choice.Message {
         AgentLLMChatResponse.Choice.Message(role: "assistant", content: text)
     }
@@ -83,10 +100,11 @@ final class AgentJobTests: XCTestCase {
         )
         await waitForJobsFinished(model)
 
-        // Exactly one card lands in the conversation, nothing else.
+        // Exactly one card lands in the conversation (delivered async).
+        let delivered = await waitForCard(model, containing: "后台任务完成 · 早报")
+        XCTAssertTrue(delivered)
         XCTAssertEqual(model.messages.count, before + 1)
         let card = model.messages.last?.content ?? ""
-        XCTAssertTrue(card.contains("后台任务完成 · 早报"))
         XCTAssertTrue(card.contains("市场没什么大事。"))
         // The user's transcript never gained a fake "user" message.
         XCTAssertFalse(model.messages.contains { $0.role == .user })
@@ -113,7 +131,8 @@ final class AgentJobTests: XCTestCase {
         XCTAssertEqual(model.pendingApprovals.count, 1)
         XCTAssertTrue(model.messages.contains { $0.approvalID != nil },
                       "the approval card must be parked in the conversation")
-        XCTAssertTrue(model.messages.contains { $0.content.contains("后台任务待批准") })
+        let parked = await waitForCard(model, containing: "后台任务待批准")
+        XCTAssertTrue(parked)
     }
 
     func testJobFailsWhenToolRoundBudgetExhausted() async {
@@ -128,7 +147,8 @@ final class AgentJobTests: XCTestCase {
 
         XCTAssertEqual(model.agentJobs.first?.state, .failed)
         XCTAssertTrue(model.agentJobs.first?.failureReason?.contains("预算上限") == true)
-        XCTAssertTrue(model.messages.contains { $0.content.contains("后台任务失败") })
+        let failedCard = await waitForCard(model, containing: "后台任务失败")
+        XCTAssertTrue(failedCard)
     }
 
     func testHeartbeatPromptTaskEnqueuesJobInsteadOfInterruptingConversation() async {
@@ -145,7 +165,8 @@ final class AgentJobTests: XCTestCase {
 
         XCTAssertFalse(model.messages.contains { $0.role == .user },
                        "heartbeat must not inject fake user messages")
-        XCTAssertTrue(model.messages.contains { $0.content.contains("后台任务完成 · 巡检") })
+        let done = await waitForCard(model, containing: "后台任务完成 · 巡检")
+        XCTAssertTrue(done)
         XCTAssertNotNil(model.heartbeatTasks.first?.completedAt)
     }
 

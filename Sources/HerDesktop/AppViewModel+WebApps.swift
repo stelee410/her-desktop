@@ -98,7 +98,11 @@ extension AppViewModel {
     /// Executes a plugin's webapp-kind capability: opens the materialized
     /// app (self-healing if it is missing but the package is installed).
     func openPluginWebAppCapability(capability: PluginManifest.Capability) -> CapabilityResult {
+        // Fall back to a fresh registry lookup when the in-memory plugins
+        // array is stale (e.g. invoked right after an install, before
+        // reloadPlugins finished).
         let pluginID = pluginRegistry.manifest(containing: capability.id, in: plugins)?.id
+            ?? pluginRegistry.manifest(containing: capability.id)?.id
         var app = webApps.first { $0.sourcePluginID != nil && $0.sourcePluginID == pluginID }
         if app == nil, let pluginID,
            let package = try? pluginRegistry.package(pluginID: pluginID) {

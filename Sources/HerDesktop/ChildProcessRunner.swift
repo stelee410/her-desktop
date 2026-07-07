@@ -73,6 +73,14 @@ enum ChildProcessRunner {
             DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
                 if process.isRunning {
                     process.terminate()
+                    // SIGTERM can be trapped/ignored (`trap '' TERM`); without
+                    // escalation the terminationHandler never fires and the
+                    // awaiting task hangs forever.
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
+                        if process.isRunning {
+                            kill(process.processIdentifier, SIGKILL)
+                        }
+                    }
                 }
             }
         }

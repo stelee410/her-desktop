@@ -78,36 +78,27 @@ struct HeartbeatTask: Identifiable, Codable, Equatable {
     var completedAt: Date? = nil
 
     /// The next time this task should fire, or nil when it never will again.
+    ///
+    /// Anchor semantics: recurring schedules anchor on `lastFiredAt`, or on
+    /// `createdAt` before the first fire — so "daily at 09:00" created at
+    /// 10:00 first fires TOMORROW 09:00 (not immediately), and "every 30
+    /// min" first fires 30 minutes after creation. Occurrences missed while
+    /// the app was closed still catch up (the computed date is in the past →
+    /// due), but never more than once.
     func nextFireDate(after reference: Date, calendar: Calendar = .current) -> Date? {
         guard enabled, completedAt == nil else { return nil }
+        let anchor = lastFiredAt ?? createdAt
         switch schedule {
         case .once(let at):
             return at
         case .every(let seconds):
             let interval = max(seconds, HeartbeatEngine.minimumInterval)
-            guard let last = lastFiredAt else { return reference }
-            return last.addingTimeInterval(interval)
+            return anchor.addingTimeInterval(interval)
         case .daily(let hour, let minute):
             var components = DateComponents()
             components.hour = hour
             components.minute = minute
-            // If it already fired today, the next occurrence is tomorrow.
-            let anchor: Date
-            if let last = lastFiredAt, calendar.isDate(last, inSameDayAs: reference) {
-                anchor = reference
-            } else if let today = calendar.date(
-                bySettingHour: hour, minute: minute, second: 0, of: reference
-            ), today <= reference {
-                // Due earlier today and not fired yet — due now.
-                return today
-            } else {
-                return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: reference)
-            }
-            return calendar.nextDate(
-                after: anchor,
-                matching: components,
-                matchingPolicy: .nextTime
-            )
+            return calendar.nextDate(after: anchor, matching: components, matchingPolicy: .nextTime)
         }
     }
 

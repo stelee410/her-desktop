@@ -62,7 +62,7 @@ final class HeartbeatTests: XCTestCase {
         XCTAssertFalse(task.isDue(at: now.addingTimeInterval(3600)), "completed one-shot never refires")
     }
 
-    func testEveryTaskEnforcesMinimumIntervalAndReschedules() {
+    func testEveryTaskAnchorsOnCreationAndEnforcesMinimumInterval() {
         let now = Date()
         var task = HeartbeatTask(
             title: "recurring",
@@ -70,34 +70,47 @@ final class HeartbeatTests: XCTestCase {
             prompt: "",
             schedule: .every(seconds: 1) // below the floor
         )
-        XCTAssertTrue(task.isDue(at: now), "never-fired recurring task is due immediately")
-        task.lastFiredAt = now
-        XCTAssertFalse(task.isDue(at: now.addingTimeInterval(30)),
-                       "1s interval is clamped to the 60s floor")
+        // Anchored on creation: "every N" first fires N after creation, and
+        // the 1s interval is clamped to the 60s floor.
+        XCTAssertFalse(task.isDue(at: now), "must not fire at the moment of creation")
+        XCTAssertFalse(task.isDue(at: now.addingTimeInterval(30)))
         XCTAssertTrue(task.isDue(at: now.addingTimeInterval(HeartbeatEngine.minimumInterval + 1)))
+        // After firing, the anchor moves to lastFiredAt.
+        task.lastFiredAt = now.addingTimeInterval(HeartbeatEngine.minimumInterval + 1)
+        XCTAssertFalse(task.isDue(at: now.addingTimeInterval(HeartbeatEngine.minimumInterval + 30)))
+        XCTAssertTrue(task.isDue(at: now.addingTimeInterval(2 * HeartbeatEngine.minimumInterval + 2)))
     }
 
-    func testDailyTaskFiresOncePerDay() {
+    func testDailyTaskFiresAtNextOccurrenceAfterCreation() {
         let calendar = Calendar.current
         let now = Date()
-        let hour = calendar.component(.hour, from: now)
-        let minute = calendar.component(.minute, from: now)
-        // Scheduled for a minute ago today.
-        let earlier = calendar.date(byAdding: .minute, value: -1, to: now)!
+        let scheduledAt = calendar.date(byAdding: .minute, value: -1, to: now)!
+        let hour = calendar.component(.hour, from: scheduledAt)
+        let minute = calendar.component(.minute, from: scheduledAt)
+
+        // Created BEFORE today's occurrence → due today (catch-up).
         var task = HeartbeatTask(
             title: "daily",
             action: .notify,
             prompt: "",
-            schedule: .daily(
-                hour: calendar.component(.hour, from: earlier),
-                minute: calendar.component(.minute, from: earlier)
-            )
+            schedule: .daily(hour: hour, minute: minute)
         )
-        XCTAssertTrue(task.isDue(at: now), "due earlier today and not yet fired")
+        task.createdAt = calendar.date(byAdding: .hour, value: -2, to: now)!
+        XCTAssertTrue(task.isDue(at: now), "created before today's time and not yet fired → due")
         task.lastFiredAt = now
         XCTAssertFalse(task.isDue(at: now.addingTimeInterval(60)),
                        "already fired today — next occurrence is tomorrow")
-        _ = (hour, minute)
+
+        // Created AFTER today's occurrence → first fire is tomorrow, not now.
+        var lateTask = HeartbeatTask(
+            title: "daily-late",
+            action: .notify,
+            prompt: "",
+            schedule: .daily(hour: hour, minute: minute)
+        )
+        lateTask.createdAt = now
+        XCTAssertFalse(lateTask.isDue(at: now),
+                       "daily task created after today's time must not fire immediately")
     }
 
     // MARK: - Engine

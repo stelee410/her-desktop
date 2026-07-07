@@ -1619,7 +1619,8 @@ extension AppViewModel {
     func captureGeneratedPluginDraft(
         from result: CapabilityResult,
         source: String,
-        installImmediately: Bool = false
+        installImmediately: Bool = false,
+        postToConversation: Bool = true
     ) -> PluginDraftCapture? {
         guard result.title == "Plugin Package Draft",
               let data = result.content.data(using: .utf8),
@@ -1641,7 +1642,11 @@ extension AppViewModel {
             queuedApprovalID = approval.id
             content += installDraftApprovalQueuedContent(approval: approval, draft: draft)
         }
-        messages.append(ChatMessage(role: .tool, content: content, approvalID: queuedApprovalID))
+        // Background jobs keep the draft in the review queue without
+        // injecting a card into whatever conversation is focused.
+        if postToConversation {
+            messages.append(ChatMessage(role: .tool, content: content, approvalID: queuedApprovalID))
+        }
         return PluginDraftCapture(content: content, queuedInstallApproval: queuedInstallApproval)
     }
 
