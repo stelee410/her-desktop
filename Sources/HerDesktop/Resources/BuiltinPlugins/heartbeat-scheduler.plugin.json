@@ -1,0 +1,105 @@
+{
+  "author" : "Her",
+  "capabilities" : [
+    {
+      "adapter" : {
+        "type" : "native"
+      },
+      "description" : "Create a scheduled task the heartbeat engine fires when due: a local notification (notify) or a full agent turn with tools (prompt).",
+      "id" : "schedule.create",
+      "inputSchema" : {
+        "properties" : {
+          "action" : {
+            "description" : "notify posts a local notification directly (no tokens). prompt wakes the agent with the prompt text as a real conversation turn.",
+            "enum" : [
+              "notify",
+              "prompt"
+            ],
+            "type" : "string"
+          },
+          "at" : {
+            "description" : "One-shot fire time, ISO-8601 (2026-07-08T09:00:00+08:00) or local \"yyyy-MM-dd HH:mm\". Provide exactly one of at / every_minutes / daily_at.",
+            "type" : "string"
+          },
+          "daily_at" : {
+            "description" : "Daily fire time as \"HH:mm\" local time.",
+            "type" : "string"
+          },
+          "every_minutes" : {
+            "description" : "Recurring interval in minutes (minimum 1).",
+            "type" : "number"
+          },
+          "prompt" : {
+            "description" : "Notification body (notify) or the agent turn text (prompt).",
+            "type" : "string"
+          },
+          "title" : {
+            "description" : "Short task title shown in notifications and task lists.",
+            "type" : "string"
+          }
+        },
+        "required" : [
+          "title",
+          "action"
+        ],
+        "type" : "object"
+      },
+      "invocation" : "schedule.create",
+      "kind" : "native",
+      "requiresApproval" : true,
+      "title" : "Create scheduled task",
+      "usageHint" : "the user asks Her to remind them at/every a specific time, run something on a schedule, check in periodically, or do timed/recurring work. Prefer action=notify for plain reminders (no tokens); use action=prompt only when the task genuinely needs the agent to think or use tools when it fires."
+    },
+    {
+      "adapter" : {
+        "type" : "native"
+      },
+      "description" : "List scheduled heartbeat tasks with their schedules and next fire times.",
+      "id" : "schedule.list",
+      "inputSchema" : {
+        "properties" : {
+          "request" : {
+            "description" : "Optional note.",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "invocation" : "schedule.list",
+      "kind" : "native",
+      "requiresApproval" : false,
+      "title" : "List scheduled tasks",
+      "usageHint" : "the user asks what is scheduled, when the next reminder fires, or before cancelling a task whose id is not already known."
+    },
+    {
+      "adapter" : {
+        "type" : "native"
+      },
+      "description" : "Cancel a scheduled heartbeat task by task_id or exact title.",
+      "id" : "schedule.cancel",
+      "inputSchema" : {
+        "properties" : {
+          "task_id" : {
+            "description" : "The task id from schedule.list or schedule.create.",
+            "type" : "string"
+          },
+          "title" : {
+            "description" : "Exact task title, when the id is not known.",
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "invocation" : "schedule.cancel",
+      "kind" : "native",
+      "requiresApproval" : false,
+      "title" : "Cancel scheduled task",
+      "usageHint" : "the user asks to cancel, remove, or stop a reminder or scheduled task. Call schedule.list first when the task id is ambiguous."
+    }
+  ],
+  "description" : "Heartbeat scheduler: timed and recurring tasks Her runs proactively — local notifications or scheduled agent turns.",
+  "id" : "builtin.heartbeat",
+  "name" : "Heartbeat Scheduler",
+  "systemPromptAddendum" : "Scheduled prompt-tasks fire as real conversation turns under normal approval rules; never promise unattended side effects beyond what an approved capability reports. Times are the user's local timezone unless they say otherwise.",
+  "version" : "0.1.0"
+}

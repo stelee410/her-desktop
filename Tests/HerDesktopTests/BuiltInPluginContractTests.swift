@@ -124,6 +124,8 @@ final class BuiltInPluginContractTests: XCTestCase {
                 "plugin.inspect",
                 "plugin.stagePackage",
                 "product.diagnostics",
+                "schedule.list",
+                "schedule.cancel",
                 "shell.inspect",
                 "webapp.list",
                 "webapp.open",

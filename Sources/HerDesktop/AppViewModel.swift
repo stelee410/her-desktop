@@ -197,6 +197,13 @@ final class AppViewModel: ObservableObject, AuditRecording {
     var streamBufferContent = ""
     var streamBufferReasoning = ""
     var streamFlushTimer: Timer?
+    /// Heartbeat: scheduled tasks (reminders / timed agent turns) checked by
+    /// a periodic tick. See AppViewModel+Heartbeat.
+    @Published var heartbeatTasks: [HeartbeatTask] = []
+    var heartbeatTimer: Timer?
+    lazy var heartbeatStore = HeartbeatTaskStore(cwd: runtimeCwd)
+    /// Injected for tests; heartbeat notify tasks fire through this directly.
+    let notificationScheduler: NativeNotificationScheduling
 
     /// True while a turn is generating and can be stopped.
     var isGenerating: Bool {
@@ -239,6 +246,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
         agentLLM: (any AgentLLMChatting)? = nil,
         speechSynthesizer: NativeSpeechSynthesizing = MacSpeechSynthesizer(),
         speechDictation: NativeSpeechDictating = MacSpeechDictationService(),
+        notificationScheduler: NativeNotificationScheduling = UserNotificationScheduler(),
         urlSession: URLSession = .shared
     ) {
         let loaded = explicitConfig ?? ConfigLoader.load(cwd: cwd)
@@ -250,6 +258,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
         self.pluginRegistry = PluginRegistry(config: loaded, baseDirectory: cwd)
         self.speechSynthesizer = speechSynthesizer
         self.speechDictation = speechDictation
+        self.notificationScheduler = notificationScheduler
         self.urlSession = urlSession
         self.capabilityExecutor = CapabilityExecutor(
             registry: pluginRegistry,
@@ -339,6 +348,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
     /// survive as orphan processes across quits. Called from the app
     /// delegate's `applicationWillTerminate`.
     func shutdown() {
+        stopHeartbeat()
         // Land any queued transcript/index/audit writes before exit.
         conversationStore.flushPendingIO()
         auditStore.flushPendingIO()
@@ -370,6 +380,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
         refreshWebServiceArtifacts()
         refreshDreamContext()
         startWebAppServerIfNeeded()
+        startHeartbeat()
         await reloadPlugins()
         await refreshServiceHealth()
     }

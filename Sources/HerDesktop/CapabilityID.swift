@@ -49,6 +49,11 @@ enum CapabilityID {
     static let pluginExport = "plugin.export"
     static let pluginStagePackage = "plugin.stagePackage"
 
+    // Heartbeat / scheduled tasks
+    static let scheduleCreate = "schedule.create"
+    static let scheduleList = "schedule.list"
+    static let scheduleCancel = "schedule.cancel"
+
     // Native / memory / misc
     static let nativeNotify = "native.notify"
     static let nativeSpeak = "native.speak"

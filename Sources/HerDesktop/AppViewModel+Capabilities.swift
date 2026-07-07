@@ -329,6 +329,15 @@ extension AppViewModel {
         CapabilityID.webappRequest: { model, invocation in
             await model.requestWebAppBackendCapability(arguments: invocation.arguments)
         },
+        CapabilityID.scheduleCreate: { model, invocation in
+            model.createScheduledTaskCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.scheduleList: { model, _ in
+            model.listScheduledTasksCapability()
+        },
+        CapabilityID.scheduleCancel: { model, invocation in
+            model.cancelScheduledTaskCapability(arguments: invocation.arguments)
+        },
         CapabilityID.terminalOpen: { model, _ in
             model.openTerminalCapability()
         },
