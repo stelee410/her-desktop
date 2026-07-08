@@ -239,6 +239,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
     let voiceLevel = VoiceLevelModel()
     /// Push-to-talk (hold Space) state — see AppViewModel+Voice.
     var pushToTalkMonitors: [Any] = []
+    var pasteMonitor: Any?
     var spaceHoldPending = false
     var spaceHoldTask: Task<Void, Never>?
     var isPushToTalking = false
@@ -410,6 +411,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
     func shutdown() {
         isShuttingDown = true
         removePushToTalkMonitors()
+        removePasteMonitor()
         stopHeartbeat()
         cancelQueuedJobs()
         speechTask?.cancel()
@@ -450,6 +452,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
         startHeartbeat()
         loadRoleplayAssets()
         installPushToTalkMonitors()
+        installPasteMonitor()
         await reloadPlugins()
         await refreshServiceHealth()
     }
