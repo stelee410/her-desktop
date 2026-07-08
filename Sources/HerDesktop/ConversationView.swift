@@ -812,14 +812,44 @@ private struct MessageArtifactChip: View {
     }
 }
 
+/// Live mic waveform shown above the composer during dictation. Observes
+/// only VoiceLevelModel, so ~15Hz level updates redraw just these bars.
+private struct DictationWaveView: View {
+    @EnvironmentObject private var voiceLevel: VoiceLevelModel
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 2.5) {
+            ForEach(Array(voiceLevel.samples.enumerated()), id: \.offset) { _, level in
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(AppTheme.coral.opacity(0.85))
+                    .frame(width: 3, height: max(3, level * 22))
+            }
+        }
+        .frame(height: 24)
+        .animation(.linear(duration: 0.06), value: voiceLevel.samples)
+    }
+}
+
 private struct ComposerView: View {
     @EnvironmentObject private var session: ConversationModel
     @EnvironmentObject private var model: AppViewModel
     @State private var isFileImporterPresented = false
     @State private var isDropTargeted = false
+    @FocusState private var isComposerFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if model.connectionState == .listening {
+                HStack(spacing: 10) {
+                    DictationWaveView()
+                    Text(model.isPushToTalking ? "松开空格结束" : "正在聆听…点麦克风结束")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.coral)
+                    Spacer()
+                }
+                .padding(.horizontal, 8)
+                .transition(.opacity)
+            }
             if !session.pendingAttachments.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
@@ -848,6 +878,10 @@ private struct ComposerView: View {
                     .textFieldStyle(.plain)
                     .lineLimit(1...6)
                     .font(.system(size: 15))
+                    .focused($isComposerFocused)
+                    .onChange(of: isComposerFocused) { _, focused in
+                        model.composerFocused = focused
+                    }
                     .onKeyPress(.return, phases: .down) { press in
                         // While an input method (e.g. Chinese pinyin) is still
                         // composing, Return must commit the composition, not send.

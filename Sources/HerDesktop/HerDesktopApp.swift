@@ -35,6 +35,7 @@ struct HerDesktopApp: App {
                 .environmentObject(viewModel.serviceStatus)
                 .environmentObject(viewModel.activityFeed)
                 .environmentObject(viewModel.conversation)
+                .environmentObject(viewModel.voiceLevel)
                 .frame(minWidth: 1180, minHeight: 760)
                 .sheet(isPresented: $isQuickCapturePresented) {
                     QuickCaptureSheet()

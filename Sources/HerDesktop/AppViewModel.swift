@@ -230,6 +230,17 @@ final class AppViewModel: ObservableObject, AuditRecording {
     /// In-flight TTS for the last reply; cancelled on conversation switch
     /// and shutdown so a previous conversation doesn't keep speaking.
     var speechTask: Task<Void, Never>?
+    /// Live mic level for the composer waveform (own observable so ~15Hz
+    /// updates never invalidate the conversation).
+    let voiceLevel = VoiceLevelModel()
+    /// Push-to-talk (hold Space) state — see AppViewModel+Voice.
+    var pushToTalkMonitors: [Any] = []
+    var spaceHoldPending = false
+    var spaceHoldTask: Task<Void, Never>?
+    var isPushToTalking = false
+    /// Set by the composer's focus state; Space push-to-talk only engages
+    /// when the composer owns focus (or nothing text-y does).
+    var composerFocused = false
     /// Set by shutdown(); an already-in-flight heartbeat tick must not
     /// enqueue new jobs (and respawn the worker) after teardown began.
     var isShuttingDown = false
@@ -390,6 +401,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
     /// delegate's `applicationWillTerminate`.
     func shutdown() {
         isShuttingDown = true
+        removePushToTalkMonitors()
         stopHeartbeat()
         cancelQueuedJobs()
         speechTask?.cancel()
@@ -429,6 +441,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
         startWebAppServerIfNeeded()
         startHeartbeat()
         loadRoleplayAssets()
+        installPushToTalkMonitors()
         await reloadPlugins()
         await refreshServiceHealth()
     }

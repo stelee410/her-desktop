@@ -15,7 +15,8 @@ protocol NativeSpeechDictating {
 }
 
 @MainActor
-final class MacSpeechDictationService: NSObject, NativeSpeechDictating {
+final class MacSpeechDictationService: NSObject, NativeSpeechDictating, AudioLevelReporting {
+    var onAudioLevel: (@MainActor (CGFloat) -> Void)?
     private let audioEngine = AVAudioEngine()
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
@@ -44,8 +45,16 @@ final class MacSpeechDictationService: NSObject, NativeSpeechDictating {
         // closure must NOT inherit @MainActor isolation — an inherited
         // isolation assertion on a realtime audio thread is a crash.
         nonisolated(unsafe) let tapRequest = request
+        // Level callback snapshotted before start; reported at ~1/3 buffer
+        // rate so the waveform updates ~15Hz without flooding the main actor.
+        let levelHandler = onAudioLevel
+        let levelCounter = TapCounter()
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { @Sendable buffer, _ in
             tapRequest.append(buffer)
+            if let levelHandler, levelCounter.shouldSample() {
+                let level = AudioLevelMeter.level(of: buffer)
+                Task { @MainActor in levelHandler(level) }
+            }
         }
 
         audioEngine.prepare()
@@ -166,6 +175,19 @@ final class UserNotificationScheduler: NativeNotificationScheduling {
         var errorDescription: String? {
             "Notification permission was not granted."
         }
+    }
+}
+
+/// Thread-safe modulo counter for audio-tap sampling.
+final class TapCounter: @unchecked Sendable {
+    private var count = 0
+    private let lock = NSLock()
+
+    func shouldSample(every n: Int = 3) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        count += 1
+        return count % n == 0
     }
 }
 

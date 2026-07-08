@@ -9,7 +9,8 @@ import Foundation
 /// transcript. `onPartial` receives a lightweight recording indicator so the
 /// composer shows that listening is active.
 @MainActor
-final class AgentLLMDictationService: NSObject, NativeSpeechDictating {
+final class AgentLLMDictationService: NSObject, NativeSpeechDictating, AudioLevelReporting {
+    var onAudioLevel: (@MainActor (CGFloat) -> Void)?
     private let config: HerAppConfig
     private let urlSession: URLSession
     private let audioEngine = AVAudioEngine()
@@ -46,8 +47,14 @@ final class AgentLLMDictationService: NSObject, NativeSpeechDictating {
         // The tap fires on the CoreAudio render thread; AVAudioFile.write is
         // safe there and the closure must not inherit @MainActor isolation.
         nonisolated(unsafe) let tapFile = file
+        let levelHandler = onAudioLevel
+        let levelCounter = TapCounter()
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { @Sendable buffer, _ in
             try? tapFile.write(from: buffer)
+            if let levelHandler, levelCounter.shouldSample() {
+                let level = AudioLevelMeter.level(of: buffer)
+                Task { @MainActor in levelHandler(level) }
+            }
         }
         audioEngine.prepare()
         try audioEngine.start()
