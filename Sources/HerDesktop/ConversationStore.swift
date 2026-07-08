@@ -6,6 +6,9 @@ struct ConversationSummary: Identifiable, Codable, Equatable {
     var pinned: Bool
     var createdAt: Date
     var updatedAt: Date
+    /// Roleplay selection for this conversation (角色卡 / 世界之书).
+    var characterCardID: String?
+    var worldBookID: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -13,6 +16,8 @@ struct ConversationSummary: Identifiable, Codable, Equatable {
         case pinned
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case characterCardID = "character_card_id"
+        case worldBookID = "world_book_id"
     }
 }
 

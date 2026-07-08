@@ -124,7 +124,8 @@ extension AppViewModel {
                 activeTaskSummary: activeTaskSummary(),
                 agentLoopSummary: "",
                 runtimeContext: PromptRuntimeContext.current(config: config, cwd: runtimeCwd),
-                companionContext: companionPromptContext()
+                companionContext: companionPromptContext(),
+                roleplayContext: roleplayPromptSection()
             )
             var llmMessages: [AgentLLMMessage] = [
                 .system(prompt),

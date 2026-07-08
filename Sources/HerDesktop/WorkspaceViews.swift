@@ -18,6 +18,10 @@ struct CenterWorkspaceView: View {
                 ToolsWorkspaceView()
             case .agents:
                 AgentsWorkspaceView()
+            case .characters:
+                CharactersWorkspaceView()
+            case .worldBooks:
+                WorldBooksWorkspaceView()
             }
         }
     }

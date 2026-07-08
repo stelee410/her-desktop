@@ -18,6 +18,8 @@ enum WorkspaceSection: String, CaseIterable, Identifiable, Codable, Equatable {
     case apps
     case tools
     case agents
+    case characters
+    case worldBooks
 
     var id: String { rawValue }
 
@@ -29,6 +31,8 @@ enum WorkspaceSection: String, CaseIterable, Identifiable, Codable, Equatable {
         case .apps: return "Apps"
         case .tools: return "Tools"
         case .agents: return "Agents"
+        case .characters: return "角色卡"
+        case .worldBooks: return "世界之书"
         }
     }
 
@@ -40,6 +44,8 @@ enum WorkspaceSection: String, CaseIterable, Identifiable, Codable, Equatable {
         case .apps: return "macwindow.on.rectangle"
         case .tools: return "square.grid.2x2"
         case .agents: return "circle.hexagongrid"
+        case .characters: return "theatermasks"
+        case .worldBooks: return "book.closed"
         }
     }
 }

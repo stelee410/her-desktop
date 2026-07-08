@@ -9,12 +9,14 @@ struct SystemPromptBuilder {
         activeTaskSummary: String,
         agentLoopSummary: String = "",
         runtimeContext: PromptRuntimeContext? = nil,
-        companionContext: CompanionPromptContext? = nil
+        companionContext: CompanionPromptContext? = nil,
+        roleplayContext: String = ""
     ) -> String {
         [
             identitySection,
             promptProvenanceSection,
             personaSection,
+            roleplaySection(roleplayContext),
             projectSection,
             runtimeSection(runtimeContext),
             companionSection(companionContext),
@@ -330,6 +332,12 @@ struct SystemPromptBuilder {
             """
         }
         return "## Installed Plugins\n\n" + blocks.joined(separator: "\n\n")
+    }
+
+    /// 角色卡/世界之书 for this conversation (already formatted by the
+    /// caller); persona-level guidance only — safety/tool contracts still win.
+    private func roleplaySection(_ context: String) -> String {
+        context.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : context
     }
 
     private func memorySection(_ context: String) -> String {

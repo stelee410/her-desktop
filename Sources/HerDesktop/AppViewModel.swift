@@ -215,6 +215,11 @@ final class AppViewModel: ObservableObject, AuditRecording {
     var streamBufferContent = ""
     var streamBufferReasoning = ""
     var streamFlushTimer: Timer?
+    /// Roleplay assets (角色卡 / 世界之书), editable in their workspace
+    /// pages and selectable per conversation. See AppViewModel+Roleplay.
+    @Published var characterCards: [CharacterCard] = []
+    @Published var worldBooks: [WorldBook] = []
+    lazy var roleplayStore = RoleplayStore(cwd: runtimeCwd)
     /// Heartbeat: scheduled tasks (reminders / timed agent turns) checked by
     /// a periodic tick. See AppViewModel+Heartbeat.
     @Published var heartbeatTasks: [HeartbeatTask] = []
@@ -423,6 +428,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
         refreshDreamContext()
         startWebAppServerIfNeeded()
         startHeartbeat()
+        loadRoleplayAssets()
         await reloadPlugins()
         await refreshServiceHealth()
     }

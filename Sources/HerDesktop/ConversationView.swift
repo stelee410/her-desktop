@@ -145,6 +145,62 @@ private struct LaunchReadinessStrip: View {
 
 }
 
+/// Per-conversation 角色卡 / 世界之书 pickers. Observing ConversationModel
+/// keeps the selection in sync with conversation switches.
+private struct RoleplaySelectors: View {
+    @EnvironmentObject private var model: AppViewModel
+    @EnvironmentObject private var session: ConversationModel
+
+    var body: some View {
+        let activeCard = model.activeCharacterCard
+        let activeBook = model.activeWorldBook
+
+        Menu {
+            Button("无角色") { model.setCharacterCard(nil) }
+            if model.characterCards.isEmpty {
+                Button("去创建角色卡…") { model.selectedSection = .characters }
+            }
+            ForEach(model.characterCards) { card in
+                Button("\(card.emoji) \(card.name)\(card.id == activeCard?.id ? " ✓" : "")") {
+                    model.setCharacterCard(card)
+                }
+            }
+        } label: {
+            Label(
+                activeCard.map { "\($0.emoji) \($0.name)" } ?? "角色",
+                systemImage: "theatermasks"
+            )
+            .font(.caption)
+            .foregroundStyle(activeCard == nil ? AppTheme.muted : AppTheme.coral)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("为这个会话选择角色卡")
+
+        Menu {
+            Button("无世界") { model.setWorldBook(nil) }
+            if model.worldBooks.isEmpty {
+                Button("去创建世界之书…") { model.selectedSection = .worldBooks }
+            }
+            ForEach(model.worldBooks) { book in
+                Button("\(book.emoji) \(book.name)\(book.id == activeBook?.id ? " ✓" : "")") {
+                    model.setWorldBook(book)
+                }
+            }
+        } label: {
+            Label(
+                activeBook.map { "\($0.emoji) \($0.name)" } ?? "世界",
+                systemImage: "book.closed"
+            )
+            .font(.caption)
+            .foregroundStyle(activeBook == nil ? AppTheme.muted : AppTheme.coral)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("为这个会话选择世界之书")
+    }
+}
+
 private struct ToolbarView: View {
     @EnvironmentObject private var session: ConversationModel
     @EnvironmentObject private var serviceStatus: ServiceStatusModel
@@ -177,6 +233,8 @@ private struct ToolbarView: View {
                 }
                 .buttonStyle(.plain)
                 .help("新建对话")
+
+                RoleplaySelectors()
             }
 
             Spacer()
