@@ -229,6 +229,9 @@ extension AppViewModel {
         guard !text.isEmpty || !attachments.isEmpty else { return }
         draft = ""
         pendingAttachments = []
+        if attachments.isEmpty, handleSlashCommand(text) {
+            return
+        }
         await send(text, attachments: attachments)
     }
 
@@ -242,6 +245,9 @@ extension AppViewModel {
         guard !text.isEmpty || !attachments.isEmpty else { return }
         draft = ""
         pendingAttachments = []
+        if attachments.isEmpty, handleSlashCommand(text) {
+            return
+        }
         if isGenerating {
             enqueueSteering(text, attachments: attachments)
         } else {
@@ -274,6 +280,10 @@ extension AppViewModel {
         await send(text, attachments: attachments)
         while !Task.isCancelled, messages.last?.role == .user {
             await runGeneration()
+        }
+        // Turn is fully settled: fold history into a recap if it grew long.
+        if !Task.isCancelled {
+            await autoCompactIfNeeded()
         }
     }
 

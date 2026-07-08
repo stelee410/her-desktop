@@ -71,6 +71,44 @@ final class ConversationContextBuilderTests: XCTestCase {
         XCTAssertFalse(result.contains { $0.content?.contains("Older Tool") == true })
     }
 
+    func testRecapBoundaryExcludesOlderMessagesAndFoldsSummaryIntoSystemPrompt() throws {
+        let builder = ConversationContextBuilder(maxMessages: 10)
+        let messages = [
+            ChatMessage(role: .user, content: "很久以前的问题"),
+            ChatMessage(role: .assistant, content: "很久以前的回答"),
+            ChatMessage(role: .assistant, content: "**正在进行**: 桌面端语音功能", recap: true),
+            ChatMessage(role: .user, content: "压缩之后的新问题")
+        ]
+
+        let result = builder.build(systemPrompt: "base prompt", messages: messages)
+
+        let system = try XCTUnwrap(result.first?.content)
+        XCTAssertTrue(system.contains("base prompt"))
+        XCTAssertTrue(system.contains("之前对话的回顾"))
+        XCTAssertTrue(system.contains("桌面端语音功能"), "recap text is folded into the system prompt")
+        XCTAssertEqual(result.map(\.role), ["system", "user"])
+        XCTAssertEqual(result.last?.content, "压缩之后的新问题")
+        XCTAssertFalse(result.contains { $0.content?.contains("很久以前") == true },
+                       "messages before the recap never reach the model")
+    }
+
+    func testLatestRecapWinsWhenCompactedTwice() throws {
+        let builder = ConversationContextBuilder(maxMessages: 10)
+        let messages = [
+            ChatMessage(role: .assistant, content: "第一次回顾", recap: true),
+            ChatMessage(role: .user, content: "中间的问题"),
+            ChatMessage(role: .assistant, content: "第二次回顾", recap: true),
+            ChatMessage(role: .user, content: "最新的问题")
+        ]
+
+        let result = builder.build(systemPrompt: "system", messages: messages)
+
+        let system = try XCTUnwrap(result.first?.content)
+        XCTAssertTrue(system.contains("第二次回顾"))
+        XCTAssertFalse(system.contains("第一次回顾"))
+        XCTAssertEqual(result.map(\.content).dropFirst(), ["最新的问题"])
+    }
+
     func testUserAttachmentContextIsIncludedForLLM() throws {
         let builder = ConversationContextBuilder(maxMessages: 4)
         let attachment = MessageAttachment(

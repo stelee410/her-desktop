@@ -71,6 +71,11 @@ struct ChatMessage: Identifiable, Codable, Equatable {
     /// shown in the transcript but NEVER sent to the model — it isn't
     /// conversation content and shouldn't spend context-window slots.
     var localOnly: Bool = false
+    /// A compaction summary (/compact). It stays visible in the transcript
+    /// and marks the context boundary: everything before the latest recap is
+    /// no longer injected into the model; the recap text itself is folded
+    /// into the system prompt instead.
+    var recap: Bool = false
 
     init(
         id: UUID = UUID(),
@@ -80,7 +85,8 @@ struct ChatMessage: Identifiable, Codable, Equatable {
         approvalID: UUID? = nil,
         createdAt: Date = Date(),
         attachments: [MessageAttachment] = [],
-        localOnly: Bool = false
+        localOnly: Bool = false,
+        recap: Bool = false
     ) {
         self.id = id
         self.role = role
@@ -90,6 +96,7 @@ struct ChatMessage: Identifiable, Codable, Equatable {
         self.createdAt = createdAt
         self.attachments = attachments
         self.localOnly = localOnly
+        self.recap = recap
     }
 
     enum CodingKeys: String, CodingKey {
@@ -101,6 +108,7 @@ struct ChatMessage: Identifiable, Codable, Equatable {
         case createdAt
         case attachments
         case localOnly
+        case recap
     }
 
     init(from decoder: Decoder) throws {
@@ -113,6 +121,7 @@ struct ChatMessage: Identifiable, Codable, Equatable {
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         attachments = try container.decodeIfPresent([MessageAttachment].self, forKey: .attachments) ?? []
         localOnly = try container.decodeIfPresent(Bool.self, forKey: .localOnly) ?? false
+        recap = try container.decodeIfPresent(Bool.self, forKey: .recap) ?? false
     }
 }
 

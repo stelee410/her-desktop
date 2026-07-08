@@ -47,6 +47,9 @@ final class ConversationModel: ObservableObject {
     /// thread; suppresses saves so the transient empty state is never
     /// persisted over the target's real content.
     @Published var isLoadingConversation = false
+    /// True while /compact (manual or automatic) is summarizing this
+    /// conversation; drives the composer banner and blocks re-entry.
+    @Published var isCompacting = false
     @Published var draft = ""
     @Published var pendingAttachments: [MessageAttachment] = []
     @Published var conversations: [ConversationSummary] = [] {

@@ -6,10 +6,28 @@ struct ConversationContextBuilder {
     var maxToolEvidenceCharacters: Int = 1_200
 
     func build(systemPrompt: String, messages: [ChatMessage]) -> [AgentLLMMessage] {
+        // A recap is a compaction boundary: everything at or before the
+        // latest recap stays visible in the transcript but is replaced, for
+        // the model, by the recap text folded into the system prompt.
+        var prompt = systemPrompt
+        var window = messages[...]
+        if let recapIndex = messages.lastIndex(where: { $0.recap }) {
+            window = messages[messages.index(after: recapIndex)...]
+            let recapText = messages[recapIndex].content.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !recapText.isEmpty {
+                prompt += """
+
+
+                ## 之前对话的回顾（已压缩）
+                更早的对话已被压缩为下面的摘要，摘要之后才是最近的原文消息：
+                \(recapText)
+                """
+            }
+        }
         var toolEvidenceCount = 0
         // localOnly messages are UI feedback, not conversation — they never
         // reach the model and never spend a context-window slot.
-        let recentReversed = messages.reversed().compactMap { message -> AgentLLMMessage? in
+        let recentReversed = window.reversed().compactMap { message -> AgentLLMMessage? in
             if message.localOnly { return nil }
             if message.role == .tool {
                 guard toolEvidenceCount < maxToolEvidenceMessages else { return nil }
@@ -18,7 +36,7 @@ struct ConversationContextBuilder {
             return agentMessage(message)
         }
         let recent = recentReversed.prefix(maxMessages).reversed()
-        return [.system(systemPrompt)] + Array(recent)
+        return [.system(prompt)] + Array(recent)
     }
 
     private func agentMessage(_ message: ChatMessage) -> AgentLLMMessage? {

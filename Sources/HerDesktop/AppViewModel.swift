@@ -39,6 +39,10 @@ final class AppViewModel: ObservableObject, AuditRecording {
         get { conversation.isLoadingConversation }
         set { conversation.isLoadingConversation = newValue }
     }
+    var isCompacting: Bool {
+        get { conversation.isCompacting }
+        set { conversation.isCompacting = newValue }
+    }
     var draft: String {
         get { conversation.draft }
         set { conversation.draft = newValue }

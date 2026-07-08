@@ -32,11 +32,26 @@ struct ConversationView: View {
                         }
 
                         ForEach(session.messages) { message in
-                            MessageBubble(
-                                message: message,
-                                artifacts: model.webServiceArtifacts(for: message)
-                            )
-                                .id(message.id)
+                            if message.recap {
+                                RecapCard(message: message)
+                                    .id(message.id)
+                            } else {
+                                MessageBubble(
+                                    message: message,
+                                    artifacts: model.webServiceArtifacts(for: message)
+                                )
+                                    .id(message.id)
+                            }
+                        }
+
+                        if session.isCompacting {
+                            HStack(spacing: 8) {
+                                ProgressView().controlSize(.small)
+                                Text("正在压缩对话…")
+                                    .font(.caption)
+                                    .foregroundStyle(AppTheme.muted)
+                            }
+                            .id("compacting-indicator")
                         }
 
                         if model.isAwaitingAssistantReply {
@@ -468,6 +483,54 @@ private struct WaveLine: Shape {
             }
         }
         return path
+    }
+}
+
+/// A /compact summary: full-width divider card marking the context boundary.
+/// Messages above it stay visible but are no longer sent to the model.
+private struct RecapCard: View {
+    var message: ChatMessage
+    @State private var isExpanded = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) { isExpanded.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.down.right.and.arrow.up.left")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.coral)
+                    Text("对话已压缩")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.ink)
+                    Text("上面的消息不再进入模型上下文")
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.muted)
+                    Spacer()
+                    Text(message.createdAt, style: .time)
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.muted)
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.muted)
+                }
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                MarkdownMessageView(content: message.content, cachesParses: true)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.coral.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(AppTheme.coral.opacity(0.22), lineWidth: 1)
+        )
     }
 }
 
