@@ -602,7 +602,7 @@ struct HerAppConfig: Codable, Equatable {
         speakAssistantReplies: Bool = false,
         speechVoiceIdentifier: String = "",
         speechRecognitionProvider: String = "apple",
-        agentLLMASRModel: String = "whisper-1",
+        agentLLMASRModel: String = "fun-asr-realtime",
         speechSynthesisProvider: String = "apple",
         agentLLMTTSModel: String = "doubao-tts",
         agentLLMTTSVoice: String = "zh_female_cancan_mars_bigtts"
@@ -658,7 +658,10 @@ struct HerAppConfig: Codable, Equatable {
         speakAssistantReplies = try container.decodeIfPresent(Bool.self, forKey: .speakAssistantReplies) ?? false
         speechVoiceIdentifier = try container.decodeIfPresent(String.self, forKey: .speechVoiceIdentifier) ?? ""
         speechRecognitionProvider = try container.decodeIfPresent(String.self, forKey: .speechRecognitionProvider) ?? "apple"
-        agentLLMASRModel = try container.decodeIfPresent(String.self, forKey: .agentLLMASRModel) ?? "whisper-1"
+        let decodedASRModel = try container.decodeIfPresent(String.self, forKey: .agentLLMASRModel) ?? "fun-asr-realtime"
+        // Migrate the obsolete default: the endpoint's ASR bridge speaks the
+        // DashScope protocol, not OpenAI whisper.
+        agentLLMASRModel = decodedASRModel == "whisper-1" ? "fun-asr-realtime" : decodedASRModel
         speechSynthesisProvider = try container.decodeIfPresent(String.self, forKey: .speechSynthesisProvider) ?? "apple"
         agentLLMTTSModel = try container.decodeIfPresent(String.self, forKey: .agentLLMTTSModel) ?? "doubao-tts"
         agentLLMTTSVoice = try container.decodeIfPresent(String.self, forKey: .agentLLMTTSVoice) ?? "zh_female_cancan_mars_bigtts"
@@ -729,9 +732,10 @@ struct HerAppConfigDraft: Equatable {
             speakAssistantReplies: speakAssistantReplies,
             speechVoiceIdentifier: speechVoiceIdentifier.trimmingCharacters(in: .whitespacesAndNewlines),
             speechRecognitionProvider: speechRecognitionProvider == "agentllm" ? "agentllm" : "apple",
-            agentLLMASRModel: agentLLMASRModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ? "whisper-1"
-                : agentLLMASRModel.trimmingCharacters(in: .whitespacesAndNewlines),
+            agentLLMASRModel: {
+                let trimmed = agentLLMASRModel.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty || trimmed == "whisper-1" ? "fun-asr-realtime" : trimmed
+            }(),
             speechSynthesisProvider: speechSynthesisProvider == "agentllm" ? "agentllm" : "apple",
             agentLLMTTSModel: agentLLMTTSModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? "doubao-tts"

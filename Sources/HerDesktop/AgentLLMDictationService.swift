@@ -1,23 +1,26 @@
 import AVFoundation
 import Foundation
 
-/// Server-side dictation through the AgentLLM endpoint (OpenAI-compatible
-/// `POST {base}/audio/transcriptions`, multipart WAV upload).
-///
-/// Unlike the Apple recognizer there are no streaming partials: this records
-/// the microphone until `stop()`, then uploads once and returns the final
-/// transcript. `onPartial` receives a lightweight recording indicator so the
-/// composer shows that listening is active.
+/// Real-time server-side dictation through the AgentLLM endpoint's
+/// DashScope ASR bridge (`WS /v1beta/dashscope/asr/ws`, run-task protocol):
+/// 16kHz mono PCM frames go up, incremental sentences come back — live
+/// partials just like the system recognizer. Models: fun-asr-realtime /
+/// paraformer-realtime-v2. Billed by audio seconds.
 @MainActor
 final class AgentLLMDictationService: NSObject, NativeSpeechDictating, AudioLevelReporting {
     var onAudioLevel: (@MainActor (CGFloat) -> Void)?
+
     private let config: HerAppConfig
     private let urlSession: URLSession
     private let audioEngine = AVAudioEngine()
-    private var audioFile: AVAudioFile?
-    private var audioFileURL: URL?
+    private var webSocket: URLSessionWebSocketTask?
+    private var receiveTask: Task<Void, Never>?
+    private var startContinuation: CheckedContinuation<Void, Error>?
     private var continuation: CheckedContinuation<String, Error>?
-    private var recordingLocale = ""
+    private var onPartial: (@MainActor (String) -> Void)?
+    private var finishedSentences: [String] = []
+    private var currentSentence = ""
+    private var stopTimeoutTask: Task<Void, Never>?
 
     init(config: HerAppConfig, urlSession: URLSession = .shared) {
         self.config = config
@@ -32,33 +35,53 @@ final class AgentLLMDictationService: NSObject, NativeSpeechDictating, AudioLeve
         guard microphoneGranted else {
             throw DictationError.microphonePermissionDenied
         }
-        stopRecordingOnly()
-        recordingLocale = localeIdentifier
+        teardown(resumeWith: nil)
+        self.onPartial = onPartial
+        finishedSentences = []
+        currentSentence = ""
 
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("her-dictation-\(UUID().uuidString).wav")
-        let inputNode = audioEngine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
-        let file = try AVAudioFile(forWriting: url, settings: format.settings)
-        audioFile = file
-        audioFileURL = url
+        // wss://…/v1beta/dashscope/asr/ws?api_key=… (browser-style WS auth).
+        var components = URLComponents(url: config.agentLLMBaseURL, resolvingAgainstBaseURL: false)
+        components?.scheme = config.agentLLMBaseURL.scheme == "http" ? "ws" : "wss"
+        components?.path = "/v1beta/dashscope/asr/ws"
+        components?.queryItems = [URLQueryItem(name: "api_key", value: config.agentLLMAPIKey)]
+        guard let url = components?.url else {
+            throw DictationError.badEndpoint
+        }
+        let socket = urlSession.webSocketTask(with: url)
+        webSocket = socket
+        socket.resume()
+        startReceiveLoop(socket)
 
-        inputNode.removeTap(onBus: 0)
-        // The tap fires on the CoreAudio render thread; AVAudioFile.write is
-        // safe there and the closure must not inherit @MainActor isolation.
-        nonisolated(unsafe) let tapFile = file
-        let levelHandler = onAudioLevel
-        let levelCounter = TapCounter()
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { @Sendable buffer, _ in
-            try? tapFile.write(from: buffer)
-            if let levelHandler, levelCounter.shouldSample() {
-                let level = AudioLevelMeter.level(of: buffer)
-                Task { @MainActor in levelHandler(level) }
+        // Kick off the ASR task and wait for task-started before streaming.
+        let runTask: [String: Any] = [
+            "header": [
+                "action": "run-task",
+                "task_id": UUID().uuidString,
+                "streaming": "duplex"
+            ],
+            "payload": [
+                "task_group": "audio",
+                "task": "asr",
+                "function": "recognition",
+                "model": config.agentLLMASRModel,
+                "input": [String: Any](),
+                "parameters": [
+                    "sample_rate": 16_000,
+                    "format": "pcm"
+                ]
+            ]
+        ]
+        try await send(json: runTask, over: socket)
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            startContinuation = continuation
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                self?.failStartIfPending(DictationError.serverNotReady)
             }
         }
-        audioEngine.prepare()
-        try audioEngine.start()
-        onPartial("(录音中……再点一次麦克风结束并转写)")
+
+        try startMicrophoneStream(to: socket)
 
         return try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
@@ -66,97 +89,193 @@ final class AgentLLMDictationService: NSObject, NativeSpeechDictating, AudioLeve
     }
 
     func stop() {
-        stopRecordingOnly()
-        guard let continuation else { return }
-        self.continuation = nil
-        guard let fileURL = audioFileURL else {
-            continuation.resume(returning: "")
+        stopMicrophone()
+        guard let socket = webSocket, continuation != nil else {
+            teardown(resumeWith: nil)
             return
         }
-        audioFileURL = nil
-        let locale = recordingLocale
-        Task { @MainActor [config, urlSession] in
-            defer { try? FileManager.default.removeItem(at: fileURL) }
-            do {
-                let transcript = try await Self.transcribe(
-                    fileURL: fileURL,
-                    locale: locale,
-                    config: config,
-                    urlSession: urlSession
-                )
-                continuation.resume(returning: transcript)
-            } catch {
-                continuation.resume(throwing: error)
-            }
+        // Ask the server to flush final results; task-finished resolves us.
+        let finishTask: [String: Any] = [
+            "header": [
+                "action": "finish-task",
+                "task_id": UUID().uuidString,
+                "streaming": "duplex"
+            ],
+            "payload": ["input": [String: Any]()]
+        ]
+        Task { @MainActor [weak self] in
+            try? await self?.send(json: finishTask, over: socket)
+        }
+        stopTimeoutTask?.cancel()
+        stopTimeoutTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            guard let self, !Task.isCancelled else { return }
+            self.finish(with: self.accumulatedTranscript())
         }
     }
 
-    private func stopRecordingOnly() {
+    // MARK: - Audio
+
+    private func startMicrophoneStream(to socket: URLSessionWebSocketTask) throws {
+        let inputNode = audioEngine.inputNode
+        let inputFormat = inputNode.outputFormat(forBus: 0)
+        guard let targetFormat = AVAudioFormat(
+            commonFormat: .pcmFormatInt16,
+            sampleRate: 16_000,
+            channels: 1,
+            interleaved: true
+        ), let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
+            throw DictationError.audioFormatUnavailable
+        }
+
+        inputNode.removeTap(onBus: 0)
+        // Tap runs on the CoreAudio render thread: convert to 16k PCM and
+        // ship binary frames straight to the socket (send is thread-safe).
+        nonisolated(unsafe) let tapConverter = converter
+        nonisolated(unsafe) let tapSocket = socket
+        let levelHandler = onAudioLevel
+        let levelCounter = TapCounter()
+        let ratio = 16_000.0 / inputFormat.sampleRate
+        inputNode.installTap(onBus: 0, bufferSize: 2048, format: inputFormat) { @Sendable buffer, _ in
+            if let levelHandler, levelCounter.shouldSample() {
+                let level = AudioLevelMeter.level(of: buffer)
+                Task { @MainActor in levelHandler(level) }
+            }
+            let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 32
+            guard let converted = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: capacity) else { return }
+            var consumed = false
+            tapConverter.convert(to: converted, error: nil) { _, status in
+                if consumed {
+                    status.pointee = .noDataNow
+                    return nil
+                }
+                consumed = true
+                status.pointee = .haveData
+                return buffer
+            }
+            guard converted.frameLength > 0, let channel = converted.int16ChannelData else { return }
+            let data = Data(bytes: channel[0], count: Int(converted.frameLength) * MemoryLayout<Int16>.size)
+            tapSocket.send(.data(data)) { _ in }
+        }
+        audioEngine.prepare()
+        try audioEngine.start()
+    }
+
+    private func stopMicrophone() {
         if audioEngine.isRunning {
             audioEngine.stop()
         }
         audioEngine.inputNode.removeTap(onBus: 0)
-        // Closing the file flushes the WAV header.
-        audioFile = nil
     }
 
-    // MARK: - Upload
+    // MARK: - WebSocket
 
-    private static func transcribe(
-        fileURL: URL,
-        locale: String,
-        config: HerAppConfig,
-        urlSession: URLSession
-    ) async throws -> String {
-        let audioData = try Data(contentsOf: fileURL)
-        guard !audioData.isEmpty else { return "" }
-
-        // Matches the chat client's convention: the base URL has no /v1.
-        let endpoint = config.agentLLMBaseURL.appending(path: "/v1/audio/transcriptions")
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 60
-        request.setValue("Bearer \(config.agentLLMAPIKey)", forHTTPHeaderField: "Authorization")
-
-        let boundary = "her-\(UUID().uuidString)"
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-
-        var body = Data()
-        func field(_ name: String, _ value: String) {
-            body.append(Data("--\(boundary)\r\n".utf8))
-            body.append(Data("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n\(value)\r\n".utf8))
+    private func startReceiveLoop(_ socket: URLSessionWebSocketTask) {
+        receiveTask?.cancel()
+        receiveTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                do {
+                    let message = try await socket.receive()
+                    guard let self else { return }
+                    if case .string(let text) = message {
+                        self.handleServerEvent(text)
+                    }
+                } catch {
+                    guard let self, !Task.isCancelled else { return }
+                    // Socket dropped: fail a pending start, or finish with
+                    // whatever was recognized so the text isn't lost.
+                    self.failStartIfPending(error)
+                    if self.continuation != nil {
+                        self.finish(with: self.accumulatedTranscript())
+                    }
+                    return
+                }
+            }
         }
-        field("model", config.agentLLMASRModel)
-        // "zh-Hans-CN" → "zh"; the API expects an ISO-639-1 code.
-        if let language = locale.split(separator: "-").first.map(String.init)?.lowercased(),
-           !language.isEmpty {
-            field("language", language)
-        }
-        body.append(Data("--\(boundary)\r\n".utf8))
-        body.append(Data("Content-Disposition: form-data; name=\"file\"; filename=\"dictation.wav\"\r\n".utf8))
-        body.append(Data("Content-Type: audio/wav\r\n\r\n".utf8))
-        body.append(audioData)
-        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
-        request.httpBody = body
+    }
 
-        let (data, response) = try await urlSession.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard status == 200 else {
-            let detail = String(data: Data(data.prefix(300)), encoding: .utf8) ?? ""
-            throw DictationError.transcriptionFailed(status: status, detail: detail)
+    private func handleServerEvent(_ text: String) {
+        guard let data = text.data(using: .utf8),
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let header = object["header"] as? [String: Any],
+              let event = header["event"] as? String else {
+            return
         }
-        // OpenAI-compatible: {"text": "..."}; tolerate plain-text bodies.
-        if let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-           let text = object["text"] as? String {
-            return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch event {
+        case "task-started":
+            startContinuation?.resume()
+            startContinuation = nil
+        case "result-generated":
+            let payload = object["payload"] as? [String: Any]
+            let output = payload?["output"] as? [String: Any]
+            let sentence = output?["sentence"] as? [String: Any]
+            guard let sentenceText = sentence?["text"] as? String else { return }
+            let ended = sentence?["sentence_end"] as? Bool ?? false
+            if ended {
+                finishedSentences.append(sentenceText)
+                currentSentence = ""
+            } else {
+                currentSentence = sentenceText
+            }
+            onPartial?(accumulatedTranscript())
+        case "task-finished":
+            finish(with: accumulatedTranscript())
+        case "task-failed":
+            let message = (header["error_message"] as? String) ?? "ASR task failed"
+            failStartIfPending(DictationError.serverError(message))
+            if continuation != nil {
+                // Keep whatever was already recognized.
+                finish(with: accumulatedTranscript())
+            }
+        default:
+            break
         }
-        return (String(data: data, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func accumulatedTranscript() -> String {
+        (finishedSentences + (currentSentence.isEmpty ? [] : [currentSentence]))
+            .joined()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func send(json: [String: Any], over socket: URLSessionWebSocketTask) async throws {
+        let data = try JSONSerialization.data(withJSONObject: json)
+        guard let text = String(data: data, encoding: .utf8) else { return }
+        try await socket.send(.string(text))
+    }
+
+    private func failStartIfPending(_ error: Error) {
+        guard let pending = startContinuation else { return }
+        startContinuation = nil
+        pending.resume(throwing: error)
+        teardown(resumeWith: nil)
+    }
+
+    private func finish(with transcript: String) {
+        stopTimeoutTask?.cancel()
+        stopTimeoutTask = nil
+        let pending = continuation
+        continuation = nil
+        teardown(resumeWith: nil)
+        pending?.resume(returning: transcript)
+    }
+
+    private func teardown(resumeWith _: String?) {
+        stopMicrophone()
+        receiveTask?.cancel()
+        receiveTask = nil
+        webSocket?.cancel(with: .normalClosure, reason: nil)
+        webSocket = nil
+        onPartial = nil
     }
 
     enum DictationError: LocalizedError {
         case missingAPIKey
         case microphonePermissionDenied
-        case transcriptionFailed(status: Int, detail: String)
+        case badEndpoint
+        case audioFormatUnavailable
+        case serverNotReady
+        case serverError(String)
 
         var errorDescription: String? {
             switch self {
@@ -164,8 +283,14 @@ final class AgentLLMDictationService: NSObject, NativeSpeechDictating, AudioLeve
                 return "AgentLLM ASR needs an AgentLLM API key (Settings → AgentLLM)."
             case .microphonePermissionDenied:
                 return "Microphone permission was not granted."
-            case .transcriptionFailed(let status, let detail):
-                return "AgentLLM transcription failed (HTTP \(status)). \(detail)"
+            case .badEndpoint:
+                return "Could not build the AgentLLM ASR endpoint URL."
+            case .audioFormatUnavailable:
+                return "Could not prepare the 16kHz audio converter for ASR."
+            case .serverNotReady:
+                return "AgentLLM ASR did not confirm the task in time."
+            case .serverError(let message):
+                return "AgentLLM ASR failed: \(message)"
             }
         }
     }

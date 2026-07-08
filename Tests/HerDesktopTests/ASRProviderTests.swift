@@ -13,7 +13,19 @@ final class ASRProviderTests: XCTestCase {
         """
         let config = try JSONDecoder().decode(HerAppConfig.self, from: Data(legacy.utf8))
         XCTAssertEqual(config.speechRecognitionProvider, "apple")
-        XCTAssertEqual(config.agentLLMASRModel, "whisper-1")
+        XCTAssertEqual(config.agentLLMASRModel, "fun-asr-realtime")
+    }
+
+    func testObsoleteWhisperDefaultMigratesToRealtimeModel() throws {
+        // Configs saved while the default was whisper-1 migrate: the
+        // endpoint's ASR bridge speaks DashScope, not OpenAI whisper.
+        let saved = """
+        {"agentLLMBaseURL":"https://agentllm.linkyun.co","agentLLMAPIKey":"k","agentLLMModel":"m",
+         "agentMemBaseURL":"https://agentmem.oyii.ai","agentMemAPIKey":"","agentCode":"her-desktop",
+         "userID":"u","pluginDirectory":".her/plugins","agentLLMASRModel":"whisper-1"}
+        """
+        let config = try JSONDecoder().decode(HerAppConfig.self, from: Data(saved.utf8))
+        XCTAssertEqual(config.agentLLMASRModel, "fun-asr-realtime")
     }
 
     func testDraftNormalizesProviderAndModel() throws {
@@ -22,7 +34,7 @@ final class ASRProviderTests: XCTestCase {
         draft.agentLLMASRModel = "   "
         let config = try draft.makeConfig()
         XCTAssertEqual(config.speechRecognitionProvider, "agentllm")
-        XCTAssertEqual(config.agentLLMASRModel, "whisper-1", "blank model falls back to the default")
+        XCTAssertEqual(config.agentLLMASRModel, "fun-asr-realtime", "blank model falls back to the default")
 
         draft.speechRecognitionProvider = "something-weird"
         XCTAssertEqual(try draft.makeConfig().speechRecognitionProvider, "apple",

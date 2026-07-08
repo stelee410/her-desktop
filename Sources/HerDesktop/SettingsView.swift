@@ -223,8 +223,11 @@ struct HerConfigurationFields: View {
                 }
                 .pickerStyle(.segmented)
                 if draft.speechRecognitionProvider == "agentllm" {
-                    TextField("ASR model (如 whisper-1)", text: $draft.agentLLMASRModel)
-                    Text("录音结束后整段上传到 AgentLLM 的 audio/transcriptions 转写；没有实时字幕。")
+                    Picker("ASR 模型", selection: $draft.agentLLMASRModel) {
+                        Text("fun-asr-realtime（推荐）").tag("fun-asr-realtime")
+                        Text("paraformer-realtime-v2").tag("paraformer-realtime-v2")
+                    }
+                    Text("实时识别（DashScope 协议，边说边出字），按音频时长计费。")
                         .font(.caption2)
                         .foregroundStyle(AppTheme.muted)
                 }
