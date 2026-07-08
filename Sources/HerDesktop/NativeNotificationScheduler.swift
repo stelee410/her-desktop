@@ -39,10 +39,13 @@ final class MacSpeechDictationService: NSObject, NativeSpeechDictating {
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
         inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-            Task { @MainActor in
-                self?.recognitionRequest?.append(buffer)
-            }
+        // The tap fires on the CoreAudio render thread. Appending directly is
+        // the documented usage (the request is thread-safe for append); the
+        // closure must NOT inherit @MainActor isolation — an inherited
+        // isolation assertion on a realtime audio thread is a crash.
+        nonisolated(unsafe) let tapRequest = request
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { @Sendable buffer, _ in
+            tapRequest.append(buffer)
         }
 
         audioEngine.prepare()
@@ -50,14 +53,20 @@ final class MacSpeechDictationService: NSObject, NativeSpeechDictating {
 
         return try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
-            self.recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
+            // The result handler fires on a Speech-framework background
+            // queue: keep the closure @Sendable (no inherited @MainActor
+            // isolation → no runtime assertion crash), extract Sendable
+            // values there, then hop to the main actor for state.
+            self.recognitionTask = recognizer.recognitionTask(with: request) { @Sendable [weak self] result, error in
+                let transcript = result?.bestTranscription.formattedString
+                let isFinal = result?.isFinal ?? false
                 Task { @MainActor in
                     guard let self else { return }
-                    if let result {
-                        self.latestTranscript = result.bestTranscription.formattedString
-                        onPartial(self.latestTranscript)
-                        if result.isFinal {
-                            self.finish(.success(self.latestTranscript))
+                    if let transcript {
+                        self.latestTranscript = transcript
+                        onPartial(transcript)
+                        if isFinal {
+                            self.finish(.success(transcript))
                         }
                     }
                     if let error {
@@ -78,8 +87,12 @@ final class MacSpeechDictationService: NSObject, NativeSpeechDictating {
     }
 
     private func requestPermissions() async throws {
+        // @Sendable is load-bearing: a plain closure formed in this
+        // @MainActor context inherits main-actor isolation, but TCC invokes
+        // the callback on a background XPC queue — the Swift 6 runtime
+        // isolation assertion then crashes (dispatch_assert_queue_fail).
         let speechStatus = await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { status in
+            SFSpeechRecognizer.requestAuthorization { @Sendable status in
                 continuation.resume(returning: status)
             }
         }
