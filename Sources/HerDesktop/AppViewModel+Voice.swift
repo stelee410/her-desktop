@@ -112,7 +112,7 @@ extension AppViewModel {
     }
 
     private static let spaceKeyCode: UInt16 = 49
-    private static let holdThreshold: TimeInterval = 0.4
+    private static let holdThreshold: TimeInterval = 0.8
 
     /// true = swallow the event; false = pass it through.
     func consumeSpaceEvent(_ event: NSEvent) -> Bool {
@@ -123,8 +123,14 @@ extension AppViewModel {
               !isVibePluginComposerPresented else {
             return false
         }
-        let textInputFocused = event.window?.firstResponder is NSTextView
-        guard composerFocused || !textInputFocused else { return false }
+        let focusedTextView = event.window?.firstResponder as? NSTextView
+        guard composerFocused || focusedTextView == nil else { return false }
+        // While an input method is composing (拼音选字), Space commits the
+        // candidate — it must reach the IME untouched, never push-to-talk.
+        if let focusedTextView, focusedTextView.hasMarkedText() {
+            cancelSpaceHold(insertSpace: false)
+            return false
+        }
 
         if event.type == .keyDown, event.keyCode == Self.spaceKeyCode {
             // Holding the key streams repeats — always swallow them so a

@@ -73,8 +73,8 @@ final class PushToTalkTests: XCTestCase {
     func testHoldStartsDictationAndReleaseStops() async {
         let model = makeModel()
         _ = model.consumeSpaceEvent(spaceEvent(.keyDown))
-        // Wait past the 0.4s hold threshold.
-        try? await Task.sleep(nanoseconds: 600_000_000)
+        // Wait past the 0.8s hold threshold.
+        try? await Task.sleep(nanoseconds: 1_100_000_000)
         XCTAssertTrue(model.isPushToTalking, "long hold engages push-to-talk")
         XCTAssertEqual(model.connectionState, .listening)
         XCTAssertEqual(model.draft, "", "no space typed when talking")
