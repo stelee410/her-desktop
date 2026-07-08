@@ -103,6 +103,64 @@ final class RoleplayTests: XCTestCase {
         XCTAssertNil(model.activeWorldBook)
     }
 
+    func testMemoryRoutingByCharacterCard() {
+        let root = makeRoot("memory-routing")
+        var config = HerAppConfig.empty
+        config.agentMemAPIKey = "global-mem-key"
+        let model = AppViewModel(config: config, cwd: root.path)
+
+        // No card → global memory.
+        XCTAssertEqual(model.memoryRouting(forConversation: model.activeConversationID), .global)
+        XCTAssertNotNil(model.memoryClient(forConversation: model.activeConversationID))
+
+        // Card WITHOUT its own key → memory disabled, even with a global key.
+        let card = model.addCharacterCard()
+        model.setCharacterCard(card)
+        XCTAssertEqual(model.memoryRouting(forConversation: model.activeConversationID), .disabled)
+        XCTAssertNil(model.memoryClient(forConversation: model.activeConversationID),
+                     "roleplay without a dedicated key must not touch the real memory")
+
+        // Card WITH its own key → dedicated client.
+        var keyed = card
+        keyed.agentMemAPIKey = "character-own-key"
+        model.updateCharacterCard(keyed)
+        XCTAssertEqual(model.memoryRouting(forConversation: model.activeConversationID), .characterScoped)
+        let scoped = model.memoryClient(forConversation: model.activeConversationID)
+        XCTAssertNotNil(scoped)
+        XCTAssertFalse(scoped === model.agentMem, "character memory must not be the global client")
+
+        // Other conversations are unaffected.
+        model.newLocalConversation()
+        XCTAssertEqual(model.memoryRouting(forConversation: model.activeConversationID), .global)
+
+        // No global key + no card → disabled too.
+        var noMem = config
+        noMem.agentMemAPIKey = ""
+        model.applyConfiguration(noMem)
+        XCTAssertNil(model.memoryClient(forConversation: model.activeConversationID))
+    }
+
+    func testCardsWithoutMemoryKeyFieldDecodeWithDefaults() throws {
+        // Cards persisted before agentMemAPIKey existed must load, not trip
+        // the corrupt-file path.
+        let legacy = """
+        {"version":1,"worldBooks":[],"characterCards":[
+          {"id":"1B0B1E9A-3C63-45E0-9E1B-3A1111111111","name":"老卡","emoji":"🎭",
+           "summary":"","prompt":"p","greeting":"","createdAt":"2026-07-08T00:00:00Z","updatedAt":"2026-07-08T00:00:00Z"}
+        ]}
+        """
+        let root = makeRoot("legacy-decode")
+        let store = RoleplayStore(cwd: root.path)
+        try FileManager.default.createDirectory(
+            at: store.fileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data(legacy.utf8).write(to: store.fileURL)
+        let loaded = store.load()
+        XCTAssertEqual(loaded.cards.map(\.name), ["老卡"])
+        XCTAssertNil(loaded.cards.first?.dedicatedMemoryKey)
+    }
+
     func testRoleplayAssetsSurviveRestart() {
         let root = makeRoot("restart")
         let model = AppViewModel(cwd: root.path)

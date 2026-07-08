@@ -74,6 +74,10 @@ private struct CharacterCardEditor: View {
                 .font(.system(size: 13))
                 .frame(minHeight: 60)
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.black.opacity(0.1)))
+            SecureField("角色专属 AgentMem Key（可选）", text: $card.agentMemAPIKey)
+            Text("留空 = 该角色的会话完全不使用记忆（不污染真实关系记忆）；填写 = 角色拥有自己独立的记忆身份，与全局 Key 互不相通。")
+                .font(.caption2)
+                .foregroundStyle(AppTheme.muted)
             HStack {
                 Spacer()
                 Button("取消") { dismiss() }

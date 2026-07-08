@@ -330,7 +330,15 @@ extension AppViewModel {
             connectionState = .ready
             saveSessionSnapshot()
             let turnSessionID = sessionID
-            Task { await persistTurnMemory(userInput: userInput, agentResponse: final, boundSessionID: turnSessionID) }
+            let turnMemoryClient = memoryClient(forConversation: turnSessionID)
+            Task {
+                await persistTurnMemory(
+                    userInput: userInput,
+                    agentResponse: final,
+                    boundSessionID: turnSessionID,
+                    boundMemoryClient: turnMemoryClient
+                )
+            }
             speechTask?.cancel()
             speechTask = Task { await speakAssistantReplyIfEnabled(final) }
         } catch is CancellationError {
@@ -666,7 +674,7 @@ extension AppViewModel {
                 )
             }
         }
-        guard config.hasMemKey else {
+        guard let agentMem = memoryClient(forConversation: id) else {
             audit(
                 type: "memory.compact_skipped",
                 summary: "AgentMem is not configured; the compacted summary was not persisted.",

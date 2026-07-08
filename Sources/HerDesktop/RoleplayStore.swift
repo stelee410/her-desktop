@@ -13,8 +13,56 @@ struct CharacterCard: Identifiable, Codable, Equatable {
     var prompt: String = ""
     /// Optional greeting used when a conversation adopts this card.
     var greeting: String = ""
+    /// Dedicated AgentMem key for this character. Empty means conversations
+    /// playing this card DON'T use memory at all — roleplay must never
+    /// pollute the real relationship memory. A key gives the character its
+    /// own memory identity (AgentMem is memory-key-bound).
+    var agentMemAPIKey: String = ""
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        emoji: String = "🎭",
+        summary: String = "",
+        prompt: String = "",
+        greeting: String = "",
+        agentMemAPIKey: String = "",
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.name = name
+        self.emoji = emoji
+        self.summary = summary
+        self.prompt = prompt
+        self.greeting = greeting
+        self.agentMemAPIKey = agentMemAPIKey
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    /// Tolerant decoding: cards written before a field existed load with
+    /// defaults instead of tripping the corrupt-file path.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? "角色"
+        emoji = try container.decodeIfPresent(String.self, forKey: .emoji) ?? "🎭"
+        summary = try container.decodeIfPresent(String.self, forKey: .summary) ?? ""
+        prompt = try container.decodeIfPresent(String.self, forKey: .prompt) ?? ""
+        greeting = try container.decodeIfPresent(String.self, forKey: .greeting) ?? ""
+        agentMemAPIKey = try container.decodeIfPresent(String.self, forKey: .agentMemAPIKey) ?? ""
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
+    }
+
+    /// Non-empty dedicated memory key, if configured.
+    var dedicatedMemoryKey: String? {
+        let trimmed = agentMemAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
 }
 
 /// 世界之书: lorebook entries injected into the prompt — always-on entries

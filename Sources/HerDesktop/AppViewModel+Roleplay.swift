@@ -115,6 +115,44 @@ extension AppViewModel {
         )
     }
 
+    // MARK: - Memory routing
+
+    /// How a conversation's memory is routed:
+    /// - no character card → the global relationship memory (as before)
+    /// - card WITHOUT its own key → memory OFF (roleplay must never pollute
+    ///   the real relationship memory)
+    /// - card WITH its own key → a dedicated client bound to that key (the
+    ///   character gets its own memory identity)
+    enum ConversationMemoryRouting: Equatable {
+        case global
+        case disabled
+        case characterScoped
+    }
+
+    func memoryRouting(forConversation id: String? = nil) -> ConversationMemoryRouting {
+        guard let card = characterCard(forConversation: id) else { return .global }
+        return card.dedicatedMemoryKey == nil ? .disabled : .characterScoped
+    }
+
+    /// The AgentMem client for a conversation, or nil when memory is off for
+    /// it (roleplay without a dedicated key — or no global key configured).
+    func memoryClient(forConversation id: String? = nil) -> AgentMemClient? {
+        guard let card = characterCard(forConversation: id) else {
+            return config.hasMemKey ? agentMem : nil
+        }
+        guard let key = card.dedicatedMemoryKey else { return nil }
+        var cardConfig = config
+        cardConfig.agentMemAPIKey = key
+        return AgentMemClient(config: cardConfig, session: urlSession)
+    }
+
+    private func characterCard(forConversation id: String?) -> CharacterCard? {
+        let summary = id.flatMap { cid in conversations.first { $0.id == cid } }
+            ?? activeConversationSummary
+        guard let raw = summary?.characterCardID, let cardID = UUID(uuidString: raw) else { return nil }
+        return characterCards.first { $0.id == cardID }
+    }
+
     // MARK: - Prompt injection
 
     /// The roleplay section for the system prompt: the active character card

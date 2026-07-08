@@ -83,7 +83,12 @@ extension AppViewModel {
     }
 
     func refreshAgentMemTurnSignals() async {
-        guard config.hasMemKey else { return }
+        guard let agentMem = memoryClient(forConversation: activeConversationID) else {
+            if memoryRouting(forConversation: activeConversationID) == .disabled {
+                memorySignal = .empty
+            }
+            return
+        }
         var relationship: [String: Any]?
         var emotion: [String: Any]?
         var failures: [String] = []
@@ -130,7 +135,7 @@ extension AppViewModel {
     }
 
     func retrieveMemory(for text: String) async -> String {
-        guard config.hasMemKey else { return "" }
+        guard let agentMem = memoryClient(forConversation: activeConversationID) else { return "" }
         do {
             let response = try await agentMem.query(text, sessionID: sessionID)
             if let first = response.retrievedMemories.first {
@@ -160,9 +165,14 @@ extension AppViewModel {
         userInput: String,
         agentResponse: String,
         attachments: [MessageAttachment] = [],
-        boundSessionID: String? = nil
+        boundSessionID: String? = nil,
+        boundMemoryClient: AgentMemClient? = nil
     ) async {
-        guard config.hasMemKey else { return }
+        // The client is bound at turn time like the session ID: this runs in
+        // a detached Task, and a conversation switch must not re-route the
+        // turn's memory (nor write roleplay turns into the real memory).
+        guard let agentMem = boundMemoryClient
+            ?? memoryClient(forConversation: boundSessionID ?? self.sessionID) else { return }
         let sessionID = boundSessionID ?? self.sessionID
         do {
             var metadata: [String: Any] = ["surface": "mac", "source": "her-desktop"]
@@ -197,6 +207,7 @@ extension AppViewModel {
                 ]
             )
             await auditAgentMemTaskStatus(
+                client: agentMem,
                 taskID: response.taskID,
                 eventType: "memory.writeback_task_status",
                 failureType: "memory.writeback_task_check_failed",
@@ -252,9 +263,11 @@ extension AppViewModel {
     func persistCapabilityMemory(
         invocation: CapabilityInvocation,
         result: CapabilityResult,
-        approved: Bool
+        approved: Bool,
+        boundMemoryClient: AgentMemClient? = nil
     ) async {
-        guard config.hasMemKey else { return }
+        guard let agentMem = boundMemoryClient
+            ?? memoryClient(forConversation: activeConversationID) else { return }
         let arguments = approvalDetail(for: invocation)
         let userInput = """
         Capability executed: \(invocation.capabilityID)
@@ -295,6 +308,7 @@ extension AppViewModel {
                 ]
             )
             await auditAgentMemTaskStatus(
+                client: agentMem,
                 taskID: response.taskID,
                 eventType: "memory.capability_writeback_task_status",
                 failureType: "memory.capability_writeback_task_check_failed",
@@ -318,13 +332,14 @@ extension AppViewModel {
     }
 
     func auditAgentMemTaskStatus(
+        client: AgentMemClient? = nil,
         taskID: String,
         eventType: String,
         failureType: String,
         metadata: [String: String]
     ) async {
         do {
-            let status = try await agentMem.waitForTaskStatus(taskID: taskID)
+            let status = try await (client ?? agentMem).waitForTaskStatus(taskID: taskID)
             var statusMetadata = metadata
             statusMetadata["taskID"] = status.taskID
             statusMetadata["taskType"] = status.taskType

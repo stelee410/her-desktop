@@ -128,6 +128,7 @@ extension AppViewModel {
             messages.append(ChatMessage(role: .tool, content: "\(result.title)\n\(result.content)"))
         }
         auditCapabilityExecution(invocation: invocation, result: result, approved: approved)
+        let boundMemoryClient = memoryClient(forConversation: activeConversationID)
         Task {
             let memoryResult = pluginDraft.map {
                 CapabilityResult(
@@ -136,7 +137,12 @@ extension AppViewModel {
                     requiresUserApproval: $0.queuedInstallApproval
                 )
             } ?? result
-            await persistCapabilityMemory(invocation: invocation, result: memoryResult, approved: approved)
+            await persistCapabilityMemory(
+                invocation: invocation,
+                result: memoryResult,
+                approved: approved,
+                boundMemoryClient: boundMemoryClient
+            )
         }
         return InvocationOutcome(result: result, pluginDraft: pluginDraft)
     }

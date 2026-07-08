@@ -366,29 +366,72 @@ private struct ServiceStatusPopover: View {
 
 private struct VoicePresenceView: View {
     @EnvironmentObject private var model: AppViewModel
+    /// Core-Animation-driven breathing (repeatForever runs on the render
+    /// server — no per-frame SwiftUI body work).
+    @State private var breathing = false
 
     var body: some View {
         VStack(spacing: 20) {
             ZStack {
+                // Soft halo: slow breathing scale + opacity.
                 Circle()
                     .stroke(AppTheme.coral.opacity(0.09), lineWidth: 34)
                     .frame(width: 182, height: 182)
+                    .scaleEffect(breathing ? 1.05 : 0.97)
+                    .opacity(breathing ? 1.0 : 0.75)
+                // Outer ring breathes slightly out of sync (delayed start)
+                // so the motion feels organic rather than mechanical.
                 Circle()
                     .stroke(AppTheme.coral.opacity(0.14), lineWidth: 1)
                     .frame(width: 218, height: 218)
+                    .scaleEffect(breathing ? 1.025 : 0.995)
+                // Gradient core: gentle pulse; glows brighter while active.
                 Circle()
                     .fill(
                         RadialGradient(colors: [AppTheme.coral.opacity(0.72), AppTheme.coral.opacity(0.06)], center: .center, startRadius: 10, endRadius: 86)
                     )
                     .frame(width: 154, height: 154)
-                WaveLine()
-                    .stroke(Color.white.opacity(0.82), lineWidth: 1.4)
-                    .frame(width: 118, height: 36)
+                    .scaleEffect(breathing ? 1.035 : 0.965)
+                    .opacity(isActive ? 1.0 : (breathing ? 0.95 : 0.8))
+                    .animation(.easeInOut(duration: 0.5), value: isActive)
+                // Flowing wave: a 30fps timeline redraws ONLY this small
+                // shape; amplitude reacts to state via an animated y-scale.
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+                    let t = timeline.date.timeIntervalSinceReferenceDate
+                    WaveLine(phase: CGFloat(t.truncatingRemainder(dividingBy: 2.8) / 2.8) * .pi * 2)
+                        .stroke(Color.white.opacity(0.82), lineWidth: 1.4)
+                }
+                .frame(width: 118, height: 36)
+                .scaleEffect(y: waveScale)
+                .animation(.easeInOut(duration: 0.6), value: waveScale)
+            }
+            .onAppear {
+                withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true)) {
+                    breathing = true
+                }
             }
             Text(greeting)
                 .font(.system(size: 30, weight: .regular))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(AppTheme.burgundy)
+                .animation(.easeInOut(duration: 0.3), value: greeting)
+        }
+    }
+
+    private var isActive: Bool {
+        switch model.connectionState {
+        case .listening, .speaking, .thinking, .working: return true
+        default: return false
+        }
+    }
+
+    /// Wave energy by state: calm at rest, lively when listening/speaking.
+    private var waveScale: CGFloat {
+        switch model.connectionState {
+        case .listening: return 2.2
+        case .speaking: return 1.9
+        case .thinking, .working: return 1.5
+        default: return 1.0
         }
     }
 
@@ -401,13 +444,28 @@ private struct VoicePresenceView: View {
 }
 
 private struct WaveLine: Shape {
+    /// Horizontal travel of the wave, 0…2π per cycle.
+    var phase: CGFloat = 0
+
+    var animatableData: CGFloat {
+        get { phase }
+        set { phase = newValue }
+    }
+
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.midY))
-        for x in stride(from: rect.minX, through: rect.maxX, by: 4) {
+        var started = false
+        for x in stride(from: rect.minX, through: rect.maxX, by: 3) {
             let progress = (x - rect.minX) / max(rect.width, 1)
-            let y = rect.midY + sin(progress * .pi * 2) * 4
-            path.addLine(to: CGPoint(x: x, y: y))
+            // Taper toward the ends so the line settles flat at the edges.
+            let envelope = sin(progress * .pi)
+            let y = rect.midY + sin(progress * .pi * 2 - phase) * 4 * envelope
+            if started {
+                path.addLine(to: CGPoint(x: x, y: y))
+            } else {
+                path.move(to: CGPoint(x: x, y: y))
+                started = true
+            }
         }
         return path
     }
