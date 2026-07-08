@@ -98,7 +98,15 @@ fi
 plutil -lint "$CONTENTS/Info.plist" >/dev/null
 
 if [[ "${HER_SKIP_CODESIGN:-0}" != "1" ]]; then
-  CODESIGN_IDENTITY="${HER_CODESIGN_IDENTITY:--}"
+  CODESIGN_IDENTITY="${HER_CODESIGN_IDENTITY:-}"
+  if [[ -z "$CODESIGN_IDENTITY" ]]; then
+    # Prefer a stable signing identity over ad-hoc: an ad-hoc CDHash changes
+    # on every rebuild, which silently invalidates TCC grants — the mic
+    # permission still reads "granted" but CoreAudio delivers all-zero audio.
+    CODESIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null \
+      | awk -F'"' '/Apple Development|Developer ID Application/ {print $2; exit}')"
+    CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
+  fi
   codesign --force --deep --sign "$CODESIGN_IDENTITY" "$APP_DIR" >/dev/null
   codesign --verify --deep --strict --verbose=2 "$APP_DIR" >/dev/null
 fi

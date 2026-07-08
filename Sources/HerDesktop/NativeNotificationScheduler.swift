@@ -22,6 +22,8 @@ final class MacSpeechDictationService: NSObject, NativeSpeechDictating, AudioLev
     private var recognitionTask: SFSpeechRecognitionTask?
     private var continuation: CheckedContinuation<String, Error>?
     private var latestTranscript = ""
+    private var captureStats: AudioCaptureStats?
+    private var captureSampleRate: Double = 48_000
 
     func start(localeIdentifier: String, onPartial: @escaping @MainActor (String) -> Void) async throws -> String {
         try await requestPermissions()
@@ -49,8 +51,12 @@ final class MacSpeechDictationService: NSObject, NativeSpeechDictating, AudioLev
         // rate so the waveform updates ~15Hz without flooding the main actor.
         let levelHandler = onAudioLevel
         let levelCounter = TapCounter()
+        let stats = AudioCaptureStats()
+        captureStats = stats
+        captureSampleRate = format.sampleRate
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { @Sendable buffer, _ in
             tapRequest.append(buffer)
+            stats.record(peak: AudioLevelMeter.peak(of: buffer), frames: Int(buffer.frameLength))
             if let levelHandler, levelCounter.shouldSample() {
                 let level = AudioLevelMeter.level(of: buffer)
                 Task { @MainActor in levelHandler(level) }
@@ -92,7 +98,15 @@ final class MacSpeechDictationService: NSObject, NativeSpeechDictating, AudioLev
         audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
         recognitionTask?.finish()
-        finish(.success(latestTranscript))
+        if latestTranscript.isEmpty,
+           captureStats?.capturedOnlySilence(sampleRate: captureSampleRate) == true {
+            // All-zero capture: stale TCC grant (signature changed since the
+            // permission was given) — say so instead of returning "".
+            finish(.failure(DictationError.silentMicrophone))
+        } else {
+            finish(.success(latestTranscript))
+        }
+        captureStats = nil
     }
 
     private func requestPermissions() async throws {
@@ -134,6 +148,7 @@ final class MacSpeechDictationService: NSObject, NativeSpeechDictating, AudioLev
         case speechPermissionDenied
         case microphonePermissionDenied
         case recognizerUnavailable
+        case silentMicrophone
 
         var errorDescription: String? {
             switch self {
@@ -143,6 +158,8 @@ final class MacSpeechDictationService: NSObject, NativeSpeechDictating, AudioLev
                 return "Microphone permission was not granted."
             case .recognizerUnavailable:
                 return "Speech recognizer is not available for the selected locale."
+            case .silentMicrophone:
+                return "麦克风只收到了静音——请在 系统设置 → 隐私与安全性 → 麦克风 中重新为 Her Desktop 授权后再试。"
             }
         }
     }
@@ -188,6 +205,32 @@ final class TapCounter: @unchecked Sendable {
         defer { lock.unlock() }
         count += 1
         return count % n == 0
+    }
+}
+
+/// Peak/duration accounting for a capture session, written from the CoreAudio
+/// render thread and read on the main actor after the session ends. Detects
+/// the "granted but silent" microphone state: a stale TCC grant (e.g. after
+/// the app's code signature changed) makes CoreAudio deliver all-zero buffers
+/// while the permission API still reports authorized.
+final class AudioCaptureStats: @unchecked Sendable {
+    private let lock = NSLock()
+    private var peak: Float = 0
+    private var frames = 0
+
+    func record(peak newPeak: Float, frames newFrames: Int) {
+        lock.lock()
+        peak = max(peak, newPeak)
+        frames += newFrames
+        lock.unlock()
+    }
+
+    /// True when at least `minSeconds` of audio was captured and every single
+    /// sample was digital zero — real rooms always have a noise floor.
+    func capturedOnlySilence(sampleRate: Double, minSeconds: Double = 0.5) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return Double(frames) >= sampleRate * minSeconds && peak == 0
     }
 }
 

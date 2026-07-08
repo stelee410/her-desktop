@@ -44,4 +44,15 @@ enum AudioLevelMeter {
         // Speech RMS rarely exceeds ~0.35; scale into a lively 0…1.
         return CGFloat(min(1, rms * 6))
     }
+
+    /// Peak absolute sample value — used to tell "quiet room" (tiny but
+    /// non-zero noise floor) apart from "TCC is feeding us digital silence".
+    static func peak(of buffer: AVAudioPCMBuffer) -> Float {
+        guard let data = buffer.floatChannelData?[0], buffer.frameLength > 0 else { return 0 }
+        var peak: Float = 0
+        for index in 0..<Int(buffer.frameLength) {
+            peak = max(peak, abs(data[index]))
+        }
+        return peak
+    }
 }

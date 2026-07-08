@@ -21,6 +21,9 @@ final class AgentLLMDictationService: NSObject, NativeSpeechDictating, AudioLeve
     private var finishedSentences: [String] = []
     private var currentSentence = ""
     private var stopTimeoutTask: Task<Void, Never>?
+    private var activeTaskID = ""
+    private var captureStats: AudioCaptureStats?
+    private var captureSampleRate: Double = 16_000
 
     init(config: HerAppConfig, urlSession: URLSession = .shared) {
         self.config = config
@@ -54,10 +57,13 @@ final class AgentLLMDictationService: NSObject, NativeSpeechDictating, AudioLeve
         startReceiveLoop(socket)
 
         // Kick off the ASR task and wait for task-started before streaming.
+        // The task_id must stay stable for the whole session — finish-task
+        // with a different id is silently ignored by the server.
+        activeTaskID = UUID().uuidString
         let runTask: [String: Any] = [
             "header": [
                 "action": "run-task",
-                "task_id": UUID().uuidString,
+                "task_id": activeTaskID,
                 "streaming": "duplex"
             ],
             "payload": [
@@ -98,7 +104,7 @@ final class AgentLLMDictationService: NSObject, NativeSpeechDictating, AudioLeve
         let finishTask: [String: Any] = [
             "header": [
                 "action": "finish-task",
-                "task_id": UUID().uuidString,
+                "task_id": activeTaskID,
                 "streaming": "duplex"
             ],
             "payload": ["input": [String: Any]()]
@@ -135,8 +141,12 @@ final class AgentLLMDictationService: NSObject, NativeSpeechDictating, AudioLeve
         nonisolated(unsafe) let tapSocket = socket
         let levelHandler = onAudioLevel
         let levelCounter = TapCounter()
+        let stats = AudioCaptureStats()
+        captureStats = stats
+        captureSampleRate = inputFormat.sampleRate
         let ratio = 16_000.0 / inputFormat.sampleRate
         inputNode.installTap(onBus: 0, bufferSize: 2048, format: inputFormat) { @Sendable buffer, _ in
+            stats.record(peak: AudioLevelMeter.peak(of: buffer), frames: Int(buffer.frameLength))
             if let levelHandler, levelCounter.shouldSample() {
                 let level = AudioLevelMeter.level(of: buffer)
                 Task { @MainActor in levelHandler(level) }
@@ -256,8 +266,18 @@ final class AgentLLMDictationService: NSObject, NativeSpeechDictating, AudioLeve
         stopTimeoutTask = nil
         let pending = continuation
         continuation = nil
+        let silentMic = transcript.isEmpty
+            && captureStats?.capturedOnlySilence(sampleRate: captureSampleRate) == true
+        captureStats = nil
         teardown(resumeWith: nil)
-        pending?.resume(returning: transcript)
+        if silentMic {
+            // All-zero capture: the mic permission is stale (TCC grant no
+            // longer matches the app signature) — surface it instead of
+            // quietly returning an empty transcript.
+            pending?.resume(throwing: DictationError.silentMicrophone)
+        } else {
+            pending?.resume(returning: transcript)
+        }
     }
 
     private func teardown(resumeWith _: String?) {
@@ -276,6 +296,7 @@ final class AgentLLMDictationService: NSObject, NativeSpeechDictating, AudioLeve
         case audioFormatUnavailable
         case serverNotReady
         case serverError(String)
+        case silentMicrophone
 
         var errorDescription: String? {
             switch self {
@@ -291,6 +312,8 @@ final class AgentLLMDictationService: NSObject, NativeSpeechDictating, AudioLeve
                 return "AgentLLM ASR did not confirm the task in time."
             case .serverError(let message):
                 return "AgentLLM ASR failed: \(message)"
+            case .silentMicrophone:
+                return "麦克风只收到了静音——请在 系统设置 → 隐私与安全性 → 麦克风 中重新为 Her Desktop 授权后再试。"
             }
         }
     }
