@@ -92,7 +92,8 @@ extension AppViewModel {
         let location = backup.map { "\n备份位置：\($0.path)" } ?? ""
         return ChatMessage(
             role: .assistant,
-            content: "这段对话的存档文件无法读取（可能已损坏），我把原文件备份好了，没有覆盖。\(location)\n接下来的新消息会保存为全新的存档。"
+            content: "这段对话的存档文件无法读取（可能已损坏），我把原文件备份好了，没有覆盖。\(location)\n接下来的新消息会保存为全新的存档。",
+            localOnly: true
         )
     }
 
@@ -286,7 +287,7 @@ extension AppViewModel {
         guard config.hasLLMKey || allowsMissingLLMKeyForInjectedClient else {
             connectionState = .offline
             lastError = ServiceError.missingAPIKey("AgentLLM").localizedDescription
-            messages.append(ChatMessage(role: .assistant, content: Self.firstRunSetupMessage(config: config)))
+            messages.append(ChatMessage(role: .assistant, content: Self.firstRunSetupMessage(config: config), localOnly: true))
             saveSessionSnapshot()
             return
         }

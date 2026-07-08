@@ -109,3 +109,30 @@ final class PushToTalkTests: XCTestCase {
         XCTAssertEqual(model.draft, "")
     }
 }
+
+
+@MainActor
+final class ConversationContextTests: XCTestCase {
+    func testLocalOnlyNoticesNeverReachTheModel() {
+        let builder = ConversationContextBuilder()
+        let messages = [
+            ChatMessage(role: .assistant, content: "新会话已经准备好。我们从哪里开始？", localOnly: true),
+            ChatMessage(role: .user, content: "你好"),
+            ChatMessage(role: .assistant, content: "AgentLLM key 已保存。", localOnly: true),
+            ChatMessage(role: .assistant, content: "你好，今天想做什么？")
+        ]
+        let context = builder.build(systemPrompt: "SYS", messages: messages)
+        let contents = context.compactMap(\.content)
+        XCTAssertFalse(contents.contains { $0.contains("新会话已经准备好") },
+                       "UI greeting must not spend a context slot")
+        XCTAssertFalse(contents.contains { $0.contains("key 已保存") })
+        XCTAssertTrue(contents.contains { $0.contains("你好，今天想做什么？") })
+        XCTAssertTrue(contents.contains { $0 == "你好" })
+    }
+
+    func testLegacyMessagesDecodeAsNotLocalOnly() throws {
+        let legacy = #"{"role":"assistant","content":"hi"}"#
+        let message = try JSONDecoder().decode(ChatMessage.self, from: Data(legacy.utf8))
+        XCTAssertFalse(message.localOnly)
+    }
+}

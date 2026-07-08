@@ -67,6 +67,10 @@ struct ChatMessage: Identifiable, Codable, Equatable {
     var approvalID: UUID?
     var createdAt: Date = Date()
     var attachments: [MessageAttachment] = []
+    /// Pure UI feedback ("新会话已经准备好", key-saved confirmations, …):
+    /// shown in the transcript but NEVER sent to the model — it isn't
+    /// conversation content and shouldn't spend context-window slots.
+    var localOnly: Bool = false
 
     init(
         id: UUID = UUID(),
@@ -75,7 +79,8 @@ struct ChatMessage: Identifiable, Codable, Equatable {
         reasoning: String = "",
         approvalID: UUID? = nil,
         createdAt: Date = Date(),
-        attachments: [MessageAttachment] = []
+        attachments: [MessageAttachment] = [],
+        localOnly: Bool = false
     ) {
         self.id = id
         self.role = role
@@ -84,6 +89,7 @@ struct ChatMessage: Identifiable, Codable, Equatable {
         self.approvalID = approvalID
         self.createdAt = createdAt
         self.attachments = attachments
+        self.localOnly = localOnly
     }
 
     enum CodingKeys: String, CodingKey {
@@ -94,6 +100,7 @@ struct ChatMessage: Identifiable, Codable, Equatable {
         case approvalID
         case createdAt
         case attachments
+        case localOnly
     }
 
     init(from decoder: Decoder) throws {
@@ -105,6 +112,7 @@ struct ChatMessage: Identifiable, Codable, Equatable {
         approvalID = try container.decodeIfPresent(UUID.self, forKey: .approvalID)
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         attachments = try container.decodeIfPresent([MessageAttachment].self, forKey: .attachments) ?? []
+        localOnly = try container.decodeIfPresent(Bool.self, forKey: .localOnly) ?? false
     }
 }
 

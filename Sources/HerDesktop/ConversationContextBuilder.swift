@@ -7,7 +7,10 @@ struct ConversationContextBuilder {
 
     func build(systemPrompt: String, messages: [ChatMessage]) -> [AgentLLMMessage] {
         var toolEvidenceCount = 0
+        // localOnly messages are UI feedback, not conversation — they never
+        // reach the model and never spend a context-window slot.
         let recentReversed = messages.reversed().compactMap { message -> AgentLLMMessage? in
+            if message.localOnly { return nil }
             if message.role == .tool {
                 guard toolEvidenceCount < maxToolEvidenceMessages else { return nil }
                 toolEvidenceCount += 1

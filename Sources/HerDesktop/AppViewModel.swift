@@ -379,9 +379,13 @@ final class AppViewModel: ObservableObject, AuditRecording {
             conversation.messages = [Self.corruptTranscriptNotice(backup: conversationBootstrap.corruptTranscriptBackup)]
         } else {
             conversation.messages = restoredMessages.isEmpty ? [
-                ChatMessage(role: .assistant, content: loaded.hasLLMKey
-                    ? "我在这里。今天想从哪里开始？"
-                    : Self.firstRunSetupMessage(config: loaded))
+                ChatMessage(
+                    role: .assistant,
+                    content: loaded.hasLLMKey
+                        ? "我在这里。今天想从哪里开始？"
+                        : Self.firstRunSetupMessage(config: loaded),
+                    localOnly: true
+                )
             ] : restoredMessages
         }
         rebuildRunningTasks()
@@ -451,7 +455,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
             let updated = try draft.makeConfig()
             _ = try ConfigLoader.saveLocal(updated, cwd: runtimeCwd)
             applyConfiguration(updated)
-            messages.append(ChatMessage(role: .assistant, content: configurationSavedMessage(config: updated)))
+            messages.append(ChatMessage(role: .assistant, content: configurationSavedMessage(config: updated), localOnly: true))
             audit(
                 type: "config.saved",
                 summary: "Local service configuration was updated.",
@@ -535,7 +539,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
             _ = try ConfigLoader.saveLocal(updated, cwd: runtimeCwd)
             applyConfiguration(updated)
             lastError = nil
-            messages.append(ChatMessage(role: .assistant, content: inlineAgentLLMKeySavedMessage(hasAttachments: !attachments.isEmpty)))
+            messages.append(ChatMessage(role: .assistant, content: inlineAgentLLMKeySavedMessage(hasAttachments: !attachments.isEmpty), localOnly: true))
             audit(
                 type: "config.agentllm_key_saved_from_chat",
                 summary: "AgentLLM API key was saved from a redacted chat message.",
