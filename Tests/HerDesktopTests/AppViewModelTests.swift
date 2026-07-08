@@ -88,7 +88,10 @@ final class AppViewModelTests: XCTestCase {
         model.selectedSection = .tools
         XCTAssertEqual(model.selectedSection, .tools)
 
-        XCTAssertEqual(WorkspaceSection.allCases.map(\.title), ["Today", "Memory", "Projects", "Apps", "Tools", "Agents"])
+        XCTAssertEqual(
+            WorkspaceSection.allCases.map(\.title),
+            ["Today", "Memory", "Projects", "Apps", "Tools", "Agents", "角色卡", "世界之书"]
+        )
     }
 
     func testMissingAgentLLMKeyUsesConversationSetupPrompt() async throws {
