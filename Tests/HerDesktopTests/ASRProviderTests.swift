@@ -95,6 +95,26 @@ final class ASRProviderTests: XCTestCase {
         XCTAssertTrue(AgentLLMVoiceCatalog.parse(Data("not json".utf8)).isEmpty)
     }
 
+    func testAudioFrameGateBuffersUntilLiveAndPreservesOrder() {
+        // Frames captured before the server handshake buffer; goLive flushes
+        // them in capture order, then later frames pass straight through.
+        final class Sink: @unchecked Sendable {
+            let lock = NSLock()
+            var frames: [Data] = []
+            func append(_ d: Data) { lock.lock(); frames.append(d); lock.unlock() }
+        }
+        let sink = Sink()
+        let gate = AudioFrameGate { sink.append($0) }
+
+        gate.push(Data([1]))
+        gate.push(Data([2]))
+        XCTAssertTrue(sink.frames.isEmpty, "nothing reaches the socket before goLive")
+
+        gate.goLive()
+        gate.push(Data([3]))
+        XCTAssertEqual(sink.frames, [Data([1]), Data([2]), Data([3])])
+    }
+
     func testViewModelRoutesDictationByProvider() {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-asr-routing-\(UUID().uuidString)", isDirectory: true)

@@ -56,6 +56,14 @@ final class AgentLLMDictationService: NSObject, NativeSpeechDictating, AudioLeve
         socket.resume()
         startReceiveLoop(socket)
 
+        // Open the microphone BEFORE the server handshake and buffer frames
+        // locally — otherwise the first ~1s of speech (WS connect + task
+        // confirmation) is lost. The gate holds frames until goLive().
+        let gate = AudioFrameGate { data in
+            socket.send(.data(data)) { _ in }
+        }
+        try startMicrophoneStream(into: gate)
+
         // Kick off the ASR task and wait for task-started before streaming.
         // The task_id must stay stable for the whole session — finish-task
         // with a different id is silently ignored by the server.
@@ -87,7 +95,8 @@ final class AgentLLMDictationService: NSObject, NativeSpeechDictating, AudioLeve
             }
         }
 
-        try startMicrophoneStream(to: socket)
+        // Server confirmed: flush everything said so far, then stream live.
+        gate.goLive()
 
         return try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
@@ -122,7 +131,7 @@ final class AgentLLMDictationService: NSObject, NativeSpeechDictating, AudioLeve
 
     // MARK: - Audio
 
-    private func startMicrophoneStream(to socket: URLSessionWebSocketTask) throws {
+    private func startMicrophoneStream(into gate: AudioFrameGate) throws {
         let inputNode = audioEngine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
         guard let targetFormat = AVAudioFormat(
@@ -136,9 +145,9 @@ final class AgentLLMDictationService: NSObject, NativeSpeechDictating, AudioLeve
 
         inputNode.removeTap(onBus: 0)
         // Tap runs on the CoreAudio render thread: convert to 16k PCM and
-        // ship binary frames straight to the socket (send is thread-safe).
+        // hand binary frames to the gate (buffered until the server is ready,
+        // then straight to the socket — send is thread-safe).
         nonisolated(unsafe) let tapConverter = converter
-        nonisolated(unsafe) let tapSocket = socket
         let levelHandler = onAudioLevel
         let levelCounter = TapCounter()
         let stats = AudioCaptureStats()
@@ -165,7 +174,7 @@ final class AgentLLMDictationService: NSObject, NativeSpeechDictating, AudioLeve
             }
             guard converted.frameLength > 0, let channel = converted.int16ChannelData else { return }
             let data = Data(bytes: channel[0], count: Int(converted.frameLength) * MemoryLayout<Int16>.size)
-            tapSocket.send(.data(data)) { _ in }
+            gate.push(data)
         }
         audioEngine.prepare()
         try audioEngine.start()
@@ -316,5 +325,48 @@ final class AgentLLMDictationService: NSObject, NativeSpeechDictating, AudioLeve
                 return "麦克风只收到了静音——请在 系统设置 → 隐私与安全性 → 麦克风 中重新为 Her Desktop 授权后再试。"
             }
         }
+    }
+}
+
+/// Buffers converted PCM frames captured before the ASR server confirms the
+/// task, then replays them in order and passes frames straight through.
+/// Written from the CoreAudio render thread, flipped live on the main actor;
+/// the lock also guarantees flush-before-live ordering.
+final class AudioFrameGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var buffered: [Data] = []
+    private var isLive = false
+    private let send: @Sendable (Data) -> Void
+    /// ~14s at 16k mono Int16 with ~43ms frames — far past the 5s handshake
+    /// timeout, so a stuck handshake can't grow memory unbounded.
+    private let maxBufferedFrames = 320
+
+    init(send: @escaping @Sendable (Data) -> Void) {
+        self.send = send
+    }
+
+    func push(_ data: Data) {
+        lock.lock()
+        if isLive {
+            lock.unlock()
+            send(data)
+            return
+        }
+        if buffered.count < maxBufferedFrames {
+            buffered.append(data)
+        }
+        lock.unlock()
+    }
+
+    func goLive() {
+        lock.lock()
+        defer { lock.unlock() }
+        isLive = true
+        // Flush under the lock: a concurrent push must not overtake the
+        // buffered frames (audio must reach the server in capture order).
+        for frame in buffered {
+            send(frame)
+        }
+        buffered = []
     }
 }
