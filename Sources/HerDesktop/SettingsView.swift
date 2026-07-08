@@ -122,6 +122,70 @@ struct SettingsView: View {
     }
 }
 
+/// Speaker dropdown for AgentLLM TTS: loads the live voice catalog from the
+/// endpoint (`/v1beta/volc/tts/voices`); falls back to a plain text field
+/// when the list can't be fetched (no key yet, offline, …).
+struct AgentLLMVoicePicker: View {
+    @Binding var draft: HerAppConfigDraft
+    @State private var voices: [AgentLLMVoiceCatalog.Voice] = []
+    @State private var loadFailed = false
+    @State private var isLoading = false
+
+    var body: some View {
+        Group {
+            if !voices.isEmpty {
+                Picker("音色", selection: $draft.agentLLMTTSVoice) {
+                    // Keep a stored voice selectable even if it's not in the
+                    // fetched list (e.g. a pack the account lost access to).
+                    if !voices.contains(where: { $0.id == draft.agentLLMTTSVoice }) {
+                        Text(draft.agentLLMTTSVoice).tag(draft.agentLLMTTSVoice)
+                    }
+                    ForEach(voices) { voice in
+                        Text(voiceLabel(voice)).tag(voice.id)
+                    }
+                }
+            } else {
+                TextField("TTS 音色 ID（如 zh_female_cancan_mars_bigtts）", text: $draft.agentLLMTTSVoice)
+                if isLoading {
+                    Text("正在加载可用音色…")
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.muted)
+                } else if loadFailed {
+                    Text("音色列表加载失败（检查 AgentLLM key/网络），可手动填写音色 ID。")
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.muted)
+                }
+            }
+            TextField("TTS model", text: $draft.agentLLMTTSModel)
+        }
+        .task(id: draft.agentLLMAPIKey) {
+            await loadVoices()
+        }
+    }
+
+    private func voiceLabel(_ voice: AgentLLMVoiceCatalog.Voice) -> String {
+        voice.gender.isEmpty ? voice.label : "\(voice.label)（\(voice.gender)）"
+    }
+
+    private func loadVoices() async {
+        let key = draft.agentLLMAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty,
+              let baseURL = URL(string: draft.agentLLMBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            loadFailed = true
+            return
+        }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let fetched = try await AgentLLMVoiceCatalog.fetch(baseURL: baseURL, apiKey: key)
+            voices = fetched
+            loadFailed = fetched.isEmpty
+        } catch {
+            loadFailed = true
+        }
+    }
+}
+
 struct HerConfigurationFields: View {
     enum Presentation {
         case compact
@@ -153,7 +217,6 @@ struct HerConfigurationFields: View {
 
             fieldSection("Voice", systemImage: "waveform") {
                 Toggle("Speak assistant replies", isOn: $draft.speakAssistantReplies)
-                TextField("Speech voice identifier", text: $draft.speechVoiceIdentifier)
                 Picker("语音识别 (ASR)", selection: $draft.speechRecognitionProvider) {
                     Text("系统（Apple，本地/免费）").tag("apple")
                     Text("AgentLLM（服务端转写）").tag("agentllm")
@@ -164,6 +227,17 @@ struct HerConfigurationFields: View {
                     Text("录音结束后整段上传到 AgentLLM 的 audio/transcriptions 转写；没有实时字幕。")
                         .font(.caption2)
                         .foregroundStyle(AppTheme.muted)
+                }
+
+                Picker("语音播报 (TTS)", selection: $draft.speechSynthesisProvider) {
+                    Text("系统（Apple）").tag("apple")
+                    Text("AgentLLM（豆包音色）").tag("agentllm")
+                }
+                .pickerStyle(.segmented)
+                if draft.speechSynthesisProvider == "apple" {
+                    TextField("Speech voice identifier", text: $draft.speechVoiceIdentifier)
+                } else {
+                    AgentLLMVoicePicker(draft: $draft)
                 }
             }
         }

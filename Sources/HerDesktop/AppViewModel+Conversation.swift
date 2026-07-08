@@ -169,7 +169,8 @@ extension AppViewModel {
         // Stop the previous conversation's voice mid-sentence.
         speechTask?.cancel()
         speechTask = nil
-        speechSynthesizer.stop()
+        baseSpeechSynthesizer.stop()
+        agentLLMSpeechSynthesizer.stop()
         pendingApprovals = []
         capabilityActivities = []
         pendingAttachments = []

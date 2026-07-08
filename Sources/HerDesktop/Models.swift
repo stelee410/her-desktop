@@ -573,6 +573,12 @@ struct HerAppConfig: Codable, Equatable {
     var speechRecognitionProvider: String
     /// Transcription model when the provider is "agentllm".
     var agentLLMASRModel: String
+    /// "apple" = AVSpeechSynthesizer (default); "agentllm" = server-side TTS
+    /// through the AgentLLM endpoint (OpenAI-compatible audio/speech).
+    var speechSynthesisProvider: String
+    /// TTS model + speaker when the provider is "agentllm".
+    var agentLLMTTSModel: String
+    var agentLLMTTSVoice: String
 
     var hasLLMKey: Bool { !agentLLMAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var hasMemKey: Bool { !agentMemAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -590,7 +596,10 @@ struct HerAppConfig: Codable, Equatable {
         speakAssistantReplies: Bool = false,
         speechVoiceIdentifier: String = "",
         speechRecognitionProvider: String = "apple",
-        agentLLMASRModel: String = "whisper-1"
+        agentLLMASRModel: String = "whisper-1",
+        speechSynthesisProvider: String = "apple",
+        agentLLMTTSModel: String = "doubao-tts",
+        agentLLMTTSVoice: String = "zh_female_cancan_mars_bigtts"
     ) {
         self.agentLLMBaseURL = agentLLMBaseURL
         self.agentLLMAPIKey = agentLLMAPIKey
@@ -605,6 +614,9 @@ struct HerAppConfig: Codable, Equatable {
         self.speechVoiceIdentifier = speechVoiceIdentifier
         self.speechRecognitionProvider = speechRecognitionProvider
         self.agentLLMASRModel = agentLLMASRModel
+        self.speechSynthesisProvider = speechSynthesisProvider
+        self.agentLLMTTSModel = agentLLMTTSModel
+        self.agentLLMTTSVoice = agentLLMTTSVoice
     }
 
     enum CodingKeys: String, CodingKey {
@@ -621,6 +633,9 @@ struct HerAppConfig: Codable, Equatable {
         case speechVoiceIdentifier
         case speechRecognitionProvider
         case agentLLMASRModel
+        case speechSynthesisProvider
+        case agentLLMTTSModel
+        case agentLLMTTSVoice
     }
 
     init(from decoder: Decoder) throws {
@@ -638,6 +653,9 @@ struct HerAppConfig: Codable, Equatable {
         speechVoiceIdentifier = try container.decodeIfPresent(String.self, forKey: .speechVoiceIdentifier) ?? ""
         speechRecognitionProvider = try container.decodeIfPresent(String.self, forKey: .speechRecognitionProvider) ?? "apple"
         agentLLMASRModel = try container.decodeIfPresent(String.self, forKey: .agentLLMASRModel) ?? "whisper-1"
+        speechSynthesisProvider = try container.decodeIfPresent(String.self, forKey: .speechSynthesisProvider) ?? "apple"
+        agentLLMTTSModel = try container.decodeIfPresent(String.self, forKey: .agentLLMTTSModel) ?? "doubao-tts"
+        agentLLMTTSVoice = try container.decodeIfPresent(String.self, forKey: .agentLLMTTSVoice) ?? "zh_female_cancan_mars_bigtts"
     }
 
     static let empty = HerAppConfig(
@@ -666,6 +684,9 @@ struct HerAppConfigDraft: Equatable {
     var speechVoiceIdentifier: String
     var speechRecognitionProvider: String
     var agentLLMASRModel: String
+    var speechSynthesisProvider: String
+    var agentLLMTTSModel: String
+    var agentLLMTTSVoice: String
 
     init(config: HerAppConfig) {
         self.agentLLMBaseURL = config.agentLLMBaseURL.absoluteString
@@ -681,6 +702,9 @@ struct HerAppConfigDraft: Equatable {
         self.speechVoiceIdentifier = config.speechVoiceIdentifier
         self.speechRecognitionProvider = config.speechRecognitionProvider
         self.agentLLMASRModel = config.agentLLMASRModel
+        self.speechSynthesisProvider = config.speechSynthesisProvider
+        self.agentLLMTTSModel = config.agentLLMTTSModel
+        self.agentLLMTTSVoice = config.agentLLMTTSVoice
     }
 
     func makeConfig() throws -> HerAppConfig {
@@ -701,7 +725,14 @@ struct HerAppConfigDraft: Equatable {
             speechRecognitionProvider: speechRecognitionProvider == "agentllm" ? "agentllm" : "apple",
             agentLLMASRModel: agentLLMASRModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? "whisper-1"
-                : agentLLMASRModel.trimmingCharacters(in: .whitespacesAndNewlines)
+                : agentLLMASRModel.trimmingCharacters(in: .whitespacesAndNewlines),
+            speechSynthesisProvider: speechSynthesisProvider == "agentllm" ? "agentllm" : "apple",
+            agentLLMTTSModel: agentLLMTTSModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "doubao-tts"
+                : agentLLMTTSModel.trimmingCharacters(in: .whitespacesAndNewlines),
+            agentLLMTTSVoice: agentLLMTTSVoice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "zh_female_cancan_mars_bigtts"
+                : agentLLMTTSVoice.trimmingCharacters(in: .whitespacesAndNewlines)
         )
     }
 

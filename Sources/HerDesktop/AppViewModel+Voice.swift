@@ -83,6 +83,12 @@ extension AppViewModel {
 
     func speakAssistantReplyIfEnabled(_ text: String) async {
         guard config.speakAssistantReplies else { return }
+        await speakTextAloud(text)
+    }
+
+    /// Speak arbitrary text now (per-message 朗读 button + auto-speak both
+    /// land here) through the configured TTS backend.
+    func speakTextAloud(_ text: String) async {
         let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanText.isEmpty else { return }
         let previousState = connectionState
@@ -98,6 +104,7 @@ extension AppViewModel {
                 metadata: ["speechID": id, "characters": String(cleanText.count)]
             )
         } catch {
+            lastError = error.localizedDescription
             audit(
                 type: "voice.reply_failed",
                 summary: error.localizedDescription,
@@ -107,6 +114,20 @@ extension AppViewModel {
         if connectionState == .speaking {
             connectionState = previousState == .thinking || previousState == .working ? .ready : previousState
         }
+    }
+
+    /// Toggle for the per-bubble 朗读 button: tap to speak, tap again to stop.
+    func toggleSpeakMessage(_ text: String) {
+        if connectionState == .speaking {
+            speechTask?.cancel()
+            speechTask = nil
+            baseSpeechSynthesizer.stop()
+            agentLLMSpeechSynthesizer.stop()
+            connectionState = config.hasLLMKey ? .ready : .offline
+            return
+        }
+        speechTask?.cancel()
+        speechTask = Task { await speakTextAloud(text) }
     }
 }
 

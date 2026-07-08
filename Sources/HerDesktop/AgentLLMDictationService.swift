@@ -104,7 +104,8 @@ final class AgentLLMDictationService: NSObject, NativeSpeechDictating {
         let audioData = try Data(contentsOf: fileURL)
         guard !audioData.isEmpty else { return "" }
 
-        let endpoint = config.agentLLMBaseURL.appendingPathComponent("audio/transcriptions")
+        // Matches the chat client's convention: the base URL has no /v1.
+        let endpoint = config.agentLLMBaseURL.appending(path: "/v1/audio/transcriptions")
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = 60

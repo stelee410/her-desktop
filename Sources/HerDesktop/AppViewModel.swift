@@ -177,7 +177,14 @@ final class AppViewModel: ObservableObject, AuditRecording {
     var attachmentStore: AttachmentStore
     let interactionEventBus: InteractionEventBus
     let localInboxBridgeServer: LocalInboxBridgeServer
-    let speechSynthesizer: NativeSpeechSynthesizing
+    /// Injected (tests) or the system AVSpeechSynthesizer.
+    let baseSpeechSynthesizer: NativeSpeechSynthesizing
+    /// Server-side TTS via AgentLLM; rebuilt on config changes.
+    var agentLLMSpeechSynthesizer: AgentLLMSpeechSynthesizer
+    /// The active TTS backend, resolved per config.
+    var speechSynthesizer: NativeSpeechSynthesizing {
+        config.speechSynthesisProvider == "agentllm" ? agentLLMSpeechSynthesizer : baseSpeechSynthesizer
+    }
     /// Injected (tests) or the system SFSpeechRecognizer dictation.
     private let baseSpeechDictation: NativeSpeechDictating
     /// Server-side dictation via AgentLLM; rebuilt on config changes.
@@ -275,7 +282,8 @@ final class AppViewModel: ObservableObject, AuditRecording {
         self.agentLLM = agentLLM ?? AgentLLMClient(config: loaded, session: urlSession)
         self.allowsMissingLLMKeyForInjectedClient = agentLLM != nil
         self.pluginRegistry = PluginRegistry(config: loaded, baseDirectory: cwd)
-        self.speechSynthesizer = speechSynthesizer
+        self.baseSpeechSynthesizer = speechSynthesizer
+        self.agentLLMSpeechSynthesizer = AgentLLMSpeechSynthesizer(config: loaded, urlSession: urlSession)
         self.baseSpeechDictation = speechDictation
         self.agentLLMDictationService = AgentLLMDictationService(config: loaded, urlSession: urlSession)
         self.notificationScheduler = notificationScheduler
@@ -284,7 +292,11 @@ final class AppViewModel: ObservableObject, AuditRecording {
             registry: pluginRegistry,
             config: loaded,
             baseDirectory: cwd,
-            speechSynthesizer: speechSynthesizer,
+            // Resolve explicitly: the init parameter shadows the computed
+            // provider-routing property here.
+            speechSynthesizer: loaded.speechSynthesisProvider == "agentllm"
+                ? agentLLMSpeechSynthesizer
+                : speechSynthesizer,
             urlSession: urlSession
         )
         let conversationStore = ConversationStore(cwd: cwd)
@@ -376,7 +388,8 @@ final class AppViewModel: ObservableObject, AuditRecording {
         stopHeartbeat()
         cancelQueuedJobs()
         speechTask?.cancel()
-        speechSynthesizer.stop()
+        baseSpeechSynthesizer.stop()
+        agentLLMSpeechSynthesizer.stop()
         // Land any queued transcript/index/audit writes before exit.
         conversationStore.flushPendingIO()
         auditStore.flushPendingIO()
@@ -566,6 +579,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
         config = updated
         agentMem = AgentMemClient(config: updated, session: urlSession)
         agentLLMDictationService = AgentLLMDictationService(config: updated, urlSession: urlSession)
+        agentLLMSpeechSynthesizer = AgentLLMSpeechSynthesizer(config: updated, urlSession: urlSession)
         // Preserve an injected (test) LLM client: rebuilding unconditionally
         // silently swapped a fake for a real network client mid-scenario.
         if !allowsMissingLLMKeyForInjectedClient {

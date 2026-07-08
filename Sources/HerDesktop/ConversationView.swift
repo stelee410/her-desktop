@@ -414,9 +414,26 @@ private struct MessageBubble: View {
                         }
                     }
                 }
-                Text(message.createdAt, style: .time)
-                    .font(.caption2)
-                    .foregroundStyle(AppTheme.muted)
+                HStack(spacing: 8) {
+                    Text(message.createdAt, style: .time)
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.muted)
+                    if message.role == .assistant,
+                       !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                       session.streamingAssistantMessageID != message.id {
+                        Button {
+                            model.toggleSpeakMessage(message.content)
+                        } label: {
+                            Image(systemName: model.connectionState == .speaking
+                                ? "speaker.wave.2.circle.fill"
+                                : "speaker.wave.2")
+                                .font(.caption)
+                                .foregroundStyle(model.connectionState == .speaking ? AppTheme.coral : AppTheme.muted)
+                        }
+                        .buttonStyle(.plain)
+                        .help(model.connectionState == .speaking ? "停止播报" : "朗读这条回复")
+                    }
+                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
