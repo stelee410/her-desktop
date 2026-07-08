@@ -154,6 +154,17 @@ struct HerConfigurationFields: View {
             fieldSection("Voice", systemImage: "waveform") {
                 Toggle("Speak assistant replies", isOn: $draft.speakAssistantReplies)
                 TextField("Speech voice identifier", text: $draft.speechVoiceIdentifier)
+                Picker("语音识别 (ASR)", selection: $draft.speechRecognitionProvider) {
+                    Text("系统（Apple，本地/免费）").tag("apple")
+                    Text("AgentLLM（服务端转写）").tag("agentllm")
+                }
+                .pickerStyle(.segmented)
+                if draft.speechRecognitionProvider == "agentllm" {
+                    TextField("ASR model (如 whisper-1)", text: $draft.agentLLMASRModel)
+                    Text("录音结束后整段上传到 AgentLLM 的 audio/transcriptions 转写；没有实时字幕。")
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.muted)
+                }
             }
         }
         .textFieldStyle(.roundedBorder)

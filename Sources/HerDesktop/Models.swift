@@ -567,6 +567,12 @@ struct HerAppConfig: Codable, Equatable {
     var pluginDirectory: String
     var speakAssistantReplies: Bool
     var speechVoiceIdentifier: String
+    /// "apple" = system SFSpeechRecognizer (default, free, on-device where
+    /// supported); "agentllm" = server-side transcription through the
+    /// AgentLLM endpoint (OpenAI-compatible audio/transcriptions).
+    var speechRecognitionProvider: String
+    /// Transcription model when the provider is "agentllm".
+    var agentLLMASRModel: String
 
     var hasLLMKey: Bool { !agentLLMAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var hasMemKey: Bool { !agentMemAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -582,7 +588,9 @@ struct HerAppConfig: Codable, Equatable {
         userID: String,
         pluginDirectory: String,
         speakAssistantReplies: Bool = false,
-        speechVoiceIdentifier: String = ""
+        speechVoiceIdentifier: String = "",
+        speechRecognitionProvider: String = "apple",
+        agentLLMASRModel: String = "whisper-1"
     ) {
         self.agentLLMBaseURL = agentLLMBaseURL
         self.agentLLMAPIKey = agentLLMAPIKey
@@ -595,6 +603,8 @@ struct HerAppConfig: Codable, Equatable {
         self.pluginDirectory = pluginDirectory
         self.speakAssistantReplies = speakAssistantReplies
         self.speechVoiceIdentifier = speechVoiceIdentifier
+        self.speechRecognitionProvider = speechRecognitionProvider
+        self.agentLLMASRModel = agentLLMASRModel
     }
 
     enum CodingKeys: String, CodingKey {
@@ -609,6 +619,8 @@ struct HerAppConfig: Codable, Equatable {
         case pluginDirectory
         case speakAssistantReplies
         case speechVoiceIdentifier
+        case speechRecognitionProvider
+        case agentLLMASRModel
     }
 
     init(from decoder: Decoder) throws {
@@ -624,6 +636,8 @@ struct HerAppConfig: Codable, Equatable {
         pluginDirectory = try container.decode(String.self, forKey: .pluginDirectory)
         speakAssistantReplies = try container.decodeIfPresent(Bool.self, forKey: .speakAssistantReplies) ?? false
         speechVoiceIdentifier = try container.decodeIfPresent(String.self, forKey: .speechVoiceIdentifier) ?? ""
+        speechRecognitionProvider = try container.decodeIfPresent(String.self, forKey: .speechRecognitionProvider) ?? "apple"
+        agentLLMASRModel = try container.decodeIfPresent(String.self, forKey: .agentLLMASRModel) ?? "whisper-1"
     }
 
     static let empty = HerAppConfig(
@@ -650,6 +664,8 @@ struct HerAppConfigDraft: Equatable {
     var pluginDirectory: String
     var speakAssistantReplies: Bool
     var speechVoiceIdentifier: String
+    var speechRecognitionProvider: String
+    var agentLLMASRModel: String
 
     init(config: HerAppConfig) {
         self.agentLLMBaseURL = config.agentLLMBaseURL.absoluteString
@@ -663,6 +679,8 @@ struct HerAppConfigDraft: Equatable {
         self.pluginDirectory = config.pluginDirectory
         self.speakAssistantReplies = config.speakAssistantReplies
         self.speechVoiceIdentifier = config.speechVoiceIdentifier
+        self.speechRecognitionProvider = config.speechRecognitionProvider
+        self.agentLLMASRModel = config.agentLLMASRModel
     }
 
     func makeConfig() throws -> HerAppConfig {
@@ -679,7 +697,11 @@ struct HerAppConfigDraft: Equatable {
             userID: userID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "local-user" : userID.trimmingCharacters(in: .whitespacesAndNewlines),
             pluginDirectory: pluginDirectory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? ".her/plugins" : pluginDirectory.trimmingCharacters(in: .whitespacesAndNewlines),
             speakAssistantReplies: speakAssistantReplies,
-            speechVoiceIdentifier: speechVoiceIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+            speechVoiceIdentifier: speechVoiceIdentifier.trimmingCharacters(in: .whitespacesAndNewlines),
+            speechRecognitionProvider: speechRecognitionProvider == "agentllm" ? "agentllm" : "apple",
+            agentLLMASRModel: agentLLMASRModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "whisper-1"
+                : agentLLMASRModel.trimmingCharacters(in: .whitespacesAndNewlines)
         )
     }
 

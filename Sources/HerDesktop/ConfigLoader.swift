@@ -27,6 +27,10 @@ enum ConfigLoader {
         config.agentCode = envValue(env, "HER_AGENT_CODE", "AGENT_CODE") ?? config.agentCode
         config.userID = envValue(env, "HER_USER_ID", "HER_DESKTOP_USER_ID") ?? config.userID
         config.pluginDirectory = envValue(env, "HER_PLUGIN_DIR", "HER_DESKTOP_PLUGIN_DIR") ?? config.pluginDirectory
+        if let provider = envValue(env, "HER_ASR_PROVIDER"), ["apple", "agentllm"].contains(provider.lowercased()) {
+            config.speechRecognitionProvider = provider.lowercased()
+        }
+        config.agentLLMASRModel = envValue(env, "HER_ASR_MODEL") ?? config.agentLLMASRModel
         return config
     }
 

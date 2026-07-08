@@ -178,7 +178,14 @@ final class AppViewModel: ObservableObject, AuditRecording {
     let interactionEventBus: InteractionEventBus
     let localInboxBridgeServer: LocalInboxBridgeServer
     let speechSynthesizer: NativeSpeechSynthesizing
-    let speechDictation: NativeSpeechDictating
+    /// Injected (tests) or the system SFSpeechRecognizer dictation.
+    private let baseSpeechDictation: NativeSpeechDictating
+    /// Server-side dictation via AgentLLM; rebuilt on config changes.
+    var agentLLMDictationService: AgentLLMDictationService
+    /// The active dictation backend, resolved per config.
+    var speechDictation: NativeSpeechDictating {
+        config.speechRecognitionProvider == "agentllm" ? agentLLMDictationService : baseSpeechDictation
+    }
     let urlSession: URLSession
     let allowsMissingLLMKeyForInjectedClient: Bool
     var serviceHealthVerifier: ServiceHealthVerifier
@@ -269,7 +276,8 @@ final class AppViewModel: ObservableObject, AuditRecording {
         self.allowsMissingLLMKeyForInjectedClient = agentLLM != nil
         self.pluginRegistry = PluginRegistry(config: loaded, baseDirectory: cwd)
         self.speechSynthesizer = speechSynthesizer
-        self.speechDictation = speechDictation
+        self.baseSpeechDictation = speechDictation
+        self.agentLLMDictationService = AgentLLMDictationService(config: loaded, urlSession: urlSession)
         self.notificationScheduler = notificationScheduler
         self.urlSession = urlSession
         self.capabilityExecutor = CapabilityExecutor(
@@ -557,6 +565,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
     func applyConfiguration(_ updated: HerAppConfig) {
         config = updated
         agentMem = AgentMemClient(config: updated, session: urlSession)
+        agentLLMDictationService = AgentLLMDictationService(config: updated, urlSession: urlSession)
         // Preserve an injected (test) LLM client: rebuilding unconditionally
         // silently swapped a fake for a real network client mid-scenario.
         if !allowsMissingLLMKeyForInjectedClient {
