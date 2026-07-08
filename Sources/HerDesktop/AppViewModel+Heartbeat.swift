@@ -74,10 +74,14 @@ extension AppViewModel {
         )
         switch task.action {
         case .notify:
+            let body = task.prompt.isEmpty ? task.title : task.prompt
+            // Card in the conversation too: a system banner is easy to miss
+            // (and macOS may suppress it while the app is frontmost).
+            deliverConversationCard(ChatMessage(role: .tool, content: "⏰ 提醒 · \(task.title)\n\(body)"))
             do {
                 _ = try await notificationScheduler.schedule(
                     title: task.title,
-                    body: task.prompt.isEmpty ? task.title : task.prompt,
+                    body: body,
                     delaySeconds: 1
                 )
             } catch {

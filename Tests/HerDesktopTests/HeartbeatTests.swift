@@ -140,6 +140,13 @@ final class HeartbeatTests: XCTestCase {
         XCTAssertEqual(notifier.scheduled.first?.body, "该喝水了")
         XCTAssertNotNil(model.heartbeatTasks.first { $0.title == "喝水" }?.completedAt)
         XCTAssertTrue(model.auditEvents.contains { $0.type == "heartbeat.fired" })
+        // The reminder also lands as a conversation card (delivered async).
+        var cardSeen = false
+        for _ in 0..<100 where !cardSeen {
+            cardSeen = model.messages.contains { $0.content.contains("⏰ 提醒 · 喝水") }
+            if !cardSeen { try? await Task.sleep(nanoseconds: 20_000_000) }
+        }
+        XCTAssertTrue(cardSeen, "notify tasks must also post a card into the conversation")
 
         // Second tick: completed one-shot must not refire.
         await model.heartbeatTick()

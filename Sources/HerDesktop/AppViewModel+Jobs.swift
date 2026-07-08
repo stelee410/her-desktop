@@ -243,20 +243,7 @@ extension AppViewModel {
         }
         let steps = job.log.isEmpty ? "" : "\n\n步骤:\n" + job.log.map { "- \($0)" }.joined(separator: "\n")
         let body = job.result ?? job.failureReason ?? ""
-        let card = ChatMessage(role: .tool, content: "\(header)\n\(body)\(steps)")
-        Task { @MainActor [weak self] in
-            // A card appended while a switched-to transcript is still decoding
-            // would be clobbered by the load completion (`messages = loaded`).
-            // Wait out the load window (bounded) before delivering.
-            var waited = 0
-            while self?.isLoadingConversation == true, waited < 100 {
-                try? await Task.sleep(nanoseconds: 100_000_000)
-                waited += 1
-            }
-            guard let self else { return }
-            self.messages.append(card)
-            self.saveSessionSnapshot()
-        }
+        deliverConversationCard(ChatMessage(role: .tool, content: "\(header)\n\(body)\(steps)"))
         if case .heartbeat = job.source {
             Task { [notificationScheduler] in
                 _ = try? await notificationScheduler.schedule(
@@ -265,6 +252,23 @@ extension AppViewModel {
                     delaySeconds: 1
                 )
             }
+        }
+    }
+
+    /// Append a system-generated card (job result, heartbeat reminder) to
+    /// the conversation. Waits out any in-flight transcript load first — a
+    /// card appended mid-load would be clobbered by the load completion
+    /// (`messages = loaded`).
+    func deliverConversationCard(_ card: ChatMessage) {
+        Task { @MainActor [weak self] in
+            var waited = 0
+            while self?.isLoadingConversation == true, waited < 100 {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                waited += 1
+            }
+            guard let self else { return }
+            self.messages.append(card)
+            self.saveSessionSnapshot()
         }
     }
 
