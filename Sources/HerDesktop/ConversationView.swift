@@ -658,6 +658,7 @@ private struct MessageBubble: View {
     @EnvironmentObject private var model: AppViewModel
     var message: ChatMessage
     var artifacts: [WebServiceArtifact] = []
+    @State private var justCopied = false
 
     var body: some View {
         HStack {
@@ -725,11 +726,31 @@ private struct MessageBubble: View {
                             Image(systemName: model.connectionState == .speaking
                                 ? "speaker.wave.2.circle.fill"
                                 : "speaker.wave.2")
-                                .font(.caption)
+                                .font(.system(size: 14))
                                 .foregroundStyle(model.connectionState == .speaking ? AppTheme.coral : AppTheme.muted)
+                                .frame(width: 22, height: 22)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .help(model.connectionState == .speaking ? "停止播报" : "朗读这条回复")
+                        Button {
+                            let pasteboard = NSPasteboard.general
+                            pasteboard.clearContents()
+                            pasteboard.setString(message.content, forType: .string)
+                            justCopied = true
+                            Task {
+                                try? await Task.sleep(for: .seconds(1.5))
+                                justCopied = false
+                            }
+                        } label: {
+                            Image(systemName: justCopied ? "checkmark" : "doc.on.doc")
+                                .font(.system(size: 13))
+                                .foregroundStyle(justCopied ? AppTheme.coral : AppTheme.muted)
+                                .frame(width: 22, height: 22)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("复制内容")
                     }
                 }
             }
