@@ -142,21 +142,11 @@ struct ConversationView: View {
                         settleAtBottom(proxy)
                     }
                 }
-                .onChange(of: session.messages.count) { _, _ in
-                    if let last = session.messages.last?.id {
-                        withAnimation { proxy.scrollTo(last, anchor: .bottom) }
-                    }
-                }
-                .onChange(of: session.messages.last.map { $0.content.count + $0.reasoning.count }) { _, _ in
-                    if let last = session.messages.last?.id {
-                        proxy.scrollTo(last, anchor: .bottom)
-                    }
-                }
-                .onChange(of: model.isAwaitingAssistantReply) { _, isAwaiting in
-                    if isAwaiting {
-                        withAnimation { proxy.scrollTo("typing-indicator", anchor: .bottom) }
-                    }
-                }
+                // No scripted scrolling past this point: landing at the
+                // bottom only happens when a conversation opens. Afterwards
+                // the bottom anchor alone decides — pinned while the user is
+                // at the bottom, hands-off once they've scrolled up to read
+                // history, so streaming never drags them back down.
             }
             ComposerView()
                 .padding(.horizontal, 54)
