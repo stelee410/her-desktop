@@ -188,18 +188,19 @@ extension AppViewModel {
         draft = dictationBaseText.isEmpty ? clean : "\(dictationBaseText)\n\(clean)"
     }
 
-    func speakAssistantReplyIfEnabled(_ text: String) async {
+    func speakAssistantReplyIfEnabled(_ text: String, messageID: UUID? = nil) async {
         guard config.speakAssistantReplies else { return }
-        await speakTextAloud(text)
+        await speakTextAloud(text, messageID: messageID)
     }
 
     /// Speak arbitrary text now (per-message 朗读 button + auto-speak both
     /// land here) through the configured TTS backend.
-    func speakTextAloud(_ text: String) async {
+    func speakTextAloud(_ text: String, messageID: UUID? = nil) async {
         let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanText.isEmpty else { return }
         let previousState = connectionState
         connectionState = .speaking
+        speakingMessageID = messageID
         do {
             let id = try await speechSynthesizer.speak(
                 cleanText,
@@ -218,23 +219,31 @@ extension AppViewModel {
                 metadata: ["characters": String(cleanText.count)]
             )
         }
-        if connectionState == .speaking {
-            connectionState = previousState == .thinking || previousState == .working ? .ready : previousState
+        // A newer speak call may already own the shared state — only the
+        // task that set it should tear it down.
+        if speakingMessageID == messageID {
+            speakingMessageID = nil
+            if connectionState == .speaking {
+                connectionState = previousState == .thinking || previousState == .working ? .ready : previousState
+            }
         }
     }
 
-    /// Toggle for the per-bubble 朗读 button: tap to speak, tap again to stop.
-    func toggleSpeakMessage(_ text: String) {
+    /// Toggle for the per-bubble 朗读 button: tap to speak, tap again to
+    /// stop. Tapping a different bubble while one is playing switches to it.
+    func toggleSpeakMessage(_ message: ChatMessage) {
         if connectionState == .speaking {
+            let wasSpeakingThisMessage = speakingMessageID == message.id
             speechTask?.cancel()
             speechTask = nil
             baseSpeechSynthesizer.stop()
             agentLLMSpeechSynthesizer.stop()
+            speakingMessageID = nil
             connectionState = config.hasLLMKey ? .ready : .offline
-            return
+            if wasSpeakingThisMessage { return }
         }
         speechTask?.cancel()
-        speechTask = Task { await speakTextAloud(text) }
+        speechTask = Task { await speakTextAloud(message.content, messageID: message.id) }
     }
 }
 

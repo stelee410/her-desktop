@@ -102,6 +102,9 @@ final class AppViewModel: ObservableObject, AuditRecording {
     @Published var workPlan: WorkPlan?
     @Published var mcpDiscoveredTools: [MCPDiscoveredTool]
     @Published var dictationTranscript: String
+    /// ID of the transcript message currently being spoken aloud, so only
+    /// that bubble's 朗读 button shows the playing state.
+    @Published var speakingMessageID: UUID?
     @Published var lastError: String?
     @Published var localInboxBridgeState: LocalInboxBridgeState
     @Published var selectedSection: WorkspaceSection
