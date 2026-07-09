@@ -5,6 +5,23 @@ import UniformTypeIdentifiers
 struct ConversationView: View {
     @EnvironmentObject private var session: ConversationModel
     @EnvironmentObject private var model: AppViewModel
+    /// Rendered window into the transcript: only the newest messages mount
+    /// when a conversation opens; scrolling up widens the window page by
+    /// page, so a thousand-message transcript never renders all at once.
+    @State private var visibleLimit = ConversationView.initialWindow
+    /// Blocks the top sentinel until the opening scroll-to-bottom has run —
+    /// ScrollView starts at the top, which would otherwise fire the sentinel
+    /// and eagerly load pages the user never asked for.
+    @State private var didInitialScroll = false
+
+    private static let initialWindow = 60
+    private static let windowStep = 80
+
+    private var visibleMessages: [ChatMessage] {
+        let all = session.messages
+        guard all.count > visibleLimit else { return all }
+        return Array(all.suffix(visibleLimit))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,7 +48,18 @@ struct ConversationView: View {
                             .padding(.top, 20)
                         }
 
-                        ForEach(session.messages) { message in
+                        if session.messages.count > visibleLimit {
+                            HStack(spacing: 8) {
+                                ProgressView().controlSize(.small)
+                                Text("正在加载更早的消息…")
+                                    .font(.caption)
+                                    .foregroundStyle(AppTheme.muted)
+                            }
+                            .id("history-loader")
+                            .onAppear { expandHistoryWindow(proxy: proxy) }
+                        }
+
+                        ForEach(visibleMessages) { message in
                             if message.recap {
                                 RecapCard(message: message)
                                     .id(message.id)
@@ -69,9 +97,20 @@ struct ConversationView: View {
                     .padding(.horizontal, 72)
                     .padding(.bottom, 26)
                 }
+                .onAppear {
+                    if let last = session.messages.last?.id {
+                        proxy.scrollTo(last, anchor: .bottom)
+                        didInitialScroll = true
+                    }
+                }
+                .onChange(of: session.activeConversationID) { _, _ in
+                    visibleLimit = Self.initialWindow
+                    didInitialScroll = false
+                }
                 .onChange(of: session.messages.count) { _, _ in
                     if let last = session.messages.last?.id {
                         withAnimation { proxy.scrollTo(last, anchor: .bottom) }
+                        didInitialScroll = true
                     }
                 }
                 .onChange(of: session.messages.last.map { $0.content.count + $0.reasoning.count }) { _, _ in
@@ -88,6 +127,20 @@ struct ConversationView: View {
             ComposerView()
                 .padding(.horizontal, 54)
                 .padding(.bottom, 24)
+        }
+    }
+
+    /// One page of older messages. The previous first message is re-anchored
+    /// to the viewport top so the transcript doesn't visually jump when the
+    /// older page mounts above it.
+    private func expandHistoryWindow(proxy: ScrollViewProxy) {
+        guard didInitialScroll else { return }
+        let anchorID = visibleMessages.first?.id
+        visibleLimit += Self.windowStep
+        if let anchorID {
+            DispatchQueue.main.async {
+                proxy.scrollTo(anchorID, anchor: .top)
+            }
         }
     }
 }
