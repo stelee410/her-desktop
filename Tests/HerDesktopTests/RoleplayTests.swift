@@ -161,6 +161,52 @@ final class RoleplayTests: XCTestCase {
         XCTAssertNil(loaded.cards.first?.dedicatedMemoryKey)
     }
 
+    func testLegacyFileWithoutVisualFieldsDecodesWithDefaults() throws {
+        // Files persisted before avatarPath/backgroundPath existed must load
+        // with defaults, not trip the corrupt-file path.
+        let legacy = """
+        {"version":1,
+         "characterCards":[
+          {"id":"1B0B1E9A-3C63-45E0-9E1B-3A1111111111","name":"老卡","emoji":"🎭",
+           "summary":"","prompt":"p","greeting":"","agentMemAPIKey":"",
+           "createdAt":"2026-07-08T00:00:00Z","updatedAt":"2026-07-08T00:00:00Z"}],
+         "worldBooks":[
+          {"id":"2B0B1E9A-3C63-45E0-9E1B-3A2222222222","name":"旧世界","emoji":"📖",
+           "summary":"","entries":[{"id":"3B0B1E9A-3C63-45E0-9E1B-3A3333333333",
+           "title":"t","keywords":"k","content":"c","alwaysOn":true}],
+           "createdAt":"2026-07-08T00:00:00Z","updatedAt":"2026-07-08T00:00:00Z"}]}
+        """
+        let root = makeRoot("legacy-visual")
+        let store = RoleplayStore(cwd: root.path)
+        try FileManager.default.createDirectory(
+            at: store.fileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data(legacy.utf8).write(to: store.fileURL)
+        let loaded = store.load()
+        XCTAssertEqual(loaded.cards.first?.avatarPath, "")
+        XCTAssertEqual(loaded.books.first?.name, "旧世界")
+        XCTAssertEqual(loaded.books.first?.backgroundPath, "")
+        XCTAssertEqual(loaded.books.first?.entries.count, 1)
+    }
+
+    func testAssetImportCopiesFileAndResolves() throws {
+        let root = makeRoot("assets")
+        let store = RoleplayStore(cwd: root.path)
+        let source = root.appendingPathComponent("source.png")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data([0x89, 0x50, 0x4E, 0x47]).write(to: source)
+
+        let name = try store.importAsset(from: source, prefix: "avatar")
+        XCTAssertTrue(name.hasPrefix("avatar-"))
+        XCTAssertTrue(name.hasSuffix(".png"))
+        let resolved = try XCTUnwrap(store.assetURL(named: name))
+        XCTAssertEqual(try Data(contentsOf: resolved).count, 4)
+        // Unset and missing names resolve to nil instead of dangling URLs.
+        XCTAssertNil(store.assetURL(named: ""))
+        XCTAssertNil(store.assetURL(named: "avatar-gone.png"))
+    }
+
     func testRoleplayAssetsSurviveRestart() {
         let root = makeRoot("restart")
         let model = AppViewModel(cwd: root.path)

@@ -121,6 +121,7 @@ struct ConversationView: View {
                 // is what used to sweep past the top region and misfire the
                 // history trigger into a calibration tug-of-war.
                 .defaultScrollAnchor(.bottom)
+                .background(WorldBookBackdrop())
                 .coordinateSpace(name: "transcript")
                 .onPreferenceChange(TranscriptTopOffsetKey.self) { minY in
                     // minY is ~0 at the very top and goes negative as the
@@ -660,8 +661,11 @@ private struct MessageBubble: View {
     var artifacts: [WebServiceArtifact] = []
 
     var body: some View {
-        HStack {
+        HStack(alignment: .top, spacing: 10) {
             if message.role == .user { Spacer(minLength: 70) }
+            if message.role == .assistant, let card = model.activeCharacterCard {
+                CharacterAvatarView(card: card)
+            }
             VStack(alignment: .leading, spacing: 8) {
                 if !message.reasoning.isEmpty {
                     ReasoningSection(
@@ -750,6 +754,55 @@ private struct MessageBubble: View {
 /// A local web app referenced in the transcript: header with an open
 /// action, plus a live embedded widget for recent messages when the app
 /// declares one.
+/// The active character's face beside their bubbles: avatar image when set,
+/// otherwise the card emoji on the rose disc.
+private struct CharacterAvatarView: View {
+    @EnvironmentObject private var model: AppViewModel
+    var card: CharacterCard
+
+    var body: some View {
+        Group {
+            if let url = model.roleplayAssetURL(card.avatarPath),
+               let avatar = RoleplayImageCache.image(at: url) {
+                Image(nsImage: avatar)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                ZStack {
+                    Circle().fill(AppTheme.rose.opacity(0.8))
+                    Text(card.emoji.isEmpty ? "🎭" : card.emoji)
+                        .font(.system(size: 15))
+                }
+            }
+        }
+        .frame(width: 30, height: 30)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(Color.black.opacity(0.06), lineWidth: 1))
+        .help(card.name)
+    }
+}
+
+/// The active world book's chat background: the image fills the transcript
+/// area under a cream wash that keeps bubbles and text readable.
+private struct WorldBookBackdrop: View {
+    @EnvironmentObject private var model: AppViewModel
+
+    var body: some View {
+        if let book = model.activeWorldBook,
+           let url = model.roleplayAssetURL(book.backgroundPath),
+           let backdrop = RoleplayImageCache.image(at: url) {
+            GeometryReader { geo in
+                Image(nsImage: backdrop)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .clipped()
+                    .overlay(AppTheme.cream.opacity(0.5))
+            }
+        }
+    }
+}
+
 private struct WebAppMessageCard: View {
     @EnvironmentObject private var model: AppViewModel
     var app: WebAppManifest
