@@ -9,10 +9,6 @@ struct ConversationView: View {
     /// when a conversation opens; scrolling up widens the window page by
     /// page, so a thousand-message transcript never renders all at once.
     @State private var visibleLimit = ConversationView.initialWindow
-    /// Blocks history paging until the opening scroll-to-bottom has run —
-    /// ScrollView starts at the top, which would otherwise page in history
-    /// the user never asked for.
-    @State private var didInitialScroll = false
     /// True from "page requested" until the post-load scroll restore has
     /// settled; suppresses further paging in between.
     @State private var isPagingHistory = false
@@ -119,23 +115,28 @@ struct ConversationView: View {
                         }
                     )
                 }
+                // Bottom-anchored: the view OPENS at the newest message and
+                // stays pinned there while content streams in — no
+                // programmatic "scroll to bottom on load" pass at all, which
+                // is what used to sweep past the top region and misfire the
+                // history trigger into a calibration tug-of-war.
+                .defaultScrollAnchor(.bottom)
                 .coordinateSpace(name: "transcript")
                 .onPreferenceChange(TranscriptTopOffsetKey.self) { minY in
                     // minY is ~0 at the very top and goes negative as the
-                    // user scrolls down; "near top" means it came back up.
+                    // user scrolls down. With the bottom anchor, "near top"
+                    // is only reachable by a real user scroll.
                     if minY > -Self.historyTriggerDistance {
                         expandHistoryWindow(proxy: proxy)
                     }
                 }
-                .onAppear {
-                    scrollToBottom(proxy, animated: false)
-                }
                 .onChange(of: session.activeConversationID) { _, _ in
                     visibleLimit = Self.initialWindow
-                    didInitialScroll = false
                 }
                 .onChange(of: session.messages.count) { _, _ in
-                    scrollToBottom(proxy, animated: true)
+                    if let last = session.messages.last?.id {
+                        withAnimation { proxy.scrollTo(last, anchor: .bottom) }
+                    }
                 }
                 .onChange(of: session.messages.last.map { $0.content.count + $0.reasoning.count }) { _, _ in
                     if let last = session.messages.last?.id {
@@ -154,30 +155,13 @@ struct ConversationView: View {
         }
     }
 
-    /// Lands the transcript on the newest message: one scroll now, one
-    /// settle pass after the lazy rows finish measuring (a single scrollTo
-    /// can undershoot while row heights are still estimates).
-    private func scrollToBottom(_ proxy: ScrollViewProxy, animated: Bool) {
-        guard let last = session.messages.last?.id else { return }
-        if animated {
-            withAnimation { proxy.scrollTo(last, anchor: .bottom) }
-        } else {
-            proxy.scrollTo(last, anchor: .bottom)
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            guard last == session.messages.last?.id else { return }
-            proxy.scrollTo(last, anchor: .bottom)
-            didInitialScroll = true
-        }
-    }
-
     /// One page of older messages. The previous first message is re-anchored
     /// near the viewport top so the transcript doesn't visually jump when
     /// the older page mounts above it. Paging is locked until the restore
     /// settles; afterwards the trigger stays quiet because the content top
     /// is now a full page further away from the viewport.
     private func expandHistoryWindow(proxy: ScrollViewProxy) {
-        guard didInitialScroll, !isPagingHistory,
+        guard !isPagingHistory,
               session.messages.count > visibleLimit else { return }
         isPagingHistory = true
         let anchorID = visibleMessages.first?.id
