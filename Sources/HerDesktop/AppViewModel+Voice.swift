@@ -218,23 +218,35 @@ extension AppViewModel {
                 metadata: ["characters": String(cleanText.count)]
             )
         }
-        if connectionState == .speaking {
+        // A cancelled run (the user tapped another bubble) must not clobber
+        // the state the replacement run just set.
+        if !Task.isCancelled, connectionState == .speaking {
             connectionState = previousState == .thinking || previousState == .working ? .ready : previousState
         }
     }
 
-    /// Toggle for the per-bubble 朗读 button: tap to speak, tap again to stop.
-    func toggleSpeakMessage(_ text: String) {
-        if connectionState == .speaking {
-            speechTask?.cancel()
-            speechTask = nil
-            baseSpeechSynthesizer.stop()
-            agentLLMSpeechSynthesizer.stop()
-            connectionState = config.hasLLMKey ? .ready : .offline
+    /// Toggle for the per-bubble 朗读 button: tap to speak, tap again to
+    /// stop. Tapping a different bubble while one is playing switches to it.
+    func toggleSpeakMessage(_ text: String, messageID: UUID) {
+        let wasSpeakingThisMessage = speakingMessageID == messageID
+        speechTask?.cancel()
+        speechTask = nil
+        baseSpeechSynthesizer.stop()
+        agentLLMSpeechSynthesizer.stop()
+        speakingMessageID = nil
+        if wasSpeakingThisMessage {
+            if connectionState == .speaking {
+                connectionState = config.hasLLMKey ? .ready : .offline
+            }
             return
         }
-        speechTask?.cancel()
-        speechTask = Task { await speakTextAloud(text) }
+        speakingMessageID = messageID
+        speechTask = Task {
+            await speakTextAloud(text)
+            if speakingMessageID == messageID {
+                speakingMessageID = nil
+            }
+        }
     }
 }
 

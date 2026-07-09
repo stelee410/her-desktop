@@ -6,6 +6,10 @@ import SwiftUI
 final class AppViewModel: ObservableObject, AuditRecording {
     @Published var config: HerAppConfig
     @Published var connectionState: ConnectionState
+    /// The transcript message currently being read aloud via its 朗读 button,
+    /// so only that bubble's speaker shows the playing state (auto-speak
+    /// leaves this nil).
+    @Published var speakingMessageID: UUID?
     @Published var memorySignal: MemorySignal
     @Published var agentProfile: AgentProfile
     @Published var plugins: [PluginManifest]

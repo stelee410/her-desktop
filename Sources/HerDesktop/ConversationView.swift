@@ -719,17 +719,18 @@ private struct MessageBubble: View {
                     if message.role == .assistant,
                        !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                        session.streamingAssistantMessageID != message.id {
+                        let isSpeakingThisMessage = model.speakingMessageID == message.id
                         Button {
-                            model.toggleSpeakMessage(message.content)
+                            model.toggleSpeakMessage(message.content, messageID: message.id)
                         } label: {
-                            Image(systemName: model.connectionState == .speaking
+                            Image(systemName: isSpeakingThisMessage
                                 ? "speaker.wave.2.circle.fill"
                                 : "speaker.wave.2")
-                                .font(.caption)
-                                .foregroundStyle(model.connectionState == .speaking ? AppTheme.coral : AppTheme.muted)
+                                .font(.system(size: 14))
+                                .foregroundStyle(isSpeakingThisMessage ? AppTheme.coral : AppTheme.muted)
                         }
                         .buttonStyle(.plain)
-                        .help(model.connectionState == .speaking ? "停止播报" : "朗读这条回复")
+                        .help(isSpeakingThisMessage ? "停止播报" : "朗读这条回复")
                     }
                 }
             }
