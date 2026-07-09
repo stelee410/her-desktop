@@ -130,8 +130,16 @@ struct ConversationView: View {
                         expandHistoryWindow(proxy: proxy)
                     }
                 }
+                .onAppear {
+                    settleAtBottom(proxy)
+                }
                 .onChange(of: session.activeConversationID) { _, _ in
                     visibleLimit = Self.initialWindow
+                }
+                .onChange(of: session.isLoadingConversation) { _, loading in
+                    if !loading {
+                        settleAtBottom(proxy)
+                    }
                 }
                 .onChange(of: session.messages.count) { _, _ in
                     if let last = session.messages.last?.id {
@@ -152,6 +160,23 @@ struct ConversationView: View {
             ComposerView()
                 .padding(.horizontal, 54)
                 .padding(.bottom, 24)
+        }
+    }
+
+    /// Pins the newest message to the bottom edge after a transcript load.
+    /// The bottom anchor positions before lazy row heights are measured, so
+    /// the landing can drift a little once estimates become real sizes —
+    /// this corrects it. Non-animated on purpose: a teleport reports no
+    /// intermediate offsets, so it can never sweep past the top region and
+    /// interact with the history-paging trigger.
+    private func settleAtBottom(_ proxy: ScrollViewProxy) {
+        guard let last = session.messages.last?.id else { return }
+        proxy.scrollTo(last, anchor: .bottom)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            // Second pass once row measurement has stabilized; skip it if a
+            // newer message arrived (its own scroll is already in flight).
+            guard session.messages.last?.id == last else { return }
+            proxy.scrollTo(last, anchor: .bottom)
         }
     }
 
