@@ -119,3 +119,18 @@ ditto -c -k --keepParent --sequesterRsrc --rsrc "$APP_DIR" "$ZIP_PATH"
 
 echo "Built $APP_DIR"
 echo "Archived $ZIP_PATH"
+
+# Install into /Applications so the Dock/Launchpad copy is always the
+# latest build. The signing identity is stable, so TCC grants survive.
+INSTALL_DIR="${HER_INSTALL_DIR:-/Applications}"
+if [[ "${HER_SKIP_INSTALL:-0}" != "1" && -d "$INSTALL_DIR" && -w "$INSTALL_DIR" ]]; then
+  INSTALLED_APP="$INSTALL_DIR/HerDesktop.app"
+  rm -rf "$INSTALLED_APP"
+  ditto "$APP_DIR" "$INSTALLED_APP"
+  echo "Installed $INSTALLED_APP"
+  # Pin the workspace root so the installed copy keeps using this project's
+  # .her (conversations, config) instead of falling back to App Support.
+  PIN_DIR="$HOME/Library/Application Support/Her Desktop"
+  mkdir -p "$PIN_DIR"
+  printf '%s\n' "$ROOT" > "$PIN_DIR/workspace-root.txt"
+fi

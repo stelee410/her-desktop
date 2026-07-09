@@ -115,12 +115,57 @@ final class ConfigLoaderTests: XCTestCase {
 
     func testDefaultRuntimeDirectoryNeverUsesReadonlyRoot() {
         withCleanServiceEnvironment {
-            let runtime = HerWorkspacePaths.defaultRuntimeDirectory(cwd: "/", bundleURL: nil)
+            // Point the pin at nowhere: the developer machine's real pin file
+            // (written by build-app.sh install) must not leak into this test.
+            let runtime = HerWorkspacePaths.defaultRuntimeDirectory(
+                cwd: "/",
+                bundleURL: nil,
+                pinnedWorkspaceFile: URL(fileURLWithPath: "/nonexistent/pin.txt")
+            )
 
             XCTAssertNotEqual(runtime.path, "/")
             XCTAssertTrue(runtime.path.contains("Application Support/Her Desktop"))
             XCTAssertEqual(HerWorkspacePaths.sessionPath(cwd: runtime.path).lastPathComponent, "session.json")
             XCTAssertFalse(HerWorkspacePaths.sessionPath(cwd: runtime.path).path.hasPrefix("/.her"))
+        }
+    }
+
+    func testPinnedWorkspaceRootIsUsedByInstalledCopies() throws {
+        try withCleanServiceEnvironmentThrowing {
+            let root = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("her-pinned-root-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: root) }
+            let pin = root.appendingPathComponent("workspace-root.txt")
+            try root.path.write(to: pin, atomically: true, encoding: .utf8)
+
+            // An installed copy: cwd "/" and a bundle under /Applications,
+            // where no ancestor is a project root.
+            let runtime = HerWorkspacePaths.defaultRuntimeDirectory(
+                cwd: "/",
+                bundleURL: URL(fileURLWithPath: "/Applications/HerDesktop.app", isDirectory: true),
+                pinnedWorkspaceFile: pin
+            )
+
+            XCTAssertEqual(runtime.standardizedFileURL.path, root.standardizedFileURL.path)
+        }
+    }
+
+    func testStalePinnedWorkspaceRootFallsBackToAppSupport() throws {
+        try withCleanServiceEnvironmentThrowing {
+            let pin = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingPathComponent("her-stale-pin-\(UUID().uuidString).txt")
+            try "/no/such/project/root".write(to: pin, atomically: true, encoding: .utf8)
+            defer { try? FileManager.default.removeItem(at: pin) }
+
+            let runtime = HerWorkspacePaths.defaultRuntimeDirectory(
+                cwd: "/",
+                bundleURL: nil,
+                pinnedWorkspaceFile: pin
+            )
+
+            XCTAssertTrue(runtime.path.contains("Application Support/Her Desktop"),
+                          "a pin pointing at a deleted directory must not be used")
         }
     }
 

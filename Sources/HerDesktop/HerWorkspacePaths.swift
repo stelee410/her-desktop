@@ -5,7 +5,8 @@ enum HerWorkspacePaths {
 
     static func defaultRuntimeDirectory(
         cwd: String = FileManager.default.currentDirectoryPath,
-        bundleURL: URL? = Bundle.main.bundleURL
+        bundleURL: URL? = Bundle.main.bundleURL,
+        pinnedWorkspaceFile: URL = defaultPinnedWorkspaceFile
     ) -> URL {
         let env = ProcessInfo.processInfo.environment
         if let override = envValue(env, "HER_DESKTOP_WORKSPACE_DIR", "HER_WORKSPACE_DIR") {
@@ -15,11 +16,32 @@ enum HerWorkspacePaths {
         if let projectRoot = nearestProjectRoot(cwd: cwd, bundleURL: bundleURL) {
             return projectRoot
         }
+        // Installed copies (/Applications) can't find the project by walking
+        // up from the bundle; the install step pins the workspace root here.
+        if let pinned = pinnedWorkspaceRoot(from: pinnedWorkspaceFile) {
+            return pinned
+        }
         let current = URL(fileURLWithPath: cwd, isDirectory: true).standardizedFileURL
         if isWritableUserDirectory(current) {
             return current
         }
         return applicationSupportRuntimeDirectory()
+    }
+
+    static var defaultPinnedWorkspaceFile: URL {
+        applicationSupportRuntimeDirectory().appendingPathComponent("workspace-root.txt")
+    }
+
+    private static func pinnedWorkspaceRoot(from file: URL) -> URL? {
+        guard let raw = try? String(contentsOf: file, encoding: .utf8) else { return nil }
+        let path = (raw.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath
+        guard !path.isEmpty else { return nil }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            return nil
+        }
+        return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
     }
 
     static func localAgentDirectory(cwd: String = FileManager.default.currentDirectoryPath) -> URL {
