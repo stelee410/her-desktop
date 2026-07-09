@@ -13,6 +13,12 @@ struct ConversationView: View {
     /// ScrollView starts at the top, which would otherwise fire the sentinel
     /// and eagerly load pages the user never asked for.
     @State private var didInitialScroll = false
+    /// One page per sighting: the sentinel disarms when it fires and only
+    /// re-arms after it has fully left the screen. Without this, the
+    /// post-load scroll restore can leave the sentinel flickering at the
+    /// viewport edge, re-firing onAppear in a loop that thrashes the
+    /// scrollbar without any user input.
+    @State private var historySentinelArmed = true
 
     private static let initialWindow = 60
     private static let windowStep = 80
@@ -49,14 +55,20 @@ struct ConversationView: View {
                         }
 
                         if session.messages.count > visibleLimit {
-                            HStack(spacing: 8) {
-                                ProgressView().controlSize(.small)
-                                Text("正在加载更早的消息…")
+                            // Auto-fires when scrolled into view; the button
+                            // doubles as a manual fallback if auto-paging
+                            // ever stalls.
+                            Button {
+                                expandHistoryWindow(proxy: proxy, force: true)
+                            } label: {
+                                Text("加载更早的消息")
                                     .font(.caption)
                                     .foregroundStyle(AppTheme.muted)
                             }
+                            .buttonStyle(.plain)
                             .id("history-loader")
-                            .onAppear { expandHistoryWindow(proxy: proxy) }
+                            .onAppear { expandHistoryWindow(proxy: proxy, force: false) }
+                            .onDisappear { historySentinelArmed = true }
                         }
 
                         ForEach(visibleMessages) { message in
@@ -131,15 +143,22 @@ struct ConversationView: View {
     }
 
     /// One page of older messages. The previous first message is re-anchored
-    /// to the viewport top so the transcript doesn't visually jump when the
-    /// older page mounts above it.
-    private func expandHistoryWindow(proxy: ScrollViewProxy) {
-        guard didInitialScroll else { return }
+    /// near the viewport top so the transcript doesn't visually jump when
+    /// the older page mounts above it.
+    private func expandHistoryWindow(proxy: ScrollViewProxy, force: Bool) {
+        if force {
+            historySentinelArmed = false
+        } else {
+            guard didInitialScroll, historySentinelArmed else { return }
+            historySentinelArmed = false
+        }
         let anchorID = visibleMessages.first?.id
         visibleLimit += Self.windowStep
         if let anchorID {
             DispatchQueue.main.async {
-                proxy.scrollTo(anchorID, anchor: .top)
+                // Slightly below the top edge: keeps the sentinel clearly
+                // offscreen so it can disappear and re-arm cleanly.
+                proxy.scrollTo(anchorID, anchor: UnitPoint(x: 0.5, y: 0.06))
             }
         }
     }
