@@ -659,10 +659,10 @@ extension AppViewModel {
             let content = try await runAgentToolLoop(llmMessages: &llmMessages, catalog: catalog)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !content.isEmpty {
-                deliverAssistantReply(content)
+                let deliveredMessageID = deliverAssistantReply(content)
                 saveSessionSnapshot()
                 speechTask?.cancel()
-                speechTask = Task { await speakAssistantReplyIfEnabled(content) }
+                speechTask = Task { await speakAssistantReplyIfEnabled(content, messageID: deliveredMessageID) }
             } else {
                 discardEmptyStreamedAssistantMessage()
             }

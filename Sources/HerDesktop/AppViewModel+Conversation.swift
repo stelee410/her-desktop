@@ -172,6 +172,7 @@ extension AppViewModel {
         speechTask = nil
         baseSpeechSynthesizer.stop()
         agentLLMSpeechSynthesizer.stop()
+        speakingMessageID = nil
         pendingApprovals = []
         capabilityActivities = []
         pendingAttachments = []
@@ -337,7 +338,7 @@ extension AppViewModel {
             } else {
                 final = reply
             }
-            deliverAssistantReply(final)
+            let deliveredMessageID = deliverAssistantReply(final)
             connectionState = .ready
             saveSessionSnapshot()
             let turnSessionID = sessionID
@@ -351,7 +352,7 @@ extension AppViewModel {
                 )
             }
             speechTask?.cancel()
-            speechTask = Task { await speakAssistantReplyIfEnabled(final) }
+            speechTask = Task { await speakAssistantReplyIfEnabled(final, messageID: deliveredMessageID) }
         } catch is CancellationError {
             handleTurnCancelled()
         } catch let error as URLError where error.code == .cancelled {
@@ -547,18 +548,25 @@ extension AppViewModel {
     }
 
     /// Routes the final reply into the live streamed bubble when one exists,
-    /// otherwise appends a fresh assistant message.
-    func deliverAssistantReply(_ final: String) {
+    /// otherwise appends a fresh assistant message. Returns the delivered
+    /// message's ID so auto-speak can mark that bubble as playing.
+    @discardableResult
+    func deliverAssistantReply(_ final: String) -> UUID {
         streamFlushTimer?.invalidate(); streamFlushTimer = nil
         streamBufferContent = ""; streamBufferReasoning = ""
         defer { streamingAssistantMessageID = nil }
+        let deliveredID: UUID
         if let id = streamingAssistantMessageID,
            let index = messages.firstIndex(where: { $0.id == id }) {
             messages[index].content = final
+            deliveredID = id
         } else {
-            messages.append(ChatMessage(role: .assistant, content: final))
+            let message = ChatMessage(role: .assistant, content: final)
+            messages.append(message)
+            deliveredID = message.id
         }
         markAgentLLMVerifiedByChat()
+        return deliveredID
     }
 
     func discardEmptyStreamedAssistantMessage() {
