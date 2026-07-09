@@ -9,19 +9,22 @@ struct ConversationView: View {
     /// when a conversation opens; scrolling up widens the window page by
     /// page, so a thousand-message transcript never renders all at once.
     @State private var visibleLimit = ConversationView.initialWindow
-    /// Blocks the top sentinel until the opening scroll-to-bottom has run —
-    /// ScrollView starts at the top, which would otherwise fire the sentinel
-    /// and eagerly load pages the user never asked for.
+    /// Blocks history paging until the opening scroll-to-bottom has run —
+    /// ScrollView starts at the top, which would otherwise page in history
+    /// the user never asked for.
     @State private var didInitialScroll = false
-    /// One page per sighting: the sentinel disarms when it fires and only
-    /// re-arms after it has fully left the screen. Without this, the
-    /// post-load scroll restore can leave the sentinel flickering at the
-    /// viewport edge, re-firing onAppear in a loop that thrashes the
-    /// scrollbar without any user input.
-    @State private var historySentinelArmed = true
+    /// True from "page requested" until the post-load scroll restore has
+    /// settled; suppresses further paging in between.
+    @State private var isPagingHistory = false
 
     private static let initialWindow = 60
     private static let windowStep = 80
+    /// Distance (pt) from the content top at which the next page loads.
+    /// Paging is driven by the real scroll offset — NOT by onAppear of a
+    /// sentinel row: LazyVStack pre-mounts rows outside the viewport, so
+    /// appear/disappear fire while nothing is visually there, which looped
+    /// (page → restore → phantom re-appear → page …) and thrashed the bar.
+    private static let historyTriggerDistance: CGFloat = 400
 
     private var visibleMessages: [ChatMessage] {
         let all = session.messages
@@ -55,11 +58,9 @@ struct ConversationView: View {
                         }
 
                         if session.messages.count > visibleLimit {
-                            // Auto-fires when scrolled into view; the button
-                            // doubles as a manual fallback if auto-paging
-                            // ever stalls.
+                            // Manual fallback; auto-paging is offset-driven.
                             Button {
-                                expandHistoryWindow(proxy: proxy, force: true)
+                                expandHistoryWindow(proxy: proxy)
                             } label: {
                                 Text("加载更早的消息")
                                     .font(.caption)
@@ -67,8 +68,6 @@ struct ConversationView: View {
                             }
                             .buttonStyle(.plain)
                             .id("history-loader")
-                            .onAppear { expandHistoryWindow(proxy: proxy, force: false) }
-                            .onDisappear { historySentinelArmed = true }
                         }
 
                         ForEach(visibleMessages) { message in
@@ -108,22 +107,35 @@ struct ConversationView: View {
                     }
                     .padding(.horizontal, 72)
                     .padding(.bottom, 26)
+                    .background(
+                        // Reports where the content top sits relative to the
+                        // viewport — the paging trigger reads real scroll
+                        // position instead of row appear/disappear noise.
+                        GeometryReader { geo in
+                            Color.clear.preference(
+                                key: TranscriptTopOffsetKey.self,
+                                value: geo.frame(in: .named("transcript")).minY
+                            )
+                        }
+                    )
+                }
+                .coordinateSpace(name: "transcript")
+                .onPreferenceChange(TranscriptTopOffsetKey.self) { minY in
+                    // minY is ~0 at the very top and goes negative as the
+                    // user scrolls down; "near top" means it came back up.
+                    if minY > -Self.historyTriggerDistance {
+                        expandHistoryWindow(proxy: proxy)
+                    }
                 }
                 .onAppear {
-                    if let last = session.messages.last?.id {
-                        proxy.scrollTo(last, anchor: .bottom)
-                        didInitialScroll = true
-                    }
+                    scrollToBottom(proxy, animated: false)
                 }
                 .onChange(of: session.activeConversationID) { _, _ in
                     visibleLimit = Self.initialWindow
                     didInitialScroll = false
                 }
                 .onChange(of: session.messages.count) { _, _ in
-                    if let last = session.messages.last?.id {
-                        withAnimation { proxy.scrollTo(last, anchor: .bottom) }
-                        didInitialScroll = true
-                    }
+                    scrollToBottom(proxy, animated: true)
                 }
                 .onChange(of: session.messages.last.map { $0.content.count + $0.reasoning.count }) { _, _ in
                     if let last = session.messages.last?.id {
@@ -142,25 +154,51 @@ struct ConversationView: View {
         }
     }
 
+    /// Lands the transcript on the newest message: one scroll now, one
+    /// settle pass after the lazy rows finish measuring (a single scrollTo
+    /// can undershoot while row heights are still estimates).
+    private func scrollToBottom(_ proxy: ScrollViewProxy, animated: Bool) {
+        guard let last = session.messages.last?.id else { return }
+        if animated {
+            withAnimation { proxy.scrollTo(last, anchor: .bottom) }
+        } else {
+            proxy.scrollTo(last, anchor: .bottom)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            guard last == session.messages.last?.id else { return }
+            proxy.scrollTo(last, anchor: .bottom)
+            didInitialScroll = true
+        }
+    }
+
     /// One page of older messages. The previous first message is re-anchored
     /// near the viewport top so the transcript doesn't visually jump when
-    /// the older page mounts above it.
-    private func expandHistoryWindow(proxy: ScrollViewProxy, force: Bool) {
-        if force {
-            historySentinelArmed = false
-        } else {
-            guard didInitialScroll, historySentinelArmed else { return }
-            historySentinelArmed = false
-        }
+    /// the older page mounts above it. Paging is locked until the restore
+    /// settles; afterwards the trigger stays quiet because the content top
+    /// is now a full page further away from the viewport.
+    private func expandHistoryWindow(proxy: ScrollViewProxy) {
+        guard didInitialScroll, !isPagingHistory,
+              session.messages.count > visibleLimit else { return }
+        isPagingHistory = true
         let anchorID = visibleMessages.first?.id
         visibleLimit += Self.windowStep
-        if let anchorID {
-            DispatchQueue.main.async {
-                // Slightly below the top edge: keeps the sentinel clearly
-                // offscreen so it can disappear and re-arm cleanly.
-                proxy.scrollTo(anchorID, anchor: UnitPoint(x: 0.5, y: 0.06))
+        DispatchQueue.main.async {
+            if let anchorID {
+                proxy.scrollTo(anchorID, anchor: UnitPoint(x: 0.5, y: 0.1))
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                isPagingHistory = false
             }
         }
+    }
+}
+
+/// Content-top position of the transcript in the scroll view's coordinate
+/// space; drives history paging.
+private struct TranscriptTopOffsetKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
