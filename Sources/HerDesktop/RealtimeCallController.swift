@@ -32,8 +32,21 @@ final class RealtimeCallController: ObservableObject {
     @Published private(set) var transcript: [TranscriptLine] = []
     /// True while assistant audio is streaming — drives the "她在说话" UI.
     @Published private(set) var assistantSpeaking = false
-    @Published var isMuted = false
+    @Published var isMuted = false {
+        didSet { tapShared?.muted = isMuted }
+    }
     @Published private(set) var startedAt: Date?
+
+    /// State the audio-thread tap reads. The tap must NEVER touch this
+    /// @MainActor object — accessing an isolated property from the render
+    /// thread trips the runtime isolation assert (SIGTRAP). Main writes,
+    /// audio thread reads; Bool/reference reads are tear-free.
+    private final class TapShared: @unchecked Sendable {
+        var muted = false
+        var socket: URLSessionWebSocketTask?
+    }
+
+    private var tapShared: TapShared?
 
     private var webSocket: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
@@ -253,13 +266,13 @@ final class RealtimeCallController: ObservableObject {
         engine.attach(playerNode)
         engine.connect(playerNode, to: engine.mainMixerNode, format: nil)
 
-        let socket = webSocket
-        let controller = self
+        let shared = TapShared()
+        shared.muted = isMuted
+        shared.socket = webSocket
+        tapShared = shared
         input.installTap(onBus: 0, bufferSize: 2_048, format: hwFormat) { buffer, _ in
-            // Audio thread: no main-actor state. Mute is read via the
-            // published property snapshot captured through the controller
-            // reference (Bool read is tear-free).
-            if controller.isMuted { return }
+            // Audio thread: only `shared` (non-isolated) may be touched here.
+            if shared.muted { return }
             let ratio = targetFormat.sampleRate / hwFormat.sampleRate
             let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 32
             guard let converted = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: capacity) else { return }
@@ -279,7 +292,7 @@ final class RealtimeCallController: ObservableObject {
                   let channel = converted.int16ChannelData else { return }
             let byteCount = Int(converted.frameLength) * MemoryLayout<Int16>.size
             let data = Data(bytes: channel[0], count: byteCount)
-            socket?.send(.data(data)) { _ in }
+            shared.socket?.send(.data(data)) { _ in }
         }
 
         engine.prepare()
@@ -327,6 +340,8 @@ final class RealtimeCallController: ObservableObject {
 
     private func stopAudioEngine() {
         engine.inputNode.removeTap(onBus: 0)
+        tapShared?.socket = nil
+        tapShared = nil
         playerNode.stop()
         if engine.isRunning {
             engine.stop()
