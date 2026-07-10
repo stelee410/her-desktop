@@ -72,6 +72,11 @@ private struct PaneResizeDivider: View {
     /// The pane size at drag start; deltas apply against this so clamping
     /// doesn't drift when the pointer overshoots the range and comes back.
     @State private var dragBase: Double?
+    /// Live drags only move this preview line; the pane itself relayouts
+    /// ONCE on mouse-up. Live relayout re-measured the whole window (and its
+    /// WKWebViews) on every pointer event.
+    @State private var previewOffset: Double = 0
+    @State private var isDragging = false
 
     var body: some View {
         Divider()
@@ -95,12 +100,42 @@ private struct PaneResizeDivider: View {
                             .onChanged { value in
                                 let base = dragBase ?? size
                                 dragBase = base
-                                let delta = vertical ? value.translation.width : value.translation.height
-                                size = min(max(base + grows * delta, range.lowerBound), range.upperBound)
+                                isDragging = true
+                                previewOffset = grows * (clampedTarget(base: base, value: value) - size)
                             }
-                            .onEnded { _ in dragBase = nil }
+                            .onEnded { value in
+                                let base = dragBase ?? size
+                                size = clampedTarget(base: base, value: value)
+                                dragBase = nil
+                                isDragging = false
+                                previewOffset = 0
+                            }
                     )
             )
+            .overlay(
+                Group {
+                    if isDragging {
+                        Rectangle()
+                            .fill(AppTheme.coral.opacity(0.55))
+                            .frame(
+                                width: vertical ? 2 : nil,
+                                height: vertical ? nil : 2
+                            )
+                            .offset(
+                                x: vertical ? previewOffset : 0,
+                                y: vertical ? 0 : previewOffset
+                            )
+                    }
+                }
+            )
+            // The preview line offsets into the neighboring pane's territory;
+            // without this the sibling drawn later would paint over it.
+            .zIndex(isDragging ? 10 : 0)
+    }
+
+    private func clampedTarget(base: Double, value: DragGesture.Value) -> Double {
+        let delta = vertical ? value.translation.width : value.translation.height
+        return min(max(base + grows * delta, range.lowerBound), range.upperBound)
     }
 }
 

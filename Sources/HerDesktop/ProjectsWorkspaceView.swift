@@ -54,76 +54,92 @@ struct ProjectsWorkspaceView: View {
     }
 }
 
-/// One project in the list: identity, progress, and quick actions.
+/// One project in the list. The whole row opens the editor (name, goal,
+/// brief, and plan are all edited there); Finder/delete ride on the right.
 private struct ProjectRow: View {
     var project: Project
     var conversationCount: Int
     var onOpen: () -> Void
     var onReveal: () -> Void
     var onDelete: () -> Void
+    @State private var isHovering = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            Text(project.emoji.isEmpty ? "📁" : project.emoji)
-                .font(.title3)
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 8) {
-                    Text(project.name)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(AppTheme.ink)
-                    if project.status != .active {
-                        Text(project.status.displayName)
-                            .font(.system(size: 10))
+        Button(action: onOpen) {
+            HStack(spacing: 12) {
+                Text(project.emoji.isEmpty ? "📁" : project.emoji)
+                    .font(.title3)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text(project.name)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppTheme.ink)
+                        if project.status != .active {
+                            Text(project.status.displayName)
+                                .font(.system(size: 10))
+                                .foregroundStyle(AppTheme.muted)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.black.opacity(0.05))
+                                .clipShape(Capsule())
+                        }
+                    }
+                    if let next = project.nextStep {
+                        Text("下一步：\(next.title)")
+                            .font(.caption)
                             .foregroundStyle(AppTheme.muted)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.black.opacity(0.05))
-                            .clipShape(Capsule())
+                            .lineLimit(1)
+                    } else if !project.goal.isEmpty {
+                        Text(project.goal)
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.muted)
+                            .lineLimit(1)
+                    } else {
+                        Text("点击填写目标和计划")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.muted.opacity(0.7))
+                    }
+                    if project.plan != nil {
+                        ProgressView(value: project.progress)
+                            .tint(AppTheme.coral)
+                            .frame(maxWidth: 220)
                     }
                 }
-                if let next = project.nextStep {
-                    Text("下一步：\(next.title)")
+                Spacer()
+                if conversationCount > 0 {
+                    Label("\(conversationCount)", systemImage: "bubble.left")
                         .font(.caption)
                         .foregroundStyle(AppTheme.muted)
-                        .lineLimit(1)
-                } else if !project.goal.isEmpty {
-                    Text(project.goal)
-                        .font(.caption)
+                        .help("归属此项目的会话")
+                }
+                Button(action: onReveal) {
+                    Image(systemName: "folder")
                         .foregroundStyle(AppTheme.muted)
-                        .lineLimit(1)
                 }
-                if project.plan != nil {
-                    ProgressView(value: project.progress)
-                        .tint(AppTheme.coral)
-                        .frame(maxWidth: 220)
+                .buttonStyle(.plain)
+                .help("在 Finder 中打开工作目录")
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .foregroundStyle(AppTheme.muted)
                 }
+                .buttonStyle(.plain)
+                .help("删除项目（工作目录里的成果物会保留）")
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.muted.opacity(0.6))
             }
-            Spacer()
-            if conversationCount > 0 {
-                Label("\(conversationCount)", systemImage: "bubble.left")
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.muted)
-                    .help("归属此项目的会话")
-            }
-            Button("打开", action: onOpen)
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            Button(action: onReveal) {
-                Image(systemName: "folder")
-                    .foregroundStyle(AppTheme.muted)
-            }
-            .buttonStyle(.plain)
-            .help("在 Finder 中打开工作目录")
-            Button(action: onDelete) {
-                Image(systemName: "trash")
-                    .foregroundStyle(AppTheme.muted)
-            }
-            .buttonStyle(.plain)
-            .help("删除项目（工作目录里的成果物会保留）")
+            .padding(10)
+            .contentShape(Rectangle())
         }
-        .padding(10)
-        .background(Color.white.opacity(0.45))
+        .buttonStyle(.plain)
+        .background(isHovering ? AppTheme.rose.opacity(0.4) : Color.white.opacity(0.45))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .onHover { isHovering = $0 }
+        .contextMenu {
+            Button("编辑项目…", action: onOpen)
+            Button("在 Finder 中打开工作目录", action: onReveal)
+            Button("删除项目…", role: .destructive, action: onDelete)
+        }
     }
 }
 
