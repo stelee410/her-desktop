@@ -602,9 +602,11 @@ struct HerAppConfig: Codable, Equatable {
     /// TTS model + speaker when the provider is "agentllm".
     var agentLLMTTSModel: String
     var agentLLMTTSVoice: String
-    /// 打电话: agentRealtime (realtime voice call) access key + optional
-    /// voice id. The service URL is fixed (agentrealtime.oyii.ai).
+    /// 打电话: agentRealtime (realtime voice call) access key, model profile
+    /// (realtime_doubao / realtime_qwen_omni), and optional voice id. The
+    /// service URL is fixed (agentrealtime.oyii.ai).
     var agentRealtimeAPIKey: String
+    var agentRealtimeModelProfile: String
     var agentRealtimeVoice: String
 
     var hasLLMKey: Bool { !agentLLMAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -629,6 +631,7 @@ struct HerAppConfig: Codable, Equatable {
         agentLLMTTSModel: String = "doubao-tts",
         agentLLMTTSVoice: String = "zh_female_cancan_mars_bigtts",
         agentRealtimeAPIKey: String = "",
+        agentRealtimeModelProfile: String = "realtime_doubao",
         agentRealtimeVoice: String = ""
     ) {
         self.agentLLMBaseURL = agentLLMBaseURL
@@ -648,6 +651,7 @@ struct HerAppConfig: Codable, Equatable {
         self.agentLLMTTSModel = agentLLMTTSModel
         self.agentLLMTTSVoice = agentLLMTTSVoice
         self.agentRealtimeAPIKey = agentRealtimeAPIKey
+        self.agentRealtimeModelProfile = agentRealtimeModelProfile
         self.agentRealtimeVoice = agentRealtimeVoice
     }
 
@@ -669,6 +673,7 @@ struct HerAppConfig: Codable, Equatable {
         case agentLLMTTSModel
         case agentLLMTTSVoice
         case agentRealtimeAPIKey
+        case agentRealtimeModelProfile
         case agentRealtimeVoice
     }
 
@@ -694,6 +699,7 @@ struct HerAppConfig: Codable, Equatable {
         agentLLMTTSModel = try container.decodeIfPresent(String.self, forKey: .agentLLMTTSModel) ?? "doubao-tts"
         agentLLMTTSVoice = try container.decodeIfPresent(String.self, forKey: .agentLLMTTSVoice) ?? "zh_female_cancan_mars_bigtts"
         agentRealtimeAPIKey = try container.decodeIfPresent(String.self, forKey: .agentRealtimeAPIKey) ?? ""
+        agentRealtimeModelProfile = try container.decodeIfPresent(String.self, forKey: .agentRealtimeModelProfile) ?? "realtime_doubao"
         agentRealtimeVoice = try container.decodeIfPresent(String.self, forKey: .agentRealtimeVoice) ?? ""
     }
 
@@ -727,6 +733,7 @@ struct HerAppConfigDraft: Equatable {
     var agentLLMTTSModel: String
     var agentLLMTTSVoice: String
     var agentRealtimeAPIKey: String
+    var agentRealtimeModelProfile: String
     var agentRealtimeVoice: String
 
     init(config: HerAppConfig) {
@@ -747,6 +754,7 @@ struct HerAppConfigDraft: Equatable {
         self.agentLLMTTSModel = config.agentLLMTTSModel
         self.agentLLMTTSVoice = config.agentLLMTTSVoice
         self.agentRealtimeAPIKey = config.agentRealtimeAPIKey
+        self.agentRealtimeModelProfile = config.agentRealtimeModelProfile
         self.agentRealtimeVoice = config.agentRealtimeVoice
     }
 
@@ -778,6 +786,7 @@ struct HerAppConfigDraft: Equatable {
                 ? "zh_female_cancan_mars_bigtts"
                 : agentLLMTTSVoice.trimmingCharacters(in: .whitespacesAndNewlines),
             agentRealtimeAPIKey: agentRealtimeAPIKey.trimmingCharacters(in: .whitespacesAndNewlines),
+            agentRealtimeModelProfile: agentRealtimeModelProfile == "realtime_qwen_omni" ? "realtime_qwen_omni" : "realtime_doubao",
             agentRealtimeVoice: agentRealtimeVoice.trimmingCharacters(in: .whitespacesAndNewlines)
         )
     }

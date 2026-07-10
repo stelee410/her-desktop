@@ -125,6 +125,81 @@ struct SettingsView: View {
 /// Speaker dropdown for AgentLLM TTS: loads the live voice catalog from the
 /// endpoint (`/v1beta/volc/tts/voices`); falls back to a plain text field
 /// when the list can't be fetched (no key yet, offline, …).
+/// 打电话音色: fetched from agentRealtime's /v1/voices for the selected
+/// realtime model — the two models have different catalogs, so switching the
+/// model reloads the list and drops a voice that no longer applies.
+struct AgentRealtimeVoicePicker: View {
+    @Binding var draft: HerAppConfigDraft
+    @State private var voices: [AgentRealtimeVoiceCatalog.Voice] = []
+    @State private var loadFailed = false
+    @State private var isLoading = false
+
+    var body: some View {
+        Group {
+            if !voices.isEmpty {
+                Picker("音色", selection: $draft.agentRealtimeVoice) {
+                    Text("服务默认").tag("")
+                    ForEach(voices) { voice in
+                        Text(voiceLabel(voice)).tag(voice.id)
+                    }
+                }
+            } else {
+                TextField("音色 ID（留空用服务默认）", text: $draft.agentRealtimeVoice)
+                if isLoading {
+                    Text("正在加载可用音色…")
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.muted)
+                } else if loadFailed, !draft.agentRealtimeAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("音色列表加载失败（检查 key/网络），可手动填写音色 ID。")
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.muted)
+                }
+            }
+        }
+        .task(id: draft.agentRealtimeAPIKey + "|" + draft.agentRealtimeModelProfile) {
+            await loadVoices()
+        }
+    }
+
+    private func voiceLabel(_ voice: AgentRealtimeVoiceCatalog.Voice) -> String {
+        let gender: String
+        switch voice.gender {
+        case "male": gender = "男"
+        case "female": gender = "女"
+        default: gender = ""
+        }
+        return gender.isEmpty ? voice.label : "\(voice.label)（\(gender)）"
+    }
+
+    private func loadVoices() async {
+        let key = draft.agentRealtimeAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else {
+            voices = []
+            loadFailed = false
+            return
+        }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let fetched = try await AgentRealtimeVoiceCatalog.fetch(
+                apiKey: key,
+                modelProfile: draft.agentRealtimeModelProfile
+            )
+            voices = fetched
+            loadFailed = fetched.isEmpty
+            // A voice from the other model's catalog would be rejected by
+            // the session; fall back to the service default.
+            if !draft.agentRealtimeVoice.isEmpty,
+               !fetched.isEmpty,
+               !fetched.contains(where: { $0.id == draft.agentRealtimeVoice }) {
+                draft.agentRealtimeVoice = ""
+            }
+        } catch {
+            loadFailed = true
+        }
+    }
+}
+
 struct AgentLLMVoicePicker: View {
     @Binding var draft: HerAppConfigDraft
     @State private var voices: [AgentLLMVoiceCatalog.Voice] = []
@@ -211,8 +286,13 @@ struct HerConfigurationFields: View {
 
             fieldSection("打电话（agentRealtime）", systemImage: "phone") {
                 SecureField("agentRealtime API key（ar_live_…）", text: $draft.agentRealtimeAPIKey)
-                TextField("音色 ID（留空用服务默认）", text: $draft.agentRealtimeVoice)
-                Text("实时语音通话：在会话工具栏点电话图标，和当前角色开始通话。")
+                Picker("模型", selection: $draft.agentRealtimeModelProfile) {
+                    Text("Realtime · 豆包").tag("realtime_doubao")
+                    Text("Realtime · Qwen-Omni").tag("realtime_qwen_omni")
+                }
+                .pickerStyle(.segmented)
+                AgentRealtimeVoicePicker(draft: $draft)
+                Text("实时语音通话：在会话工具栏点电话图标，和当前角色开始通话。音色按所选模型自动加载。")
                     .font(.caption2)
                     .foregroundStyle(AppTheme.muted)
             }

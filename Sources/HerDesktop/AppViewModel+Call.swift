@@ -19,6 +19,7 @@ extension AppViewModel {
         isCallPresented = true
         callController.start(
             apiKey: config.agentRealtimeAPIKey,
+            modelProfile: config.agentRealtimeModelProfile,
             instructions: voiceCallInstructions(),
             voice: config.agentRealtimeVoice
         )

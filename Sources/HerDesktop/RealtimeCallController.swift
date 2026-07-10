@@ -54,7 +54,7 @@ final class RealtimeCallController: ObservableObject {
 
     /// Dials: connects the socket, opens the session, and starts streaming
     /// the microphone.
-    func start(apiKey: String, instructions: String, voice: String) {
+    func start(apiKey: String, modelProfile: String, instructions: String, voice: String) {
         guard !isInCall else { return }
         transcript = []
         openUserLineID = nil
@@ -72,7 +72,7 @@ final class RealtimeCallController: ObservableObject {
         sendEvent(type: "session.start", payload: [
             "agent_id": "omnia_default",
             "mode": "realtime",
-            "model_profile": "realtime_doubao",
+            "model_profile": modelProfile.isEmpty ? "realtime_doubao" : modelProfile,
             "audio": [
                 "input_format": "pcm16",
                 "output_format": "pcm16",
@@ -332,5 +332,38 @@ final class RealtimeCallController: ObservableObject {
             engine.stop()
         }
         playbackFormat = nil
+    }
+}
+
+/// Voice catalog of the agentRealtime service (`GET /v1/voices?model=…`),
+/// fetched per realtime model so Settings can offer the right音色 list.
+enum AgentRealtimeVoiceCatalog {
+    struct Voice: Identifiable, Decodable, Equatable {
+        var id: String
+        var label: String
+        var gender: String?
+        var provider: String?
+    }
+
+    private struct Response: Decodable {
+        var voices: [Voice]
+    }
+
+    /// The `model` query value for a session model profile.
+    static func catalogModel(forProfile profile: String) -> String {
+        profile == "realtime_qwen_omni" ? "qwen3-omni-flash-realtime" : "doubao-realtime"
+    }
+
+    static func fetch(apiKey: String, modelProfile: String) async throws -> [Voice] {
+        var components = URLComponents(string: "https://agentrealtime.oyii.ai/v1/voices")!
+        components.queryItems = [URLQueryItem(name: "model", value: catalogModel(forProfile: modelProfile))]
+        var request = URLRequest(url: components.url!)
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 12
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(Response.self, from: data).voices
     }
 }
