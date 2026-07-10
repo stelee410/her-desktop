@@ -10,13 +10,15 @@ struct SystemPromptBuilder {
         agentLoopSummary: String = "",
         runtimeContext: PromptRuntimeContext? = nil,
         companionContext: CompanionPromptContext? = nil,
-        roleplayContext: String = ""
+        roleplayContext: String = "",
+        activeProjectContext: String = ""
     ) -> String {
         [
             identitySection,
             promptProvenanceSection,
             personaSection,
             roleplaySection(roleplayContext),
+            activeProjectSection(activeProjectContext),
             projectSection,
             runtimeSection(runtimeContext),
             companionSection(companionContext),
@@ -337,6 +339,12 @@ struct SystemPromptBuilder {
     /// 角色卡/世界之书 for this conversation (already formatted by the
     /// caller); persona-level guidance only — safety/tool contracts still win.
     private func roleplaySection(_ context: String) -> String {
+        context.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : context
+    }
+
+    /// The bound project (goal/brief/working directory/plan state) or the
+    /// project-founding rule; built by AppViewModel.projectPromptSection().
+    private func activeProjectSection(_ context: String) -> String {
         context.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : context
     }
 

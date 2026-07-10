@@ -25,12 +25,12 @@ enum WorkspaceSection: String, CaseIterable, Identifiable, Codable, Equatable {
 
     var title: String {
         switch self {
-        case .today: return "Today"
-        case .memory: return "Memory"
-        case .projects: return "Projects"
-        case .apps: return "Apps"
-        case .tools: return "Tools"
-        case .agents: return "Agents"
+        case .today: return "今天"
+        case .memory: return "记忆"
+        case .projects: return "项目"
+        case .apps: return "应用"
+        case .tools: return "工具"
+        case .agents: return "智能体"
         case .characters: return "角色卡"
         case .worldBooks: return "世界之书"
         }

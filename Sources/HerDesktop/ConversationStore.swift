@@ -9,6 +9,8 @@ struct ConversationSummary: Identifiable, Codable, Equatable {
     /// Roleplay selection for this conversation (角色卡 / 世界之书).
     var characterCardID: String?
     var worldBookID: String?
+    /// The project this conversation belongs to (at most one).
+    var projectID: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -18,6 +20,7 @@ struct ConversationSummary: Identifiable, Codable, Equatable {
         case updatedAt = "updated_at"
         case characterCardID = "character_card_id"
         case worldBookID = "world_book_id"
+        case projectID = "project_id"
     }
 }
 

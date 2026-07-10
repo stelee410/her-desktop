@@ -279,6 +279,7 @@ private struct RoleplaySelectors: View {
     var body: some View {
         let activeCard = model.activeCharacterCard
         let activeBook = model.activeWorldBook
+        let activeProject = model.activeProject
 
         Menu {
             Button("无角色") { model.setCharacterCard(nil) }
@@ -323,6 +324,28 @@ private struct RoleplaySelectors: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .help("为这个会话选择世界之书")
+
+        Menu {
+            Button("不归属项目") { model.setProject(nil) }
+            if model.projects.isEmpty {
+                Button("去创建项目…") { model.selectedSection = .projects }
+            }
+            ForEach(model.projects.filter { $0.status == .active || $0.id == activeProject?.id }) { project in
+                Button("\(project.emoji) \(project.name)\(project.id == activeProject?.id ? " ✓" : "")") {
+                    model.setProject(project)
+                }
+            }
+        } label: {
+            Label(
+                activeProject.map { "\($0.emoji) \($0.name)" } ?? "项目",
+                systemImage: "folder"
+            )
+            .font(.caption)
+            .foregroundStyle(activeProject == nil ? AppTheme.muted : AppTheme.coral)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("把这个会话归入一个项目；项目的目标、计划和工作目录会注入对话")
     }
 }
 

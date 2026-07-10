@@ -228,6 +228,10 @@ final class AppViewModel: ObservableObject, AuditRecording {
     @Published var characterCards: [CharacterCard] = []
     @Published var worldBooks: [WorldBook] = []
     lazy var roleplayStore = RoleplayStore(cwd: runtimeCwd)
+    /// 项目: ongoing work units — goal, brief, shared plan checklist, and a
+    /// working directory for deliverables. See AppViewModel+Projects.
+    @Published var projects: [Project] = []
+    lazy var projectStore = ProjectStore(cwd: runtimeCwd)
     /// Heartbeat: scheduled tasks (reminders / timed agent turns) checked by
     /// a periodic tick. See AppViewModel+Heartbeat.
     @Published var heartbeatTasks: [HeartbeatTask] = []
@@ -455,6 +459,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
         startWebAppServerIfNeeded()
         startHeartbeat()
         loadRoleplayAssets()
+        loadProjects()
         installPushToTalkMonitors()
         installPasteMonitor()
         await reloadPlugins()

@@ -107,6 +107,10 @@ extension AppViewModel {
             let url = try workPlanStore.save(plan)
             workPlan = plan
             rebuildRunningTasks()
+            // The plan also lands in the project system: the bound project's
+            // checklist, or a newly founded project for an unbound
+            // conversation (the 主动立项 path).
+            let projectNote = routePlanIntoProject(plan)
             audit(
                 type: "workspace.plan_saved",
                 summary: "Saved current work plan.",
@@ -120,7 +124,7 @@ extension AppViewModel {
             )
             return CapabilityResult(
                 title: "Workspace Plan Saved",
-                content: workPlanSummary(plan: plan, path: url.path),
+                content: projectNote + "\n" + workPlanSummary(plan: plan, path: url.path),
                 requiresUserApproval: false
             )
         } catch {
