@@ -232,6 +232,9 @@ final class AppViewModel: ObservableObject, AuditRecording {
     /// working directory for deliverables. See AppViewModel+Projects.
     @Published var projects: [Project] = []
     lazy var projectStore = ProjectStore(cwd: runtimeCwd)
+    /// 打电话: realtime voice call over agentRealtime. See AppViewModel+Call.
+    @Published var isCallPresented = false
+    lazy var callController = RealtimeCallController()
     /// Heartbeat: scheduled tasks (reminders / timed agent turns) checked by
     /// a periodic tick. See AppViewModel+Heartbeat.
     @Published var heartbeatTasks: [HeartbeatTask] = []
@@ -425,6 +428,9 @@ final class AppViewModel: ObservableObject, AuditRecording {
         speechTask?.cancel()
         baseSpeechSynthesizer.stop()
         agentLLMSpeechSynthesizer.stop()
+        if isCallPresented {
+            callController.hangUp()
+        }
         // Land any queued transcript/index/audit writes before exit.
         conversationStore.flushPendingIO()
         auditStore.flushPendingIO()

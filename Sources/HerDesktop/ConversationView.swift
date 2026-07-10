@@ -152,6 +152,15 @@ struct ConversationView: View {
                 .padding(.horizontal, 54)
                 .padding(.bottom, 24)
         }
+        .sheet(isPresented: Binding(
+            get: { model.isCallPresented },
+            set: { presented in
+                if !presented { model.endVoiceCall() }
+            }
+        )) {
+            CallView(call: model.callController)
+                .environmentObject(model)
+        }
     }
 
     /// Pins the newest message to the bottom edge after a transcript load.
@@ -395,6 +404,17 @@ private struct ToolbarView: View {
             }
             .buttonStyle(.plain)
             .help(model.config.speakAssistantReplies ? "Disable spoken replies" : "Enable spoken replies")
+
+            Button {
+                model.startVoiceCall()
+            } label: {
+                Image(systemName: "phone.fill")
+                    .foregroundStyle(model.isCallPresented ? AppTheme.coral : AppTheme.muted)
+            }
+            .buttonStyle(.plain)
+            .help(model.config.hasRealtimeKey
+                ? "打电话（实时语音通话）"
+                : "打电话：先在设置里填写 agentRealtime API key")
 
             Button {
                 isStatusPopoverPresented.toggle()

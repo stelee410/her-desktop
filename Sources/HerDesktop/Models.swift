@@ -602,9 +602,14 @@ struct HerAppConfig: Codable, Equatable {
     /// TTS model + speaker when the provider is "agentllm".
     var agentLLMTTSModel: String
     var agentLLMTTSVoice: String
+    /// 打电话: agentRealtime (realtime voice call) access key + optional
+    /// voice id. The service URL is fixed (agentrealtime.oyii.ai).
+    var agentRealtimeAPIKey: String
+    var agentRealtimeVoice: String
 
     var hasLLMKey: Bool { !agentLLMAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var hasMemKey: Bool { !agentMemAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var hasRealtimeKey: Bool { !agentRealtimeAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     init(
         agentLLMBaseURL: URL,
@@ -622,7 +627,9 @@ struct HerAppConfig: Codable, Equatable {
         agentLLMASRModel: String = "fun-asr-realtime",
         speechSynthesisProvider: String = "apple",
         agentLLMTTSModel: String = "doubao-tts",
-        agentLLMTTSVoice: String = "zh_female_cancan_mars_bigtts"
+        agentLLMTTSVoice: String = "zh_female_cancan_mars_bigtts",
+        agentRealtimeAPIKey: String = "",
+        agentRealtimeVoice: String = ""
     ) {
         self.agentLLMBaseURL = agentLLMBaseURL
         self.agentLLMAPIKey = agentLLMAPIKey
@@ -640,6 +647,8 @@ struct HerAppConfig: Codable, Equatable {
         self.speechSynthesisProvider = speechSynthesisProvider
         self.agentLLMTTSModel = agentLLMTTSModel
         self.agentLLMTTSVoice = agentLLMTTSVoice
+        self.agentRealtimeAPIKey = agentRealtimeAPIKey
+        self.agentRealtimeVoice = agentRealtimeVoice
     }
 
     enum CodingKeys: String, CodingKey {
@@ -659,6 +668,8 @@ struct HerAppConfig: Codable, Equatable {
         case speechSynthesisProvider
         case agentLLMTTSModel
         case agentLLMTTSVoice
+        case agentRealtimeAPIKey
+        case agentRealtimeVoice
     }
 
     init(from decoder: Decoder) throws {
@@ -682,6 +693,8 @@ struct HerAppConfig: Codable, Equatable {
         speechSynthesisProvider = try container.decodeIfPresent(String.self, forKey: .speechSynthesisProvider) ?? "apple"
         agentLLMTTSModel = try container.decodeIfPresent(String.self, forKey: .agentLLMTTSModel) ?? "doubao-tts"
         agentLLMTTSVoice = try container.decodeIfPresent(String.self, forKey: .agentLLMTTSVoice) ?? "zh_female_cancan_mars_bigtts"
+        agentRealtimeAPIKey = try container.decodeIfPresent(String.self, forKey: .agentRealtimeAPIKey) ?? ""
+        agentRealtimeVoice = try container.decodeIfPresent(String.self, forKey: .agentRealtimeVoice) ?? ""
     }
 
     static let empty = HerAppConfig(
@@ -713,6 +726,8 @@ struct HerAppConfigDraft: Equatable {
     var speechSynthesisProvider: String
     var agentLLMTTSModel: String
     var agentLLMTTSVoice: String
+    var agentRealtimeAPIKey: String
+    var agentRealtimeVoice: String
 
     init(config: HerAppConfig) {
         self.agentLLMBaseURL = config.agentLLMBaseURL.absoluteString
@@ -731,6 +746,8 @@ struct HerAppConfigDraft: Equatable {
         self.speechSynthesisProvider = config.speechSynthesisProvider
         self.agentLLMTTSModel = config.agentLLMTTSModel
         self.agentLLMTTSVoice = config.agentLLMTTSVoice
+        self.agentRealtimeAPIKey = config.agentRealtimeAPIKey
+        self.agentRealtimeVoice = config.agentRealtimeVoice
     }
 
     func makeConfig() throws -> HerAppConfig {
@@ -759,7 +776,9 @@ struct HerAppConfigDraft: Equatable {
                 : agentLLMTTSModel.trimmingCharacters(in: .whitespacesAndNewlines),
             agentLLMTTSVoice: agentLLMTTSVoice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? "zh_female_cancan_mars_bigtts"
-                : agentLLMTTSVoice.trimmingCharacters(in: .whitespacesAndNewlines)
+                : agentLLMTTSVoice.trimmingCharacters(in: .whitespacesAndNewlines),
+            agentRealtimeAPIKey: agentRealtimeAPIKey.trimmingCharacters(in: .whitespacesAndNewlines),
+            agentRealtimeVoice: agentRealtimeVoice.trimmingCharacters(in: .whitespacesAndNewlines)
         )
     }
 

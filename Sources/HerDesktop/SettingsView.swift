@@ -209,6 +209,14 @@ struct HerConfigurationFields: View {
                 SecureField("AgentMem API key", text: $draft.agentMemAPIKey)
             }
 
+            fieldSection("打电话（agentRealtime）", systemImage: "phone") {
+                SecureField("agentRealtime API key（ar_live_…）", text: $draft.agentRealtimeAPIKey)
+                TextField("音色 ID（留空用服务默认）", text: $draft.agentRealtimeVoice)
+                Text("实时语音通话：在会话工具栏点电话图标，和当前角色开始通话。")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.muted)
+            }
+
             fieldSection("Local Labels & Plugins", systemImage: "puzzlepiece.extension") {
                 TextField("Local agent label", text: $draft.agentCode)
                 TextField("Local user label", text: $draft.userID)
