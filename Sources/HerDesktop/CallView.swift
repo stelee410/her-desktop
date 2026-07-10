@@ -23,33 +23,18 @@ struct CallView: View {
             .frame(maxWidth: .infinity)
             .padding(.bottom, 18)
 
-            Divider().opacity(0.35)
-
-            // Live captions: user turns and assistant turns as they stream.
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(call.transcript) { line in
-                            HStack(alignment: .top, spacing: 6) {
-                                Text(line.role == .user ? "我" : partnerName)
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(line.role == .user ? AppTheme.muted : AppTheme.coral)
-                                    .frame(width: 52, alignment: .trailing)
-                                Text(line.text)
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(AppTheme.ink)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .id(line.id)
-                        }
-                    }
-                    .padding(16)
-                }
-                .onChange(of: call.transcript.last?.text) { _, _ in
-                    if let last = call.transcript.last?.id {
-                        proxy.scrollTo(last, anchor: .bottom)
-                    }
-                }
+            // No live captions — a call should feel like a call. The full
+            // conversation is summarized back into the chat on hang-up.
+            VStack(spacing: 8) {
+                Spacer()
+                Image(systemName: "waveform")
+                    .font(.system(size: 22))
+                    .foregroundStyle(AppTheme.rose)
+                    .symbolEffect(.variableColor.iterative, isActive: call.assistantSpeaking)
+                Text("挂断后会把通话整理成一段总结，回到聊天里")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.muted.opacity(0.8))
+                Spacer()
             }
             .frame(maxHeight: .infinity)
 

@@ -235,6 +235,9 @@ final class AppViewModel: ObservableObject, AuditRecording {
     /// 打电话: realtime voice call over agentRealtime. See AppViewModel+Call.
     @Published var isCallPresented = false
     lazy var callController = RealtimeCallController()
+    /// The in-call memo agent: periodically distills the live transcript
+    /// into facts injected back into the realtime session.
+    var callMemoTask: Task<Void, Never>?
     /// Heartbeat: scheduled tasks (reminders / timed agent turns) checked by
     /// a periodic tick. See AppViewModel+Heartbeat.
     @Published var heartbeatTasks: [HeartbeatTask] = []

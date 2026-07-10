@@ -54,11 +54,20 @@ final class RealtimeCallController: ObservableObject {
         /// Loudest absolute sample seen so far — the mic watchdog reads this
         /// to distinguish "quiet room" from "all-zero broken capture".
         var peakAmplitude: Int16 = 0
+        /// Half-duplex anti-echo (no VP on this machine): while assistant
+        /// audio plays — plus a short tail — mic chunks are dropped unless
+        /// they're loud enough to be deliberate barge-in speech rather than
+        /// speaker bleed.
+        var assistantPlaying = false
+        var gateTailDeadline: TimeInterval = 0
+        static let bargeInThreshold: Int16 = 6_000
     }
 
     private var tapShared: TapShared?
     private var playbackChunks = 0
     private var micWatchdog: Task<Void, Never>?
+    /// 嘟…嘟… while the session is being established.
+    private var ringbackPlayer: AVAudioPlayer?
     /// Once VP proved dead on this machine, every later call — across
     /// launches — skips it directly instead of burning the watchdog delay.
     private var voiceProcessingBroken = UserDefaults.standard.bool(forKey: "call.voiceProcessingBroken") {
@@ -126,10 +135,21 @@ final class RealtimeCallController: ObservableObject {
         receiveTask = Task { [weak self] in
             await self?.receiveLoop(task)
         }
+        startRingback()
+    }
+
+    /// Injects a one-line fact into the session's working memory
+    /// (context.update is non-interrupting; applies from the next reply).
+    func sendContextFact(_ fact: String) {
+        let trimmed = fact.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, isInCall else { return }
+        sendEvent(type: "context.update", payload: ["fact": trimmed])
+        callLog.notice("context fact sent (\(trimmed.count, privacy: .public) chars)")
     }
 
     func hangUp(reason: String? = nil) {
         guard state != .idle else { return }
+        stopRingback()
         stopAudioEngine()
         receiveTask?.cancel()
         receiveTask = nil
@@ -146,6 +166,64 @@ final class RealtimeCallController: ObservableObject {
         state = .idle
         startedAt = nil
     }
+
+    // MARK: - Ringback (嘟…嘟…)
+
+    private func startRingback() {
+        guard let player = try? AVAudioPlayer(data: Self.ringbackWAV) else { return }
+        player.numberOfLoops = -1
+        player.volume = 0.35
+        player.play()
+        ringbackPlayer = player
+    }
+
+    private func stopRingback() {
+        ringbackPlayer?.stop()
+        ringbackPlayer = nil
+    }
+
+    /// Standard Chinese ringback cadence: 450 Hz, 1s on / 4s off — rendered
+    /// once into a WAV the looping player can own.
+    nonisolated private static let ringbackWAV: Data = {
+        let sampleRate = 16_000
+        let toneSeconds = 1.0
+        let silenceSeconds = 4.0
+        let toneFrames = Int(Double(sampleRate) * toneSeconds)
+        let totalFrames = Int(Double(sampleRate) * (toneSeconds + silenceSeconds))
+        var samples = [Int16](repeating: 0, count: totalFrames)
+        let fadeFrames = 400
+        for frame in 0..<toneFrames {
+            let envelope: Double
+            if frame < fadeFrames {
+                envelope = Double(frame) / Double(fadeFrames)
+            } else if frame > toneFrames - fadeFrames {
+                envelope = Double(toneFrames - frame) / Double(fadeFrames)
+            } else {
+                envelope = 1
+            }
+            let value = sin(2 * .pi * 450 * Double(frame) / Double(sampleRate)) * envelope * 0.5
+            samples[frame] = Int16(value * Double(Int16.max))
+        }
+        var data = Data()
+        let byteCount = totalFrames * 2
+        func appendLE32(_ value: UInt32) { withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) } }
+        func appendLE16(_ value: UInt16) { withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) } }
+        data.append(contentsOf: Array("RIFF".utf8))
+        appendLE32(UInt32(36 + byteCount))
+        data.append(contentsOf: Array("WAVE".utf8))
+        data.append(contentsOf: Array("fmt ".utf8))
+        appendLE32(16)
+        appendLE16(1)
+        appendLE16(1)
+        appendLE32(UInt32(sampleRate))
+        appendLE32(UInt32(sampleRate * 2))
+        appendLE16(2)
+        appendLE16(16)
+        data.append(contentsOf: Array("data".utf8))
+        appendLE32(UInt32(byteCount))
+        samples.withUnsafeBytes { data.append(contentsOf: $0) }
+        return data
+    }()
 
     // MARK: - Receive loop
 
@@ -179,6 +257,7 @@ final class RealtimeCallController: ObservableObject {
         callLog.notice("event \(type, privacy: .public)")
         switch type {
         case "session.created":
+            stopRingback()
             state = .active
             startedAt = Date()
             // One continuous audio segment for the whole call; the server's
@@ -197,18 +276,25 @@ final class RealtimeCallController: ObservableObject {
 
         case "output_audio.start":
             assistantSpeaking = true
+            tapShared?.assistantPlaying = true
             let sampleRate = payload["sample_rate"] as? Double ?? 24_000
             preparePlayback(sampleRate: sampleRate)
 
         case "output_audio.done":
             assistantSpeaking = false
             openAssistantLineID = nil
+            // Keep the mic gated briefly past the end of playback: the tail
+            // of her voice is still in the room.
+            tapShared?.gateTailDeadline = Date().timeIntervalSince1970 + 0.5
+            tapShared?.assistantPlaying = false
 
         case "output_audio.stop":
             // Barge-in: drop everything queued and go quiet immediately.
             assistantSpeaking = false
             openAssistantLineID = nil
             playerNode.stop()
+            tapShared?.gateTailDeadline = Date().timeIntervalSince1970 + 0.3
+            tapShared?.assistantPlaying = false
 
         case "error":
             let message = payload["message"] as? String ?? "未知错误"
@@ -357,7 +443,9 @@ final class RealtimeCallController: ObservableObject {
             let sent = self.tapShared?.framesSent ?? 0
             let peak = self.tapShared?.peakAmplitude ?? 0
             callLog.notice("mic watchdog: sent=\(sent, privacy: .public) peak=\(peak, privacy: .public)")
-            if sent == 0 || peak == 0 {
+            // Peak is the dead-capture signal; framesSent can legitimately
+            // be 0 while the half-duplex gate holds during her greeting.
+            if peak == 0 {
                 callLog.notice("mic watchdog: capture is dead with VP — restarting without it")
                 self.restartAudioEngineWithoutVoiceProcessing()
             }
@@ -427,14 +515,23 @@ final class RealtimeCallController: ObservableObject {
             }
             let byteCount = Int(converted.frameLength) * MemoryLayout<Int16>.size
             let data = Data(bytes: channel[0], count: byteCount)
-            // Track the loudest sample (sparsely) so the watchdog can tell
-            // silence-from-a-broken-tap apart from a quiet room.
+            // Chunk peak (sparse): feeds the dead-capture watchdog AND the
+            // half-duplex gate below.
+            var chunkPeak: Int16 = 0
             var index = 0
             let frames = Int(converted.frameLength)
             while index < frames {
                 let amplitude = channel[0][index] == Int16.min ? Int16.max : abs(channel[0][index])
-                if amplitude > shared.peakAmplitude { shared.peakAmplitude = amplitude }
+                if amplitude > chunkPeak { chunkPeak = amplitude }
                 index += 16
+            }
+            if chunkPeak > shared.peakAmplitude { shared.peakAmplitude = chunkPeak }
+            // Anti-echo without VP: while her voice plays (plus a short
+            // tail), drop mic chunks unless they're loud enough to be the
+            // user deliberately talking over her.
+            let now = Date().timeIntervalSince1970
+            if shared.assistantPlaying || now < shared.gateTailDeadline {
+                if chunkPeak < TapShared.bargeInThreshold { return }
             }
             shared.framesSent += 1
             if shared.framesSent == 1 || shared.framesSent % 100 == 0 {
