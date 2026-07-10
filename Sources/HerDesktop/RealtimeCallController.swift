@@ -1,6 +1,10 @@
 import AVFoundation
 import Foundation
+import os
 import SwiftUI
+
+/// Call-path diagnostics: `log show --predicate 'subsystem == "her.call"'`.
+let callLog = Logger(subsystem: "her.call", category: "realtime")
 
 /// 打电话: one realtime voice call over the agentRealtime WebSocket
 /// (wss://agentrealtime.oyii.ai/v1/realtime).
@@ -45,9 +49,16 @@ final class RealtimeCallController: ObservableObject {
     final class TapShared: @unchecked Sendable {
         var muted = false
         var socket: URLSessionWebSocketTask?
+        var framesSent = 0
+        var sendErrorsLogged = 0
+        /// Loudest absolute sample seen so far — the mic watchdog reads this
+        /// to distinguish "quiet room" from "all-zero broken capture".
+        var peakAmplitude: Int16 = 0
     }
 
     private var tapShared: TapShared?
+    private var playbackChunks = 0
+    private var micWatchdog: Task<Void, Never>?
 
     private var webSocket: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
@@ -152,6 +163,7 @@ final class RealtimeCallController: ObservableObject {
               let type = object["type"] as? String else { return }
         let payload = object["payload"] as? [String: Any] ?? [:]
 
+        callLog.notice("event \(type, privacy: .public)")
         switch type {
         case "session.created":
             state = .active
@@ -245,13 +257,21 @@ final class RealtimeCallController: ObservableObject {
 
     // MARK: - Audio: microphone up
 
-    private func startAudioEngine() {
+    private func startAudioEngine(voiceProcessing: Bool = true) {
         let input = engine.inputNode
         // AEC: without voice processing the assistant hears herself through
-        // the speakers and barge-in fires on her own voice.
-        try? input.setVoiceProcessingEnabled(true)
+        // the speakers. But macOS VP is known to silently deliver all-zero
+        // audio in some configurations — the watchdog below detects that and
+        // restarts the engine without it.
+        do {
+            try input.setVoiceProcessingEnabled(voiceProcessing)
+            callLog.notice("voice processing set to \(voiceProcessing, privacy: .public)")
+        } catch {
+            callLog.error("voice processing toggle failed: \(error.localizedDescription, privacy: .public)")
+        }
 
         let hwFormat = input.outputFormat(forBus: 0)
+        callLog.notice("input hw format: \(hwFormat.sampleRate, privacy: .public) Hz, \(hwFormat.channelCount, privacy: .public) ch")
         guard hwFormat.sampleRate > 0,
               let targetFormat = AVAudioFormat(
                   commonFormat: .pcmFormatInt16,
@@ -264,7 +284,9 @@ final class RealtimeCallController: ObservableObject {
             return
         }
 
-        engine.attach(playerNode)
+        if !engine.attachedNodes.contains(playerNode) {
+            engine.attach(playerNode)
+        }
         engine.connect(playerNode, to: engine.mainMixerNode, format: nil)
 
         let shared = TapShared()
@@ -286,9 +308,41 @@ final class RealtimeCallController: ObservableObject {
         engine.prepare()
         do {
             try engine.start()
+            callLog.notice("audio engine started (vp=\(voiceProcessing, privacy: .public))")
         } catch {
+            callLog.error("engine start failed: \(error.localizedDescription, privacy: .public)")
             hangUp(reason: "音频引擎启动失败：\(error.localizedDescription)")
+            return
         }
+
+        // Mic watchdog: if voice processing produced literally nothing (no
+        // frames, or frames that are all-zero silence — the classic macOS VP
+        // failure), tear the engine down and run without it. Echo
+        // cancellation lost beats a dead microphone.
+        guard voiceProcessing else { return }
+        micWatchdog?.cancel()
+        micWatchdog = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            guard let self, !Task.isCancelled, self.isInCall else { return }
+            let sent = self.tapShared?.framesSent ?? 0
+            let peak = self.tapShared?.peakAmplitude ?? 0
+            callLog.notice("mic watchdog: sent=\(sent, privacy: .public) peak=\(peak, privacy: .public)")
+            if sent == 0 || peak == 0 {
+                callLog.notice("mic watchdog: capture is dead with VP — restarting without it")
+                self.restartAudioEngineWithoutVoiceProcessing()
+            }
+        }
+    }
+
+    /// VP delivered silence — rebuild the audio path with it disabled.
+    private func restartAudioEngineWithoutVoiceProcessing() {
+        engine.inputNode.removeTap(onBus: 0)
+        playerNode.stop()
+        if engine.isRunning {
+            engine.stop()
+        }
+        playbackFormat = nil
+        startAudioEngine(voiceProcessing: false)
     }
 
     /// Builds the mic tap callback in a nonisolated context. A closure formed
@@ -318,12 +372,42 @@ final class RealtimeCallController: ObservableObject {
                 status.pointee = .haveData
                 return buffer
             }
-            guard conversionError == nil,
-                  converted.frameLength > 0,
-                  let channel = converted.int16ChannelData else { return }
+            if let conversionError {
+                if shared.sendErrorsLogged < 3 {
+                    shared.sendErrorsLogged += 1
+                    callLog.error("mic convert failed: \(conversionError.localizedDescription, privacy: .public)")
+                }
+                return
+            }
+            guard converted.frameLength > 0,
+                  let channel = converted.int16ChannelData else {
+                if shared.sendErrorsLogged < 3 {
+                    shared.sendErrorsLogged += 1
+                    callLog.error("mic convert produced no frames (in \(buffer.frameLength, privacy: .public))")
+                }
+                return
+            }
             let byteCount = Int(converted.frameLength) * MemoryLayout<Int16>.size
             let data = Data(bytes: channel[0], count: byteCount)
-            shared.socket?.send(.data(data)) { _ in }
+            // Track the loudest sample (sparsely) so the watchdog can tell
+            // silence-from-a-broken-tap apart from a quiet room.
+            var index = 0
+            let frames = Int(converted.frameLength)
+            while index < frames {
+                let amplitude = channel[0][index] == Int16.min ? Int16.max : abs(channel[0][index])
+                if amplitude > shared.peakAmplitude { shared.peakAmplitude = amplitude }
+                index += 16
+            }
+            shared.framesSent += 1
+            if shared.framesSent == 1 || shared.framesSent % 100 == 0 {
+                callLog.notice("mic sent \(shared.framesSent, privacy: .public) chunks (last \(byteCount, privacy: .public)B)")
+            }
+            shared.socket?.send(.data(data)) { error in
+                if let error, shared.sendErrorsLogged < 3 {
+                    shared.sendErrorsLogged += 1
+                    callLog.error("mic send failed: \(error.localizedDescription, privacy: .public)")
+                }
+            }
         }
     }
 
@@ -357,12 +441,19 @@ final class RealtimeCallController: ObservableObject {
             }
         }
         playerNode.scheduleBuffer(buffer)
+        playbackChunks += 1
+        if playbackChunks == 1 || playbackChunks % 50 == 0 {
+            callLog.notice("playback chunk \(self.playbackChunks, privacy: .public) (\(frameCount, privacy: .public) frames @\(format.sampleRate, privacy: .public))")
+        }
         if !playerNode.isPlaying, engine.isRunning {
             playerNode.play()
+            callLog.notice("player started")
         }
     }
 
     private func stopAudioEngine() {
+        micWatchdog?.cancel()
+        micWatchdog = nil
         engine.inputNode.removeTap(onBus: 0)
         tapShared?.socket = nil
         tapShared = nil
