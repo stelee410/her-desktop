@@ -59,11 +59,17 @@ final class RealtimeCallController: ObservableObject {
     private var tapShared: TapShared?
     private var playbackChunks = 0
     private var micWatchdog: Task<Void, Never>?
+    /// Once VP proved dead on this machine, later calls skip it directly
+    /// instead of burning the watchdog delay again.
+    private var voiceProcessingBroken = false
 
     private var webSocket: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
-    private let engine = AVAudioEngine()
-    private let playerNode = AVAudioPlayerNode()
+    /// Rebuilt from scratch on the VP fallback: an engine whose voice
+    /// processing was toggled keeps a dirty graph and fails to restart
+    /// (kAudioUnitErr -10875).
+    private var engine = AVAudioEngine()
+    private var playerNode = AVAudioPlayerNode()
     private var playbackFormat: AVAudioFormat?
     /// Transcript lines still being streamed into (replaced per partial).
     private var openUserLineID: UUID?
@@ -171,7 +177,7 @@ final class RealtimeCallController: ObservableObject {
             // One continuous audio segment for the whole call; the server's
             // VAD segments turns by itself.
             sendEvent(type: "input_audio.start", payload: nil)
-            startAudioEngine()
+            startAudioEngine(voiceProcessing: !voiceProcessingBroken)
 
         case "asr.partial", "asr.final":
             let text = payload["text"] as? String ?? ""
@@ -334,13 +340,17 @@ final class RealtimeCallController: ObservableObject {
         }
     }
 
-    /// VP delivered silence — rebuild the audio path with it disabled.
+    /// VP delivered silence — rebuild the audio path with it disabled, on a
+    /// FRESH engine: reusing the toggled one fails to start (-10875).
     private func restartAudioEngineWithoutVoiceProcessing() {
+        voiceProcessingBroken = true
         engine.inputNode.removeTap(onBus: 0)
         playerNode.stop()
         if engine.isRunning {
             engine.stop()
         }
+        engine = AVAudioEngine()
+        playerNode = AVAudioPlayerNode()
         playbackFormat = nil
         startAudioEngine(voiceProcessing: false)
     }
