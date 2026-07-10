@@ -59,9 +59,15 @@ final class RealtimeCallController: ObservableObject {
     private var tapShared: TapShared?
     private var playbackChunks = 0
     private var micWatchdog: Task<Void, Never>?
-    /// Once VP proved dead on this machine, later calls skip it directly
-    /// instead of burning the watchdog delay again.
-    private var voiceProcessingBroken = false
+    /// Once VP proved dead on this machine, every later call — across
+    /// launches — skips it directly instead of burning the watchdog delay.
+    private var voiceProcessingBroken = UserDefaults.standard.bool(forKey: "call.voiceProcessingBroken") {
+        didSet { UserDefaults.standard.set(voiceProcessingBroken, forKey: "call.voiceProcessingBroken") }
+    }
+    /// Fallback engine-start retries within one call: the discarded VP
+    /// engine's VoiceIO unit can hold the audio device for a moment, failing
+    /// the fresh engine with -10875 until it's released.
+    private var engineStartRetries = 0
 
     private var webSocket: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
@@ -92,6 +98,7 @@ final class RealtimeCallController: ObservableObject {
         openAssistantLineID = nil
         assistantSpeaking = false
         isMuted = false
+        engineStartRetries = 0
         state = .connecting
 
         var components = URLComponents(url: Self.serviceURL, resolvingAgainstBaseURL: false)!
@@ -317,7 +324,24 @@ final class RealtimeCallController: ObservableObject {
             callLog.notice("audio engine started (vp=\(voiceProcessing, privacy: .public))")
         } catch {
             callLog.error("engine start failed: \(error.localizedDescription, privacy: .public)")
-            hangUp(reason: "音频引擎启动失败：\(error.localizedDescription)")
+            if voiceProcessing {
+                // VP couldn't even start — go straight to the fallback.
+                restartAudioEngineWithoutVoiceProcessing()
+            } else if engineStartRetries < 3 {
+                // The just-discarded VoiceIO unit may still hold the device;
+                // give CoreAudio a beat and try again on a fresh engine.
+                engineStartRetries += 1
+                callLog.notice("retrying engine start, attempt \(self.engineStartRetries, privacy: .public)")
+                Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: 400_000_000)
+                    guard let self, self.isInCall else { return }
+                    self.engine = AVAudioEngine()
+                    self.playerNode = AVAudioPlayerNode()
+                    self.startAudioEngine(voiceProcessing: false)
+                }
+            } else {
+                hangUp(reason: "音频引擎启动失败：\(error.localizedDescription)")
+            }
             return
         }
 
@@ -349,6 +373,10 @@ final class RealtimeCallController: ObservableObject {
         if engine.isRunning {
             engine.stop()
         }
+        // Release the VoiceIO unit deterministically BEFORE the fresh engine
+        // initializes its IO — a lingering VP unit holds the device and
+        // fails the new engine with -10875.
+        try? engine.inputNode.setVoiceProcessingEnabled(false)
         engine = AVAudioEngine()
         playerNode = AVAudioPlayerNode()
         playbackFormat = nil
