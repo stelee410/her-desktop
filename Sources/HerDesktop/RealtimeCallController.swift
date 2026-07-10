@@ -41,7 +41,8 @@ final class RealtimeCallController: ObservableObject {
     /// @MainActor object — accessing an isolated property from the render
     /// thread trips the runtime isolation assert (SIGTRAP). Main writes,
     /// audio thread reads; Bool/reference reads are tear-free.
-    private final class TapShared: @unchecked Sendable {
+    /// Internal (not private) so tests can drive the tap block off-main.
+    final class TapShared: @unchecked Sendable {
         var muted = false
         var socket: URLSessionWebSocketTask?
     }
@@ -270,10 +271,40 @@ final class RealtimeCallController: ObservableObject {
         shared.muted = isMuted
         shared.socket = webSocket
         tapShared = shared
-        input.installTap(onBus: 0, bufferSize: 2_048, format: hwFormat) { buffer, _ in
-            // Audio thread: only `shared` (non-isolated) may be touched here.
+        input.installTap(
+            onBus: 0,
+            bufferSize: 2_048,
+            format: hwFormat,
+            block: Self.makeMicTapBlock(
+                shared: shared,
+                converter: converter,
+                targetFormat: targetFormat,
+                sourceSampleRate: hwFormat.sampleRate
+            )
+        )
+
+        engine.prepare()
+        do {
+            try engine.start()
+        } catch {
+            hangUp(reason: "音频引擎启动失败：\(error.localizedDescription)")
+        }
+    }
+
+    /// Builds the mic tap callback in a nonisolated context. A closure formed
+    /// inside a @MainActor method inherits main-actor isolation (AVFAudio's
+    /// tap block isn't @Sendable, so it doesn't opt out), and the runtime
+    /// isolation assert then SIGTRAPs the audio thread the moment the tap
+    /// fires — even if the body never touches actor state.
+    nonisolated static func makeMicTapBlock(
+        shared: TapShared,
+        converter: AVAudioConverter,
+        targetFormat: AVAudioFormat,
+        sourceSampleRate: Double
+    ) -> (AVAudioPCMBuffer, AVAudioTime) -> Void {
+        { buffer, _ in
             if shared.muted { return }
-            let ratio = targetFormat.sampleRate / hwFormat.sampleRate
+            let ratio = targetFormat.sampleRate / sourceSampleRate
             let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 32
             guard let converted = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: capacity) else { return }
             var pulled = false
@@ -293,13 +324,6 @@ final class RealtimeCallController: ObservableObject {
             let byteCount = Int(converted.frameLength) * MemoryLayout<Int16>.size
             let data = Data(bytes: channel[0], count: byteCount)
             shared.socket?.send(.data(data)) { _ in }
-        }
-
-        engine.prepare()
-        do {
-            try engine.start()
-        } catch {
-            hangUp(reason: "音频引擎启动失败：\(error.localizedDescription)")
         }
     }
 
