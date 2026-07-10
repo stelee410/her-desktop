@@ -14,6 +14,30 @@ enum RoleplayImageCache {
         cache.setObject(image, forKey: key)
         return image
     }
+
+    /// A pre-scaled thumbnail. Small UI slots must NOT receive the full
+    /// image: some hosts (Menu labels, for one) size by the image's native
+    /// dimensions and blow a photo up over the whole window.
+    static func thumbnail(at url: URL, maxDimension: CGFloat) -> NSImage? {
+        let key = "\(url.path)#thumb\(Int(maxDimension))" as NSString
+        if let hit = cache.object(forKey: key) { return hit }
+        guard let full = image(at: url) else { return nil }
+        let size = full.size
+        guard size.width > 0, size.height > 0 else { return nil }
+        let scale = min(1, maxDimension / max(size.width, size.height))
+        let target = NSSize(width: size.width * scale, height: size.height * scale)
+        let thumb = NSImage(size: target)
+        thumb.lockFocus()
+        full.draw(
+            in: NSRect(origin: .zero, size: target),
+            from: .zero,
+            operation: .copy,
+            fraction: 1
+        )
+        thumb.unlockFocus()
+        cache.setObject(thumb, forKey: key)
+        return thumb
+    }
 }
 
 /// Runs the shared security-scope dance for a fileImporter pick and imports
@@ -378,21 +402,19 @@ private struct WorldBookEditor: View {
                 Spacer()
 
                 // Chat background: shown behind the transcript of any
-                // conversation that adopts this world.
-                Menu {
-                    Button(book.backgroundPath.isEmpty ? "选择背景图片…" : "更换背景图片…") {
-                        isPickingBackground = true
-                    }
-                    if !book.backgroundPath.isEmpty {
-                        Button("移除背景") { book.backgroundPath = "" }
-                    }
+                // conversation that adopts this world. A plain Button with a
+                // pre-scaled thumbnail — an image inside a Menu label renders
+                // at native size on macOS and covered the whole editor.
+                Button {
+                    isPickingBackground = true
                 } label: {
                     if let url = model.roleplayAssetURL(book.backgroundPath),
-                       let backdrop = RoleplayImageCache.image(at: url) {
+                       let backdrop = RoleplayImageCache.thumbnail(at: url, maxDimension: 152) {
                         Image(nsImage: backdrop)
                             .resizable()
                             .scaledToFill()
                             .frame(width: 76, height: 46)
+                            .clipped()
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
@@ -411,10 +433,23 @@ private struct WorldBookEditor: View {
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                 }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .help("启用这个世界的会话，聊天区会铺上这张背景")
+                .buttonStyle(.plain)
+                .overlay(alignment: .topTrailing) {
+                    if !book.backgroundPath.isEmpty {
+                        Button {
+                            book.backgroundPath = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 12))
+                                .foregroundStyle(AppTheme.muted)
+                                .background(Circle().fill(.white))
+                        }
+                        .buttonStyle(.plain)
+                        .offset(x: 5, y: -5)
+                        .help("移除背景")
+                    }
+                }
+                .help("启用这个世界的会话，聊天区会铺上这张背景；点击更换")
                 .fileImporter(isPresented: $isPickingBackground, allowedContentTypes: [.image]) { result in
                     if let name = importPickedRoleplayImage(result, prefix: "backdrop", model: model) {
                         book.backgroundPath = name
