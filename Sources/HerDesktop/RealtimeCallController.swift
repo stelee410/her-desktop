@@ -1,3 +1,4 @@
+import Accelerate
 import AVFoundation
 import Foundation
 import os
@@ -68,6 +69,9 @@ final class RealtimeCallController: ObservableObject {
     private var micWatchdog: Task<Void, Never>?
     /// 嘟…嘟… while the session is being established.
     private var ringbackPlayer: AVAudioPlayer?
+    /// 反向声波: software AEC used when system voice processing is broken —
+    /// the engine's real output is the reference subtracted from the mic.
+    private let echoCanceller = CallEchoCanceller()
     /// Once VP proved dead on this machine, every later call — across
     /// launches — skips it directly instead of burning the watchdog delay.
     private var voiceProcessingBroken = UserDefaults.standard.bool(forKey: "call.voiceProcessingBroken") {
@@ -392,6 +396,10 @@ final class RealtimeCallController: ObservableObject {
         shared.muted = isMuted
         shared.socket = webSocket
         tapShared = shared
+        // Software AEC only when the system's voice processing is off; VP
+        // does its own echo cancellation.
+        let canceller: CallEchoCanceller? = voiceProcessing ? nil : echoCanceller
+        canceller?.reset()
         input.installTap(
             onBus: 0,
             bufferSize: 2_048,
@@ -400,9 +408,33 @@ final class RealtimeCallController: ObservableObject {
                 shared: shared,
                 converter: converter,
                 targetFormat: targetFormat,
-                sourceSampleRate: hwFormat.sampleRate
+                sourceSampleRate: hwFormat.sampleRate,
+                canceller: canceller
             )
         )
+        if let canceller {
+            let mixerFormat = engine.mainMixerNode.outputFormat(forBus: 0)
+            if let referenceFormat = AVAudioFormat(
+                   commonFormat: .pcmFormatFloat32,
+                   sampleRate: 16_000,
+                   channels: 1,
+                   interleaved: true
+               ),
+               let referenceConverter = AVAudioConverter(from: mixerFormat, to: referenceFormat) {
+                engine.mainMixerNode.installTap(
+                    onBus: 0,
+                    bufferSize: 1_024,
+                    format: mixerFormat,
+                    block: Self.makeOutputTapBlock(
+                        canceller: canceller,
+                        converter: referenceConverter,
+                        referenceFormat: referenceFormat,
+                        sourceSampleRate: mixerFormat.sampleRate
+                    )
+                )
+                callLog.notice("software AEC armed (mixer @\(mixerFormat.sampleRate, privacy: .public))")
+            }
+        }
 
         engine.prepare()
         do {
@@ -480,7 +512,8 @@ final class RealtimeCallController: ObservableObject {
         shared: TapShared,
         converter: AVAudioConverter,
         targetFormat: AVAudioFormat,
-        sourceSampleRate: Double
+        sourceSampleRate: Double,
+        canceller: CallEchoCanceller?
     ) -> (AVAudioPCMBuffer, AVAudioTime) -> Void {
         { buffer, _ in
             if shared.muted { return }
@@ -513,29 +546,42 @@ final class RealtimeCallController: ObservableObject {
                 }
                 return
             }
-            let byteCount = Int(converted.frameLength) * MemoryLayout<Int16>.size
-            let data = Data(bytes: channel[0], count: byteCount)
-            // Chunk peak (sparse): feeds the dead-capture watchdog AND the
-            // half-duplex gate below.
-            var chunkPeak: Int16 = 0
-            var index = 0
             let frames = Int(converted.frameLength)
-            while index < frames {
-                let amplitude = channel[0][index] == Int16.min ? Int16.max : abs(channel[0][index])
-                if amplitude > chunkPeak { chunkPeak = amplitude }
-                index += 16
-            }
+
+            // 反向声波: subtract the predicted speaker echo before anything
+            // else judges the chunk.
+            var samples = [Float](repeating: 0, count: frames)
+            vDSP_vflt16(channel[0], 1, &samples, 1, vDSP_Length(frames))
+            var toUnit: Float = 1.0 / 32_768.0
+            vDSP_vsmul(samples, 1, &toUnit, &samples, 1, vDSP_Length(frames))
+            canceller?.process(&samples)
+
+            var unitPeak: Float = 0
+            vDSP_maxmgv(samples, 1, &unitPeak, vDSP_Length(frames))
+            let chunkPeak = Int16(min(unitPeak * 32_767, 32_767))
             if chunkPeak > shared.peakAmplitude { shared.peakAmplitude = chunkPeak }
-            // Anti-echo without VP: while her voice plays (plus a short
-            // tail), drop mic chunks unless they're loud enough to be the
-            // user deliberately talking over her.
+
+            // Half-duplex gate, now the FALLBACK layer: once the canceller
+            // demonstrably converged, soft speech may pass; before that the
+            // conservative threshold holds.
             let now = Date().timeIntervalSince1970
             if shared.assistantPlaying || now < shared.gateTailDeadline {
-                if chunkPeak < TapShared.bargeInThreshold { return }
+                let threshold: Int16 = (canceller?.isConverged == true) ? 2_500 : TapShared.bargeInThreshold
+                if chunkPeak < threshold { return }
             }
+
+            // Back to little-endian PCM16 for the wire.
+            var toPCM: Float = 32_767
+            vDSP_vsmul(samples, 1, &toPCM, &samples, 1, vDSP_Length(frames))
+            var low: Float = -32_768
+            var high: Float = 32_767
+            vDSP_vclip(samples, 1, &low, &high, &samples, 1, vDSP_Length(frames))
+            var pcm = [Int16](repeating: 0, count: frames)
+            vDSP_vfix16(samples, 1, &pcm, 1, vDSP_Length(frames))
+            let data = pcm.withUnsafeBufferPointer { Data(buffer: $0) }
             shared.framesSent += 1
             if shared.framesSent == 1 || shared.framesSent % 100 == 0 {
-                callLog.notice("mic sent \(shared.framesSent, privacy: .public) chunks (last \(byteCount, privacy: .public)B)")
+                callLog.notice("mic sent \(shared.framesSent, privacy: .public) chunks (last \(data.count, privacy: .public)B)")
             }
             shared.socket?.send(.data(data)) { error in
                 if let error, shared.sendErrorsLogged < 3 {
@@ -543,6 +589,35 @@ final class RealtimeCallController: ObservableObject {
                     callLog.error("mic send failed: \(error.localizedDescription, privacy: .public)")
                 }
             }
+        }
+    }
+
+    /// Builds the OUTPUT tap (nonisolated for the same SIGTRAP reason as the
+    /// mic tap): converts what is actually playing to 16 kHz mono float and
+    /// feeds it to the canceller as the echo reference.
+    nonisolated static func makeOutputTapBlock(
+        canceller: CallEchoCanceller,
+        converter: AVAudioConverter,
+        referenceFormat: AVAudioFormat,
+        sourceSampleRate: Double
+    ) -> (AVAudioPCMBuffer, AVAudioTime) -> Void {
+        { buffer, _ in
+            let ratio = referenceFormat.sampleRate / sourceSampleRate
+            let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 32
+            guard let converted = AVAudioPCMBuffer(pcmFormat: referenceFormat, frameCapacity: capacity) else { return }
+            var pulled = false
+            converter.convert(to: converted, error: nil) { _, status in
+                if pulled {
+                    status.pointee = .noDataNow
+                    return nil
+                }
+                pulled = true
+                status.pointee = .haveData
+                return buffer
+            }
+            let frames = Int(converted.frameLength)
+            guard frames > 0, let channel = converted.floatChannelData else { return }
+            canceller.writeReference(UnsafeBufferPointer(start: channel[0], count: frames))
         }
     }
 
@@ -590,6 +665,7 @@ final class RealtimeCallController: ObservableObject {
         micWatchdog?.cancel()
         micWatchdog = nil
         engine.inputNode.removeTap(onBus: 0)
+        engine.mainMixerNode.removeTap(onBus: 0)
         tapShared?.socket = nil
         tapShared = nil
         playerNode.stop()

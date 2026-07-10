@@ -132,11 +132,17 @@ extension AppViewModel {
         guard config.hasLLMKey else { return }
         callMemoTask = Task { [weak self] in
             var digestedLines = 0
+            var isFirstPass = true
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 40_000_000_000)
+                // First pass joins 10s in so early facts (names, plans
+                // mentioned right away) reach the session quickly; later
+                // passes batch every 30s.
+                try? await Task.sleep(nanoseconds: isFirstPass ? 10_000_000_000 : 30_000_000_000)
                 guard let self, !Task.isCancelled, self.callController.isInCall else { return }
                 let lines = self.callController.transcript
-                guard lines.count - digestedLines >= 4 else { continue }
+                let minimumFresh = isFirstPass ? 2 : 4
+                isFirstPass = false
+                guard lines.count - digestedLines >= minimumFresh else { continue }
                 let fresh = Array(lines.suffix(from: digestedLines))
                 digestedLines = lines.count
                 let excerpt = Self.callTranscriptText(lines: fresh, partnerName: self.activeCharacterCard?.name ?? "她")
