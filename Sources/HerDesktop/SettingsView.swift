@@ -43,8 +43,12 @@ struct SettingsView: View {
             Divider()
 
             ScrollView {
-                HerConfigurationFields(draft: $draft, presentation: .settings)
-                    .padding(.trailing, 8)
+                VStack(alignment: .leading, spacing: 16) {
+                    HerConfigurationFields(draft: $draft, presentation: .settings)
+                    Divider()
+                    VoiceprintSettingsSection()
+                }
+                .padding(.trailing, 8)
             }
 
             if let lastError = model.lastError {
@@ -118,6 +122,68 @@ struct SettingsView: View {
             return AppTheme.coral
         case .offline:
             return AppTheme.muted
+        }
+    }
+}
+
+private struct VoiceprintSettingsSection: View {
+    @EnvironmentObject private var model: AppViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("声纹识别（本地）", systemImage: "person.wave.2")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppTheme.ink)
+            if let profile = model.voiceprintProfile {
+                Toggle(
+                    "通话时只接受我的声音",
+                    isOn: Binding(
+                        get: { profile.enabled },
+                        set: { model.setVoiceprintEnabled($0) }
+                    )
+                )
+                Text("已录入 · \(profile.createdAt.formatted(date: .abbreviated, time: .shortened)) · 模板仅保存在本机")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.muted)
+            } else {
+                Text("尚未录入。录入后，每段语音会先在本机匹配，只有匹配的声音才会发送给通话服务。")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.muted)
+            }
+            if model.isEnrollingVoiceprint {
+                ProgressView(value: Double(model.voiceprintEnrollmentProgress), total: 100)
+                ProgressView(
+                    value: min(Double(model.voiceprintEnrollmentLevel) / 1_200, 1),
+                    label: { Text("麦克风音量") }
+                )
+                Text(
+                    "\(model.voiceprintEnrollmentProgress)% · "
+                    + (model.voiceprintEnrollmentLevel >= EnrollmentCollector.minimumVoiceLevel
+                       ? "已检测到说话声"
+                       : "声音偏低，请靠近麦克风")
+                    + " · 有效语音 \(String(format: "%.1f", Double(model.voiceprintEnrollmentVoicedMilliseconds) / 1_000)) 秒"
+                )
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.muted)
+            }
+            HStack {
+                Button(model.voiceprintProfile == nil ? "录入声纹" : "重新录入") {
+                    Task { await model.enrollVoiceprint() }
+                }
+                .disabled(model.isEnrollingVoiceprint || model.isCallPresented)
+                if model.voiceprintProfile != nil {
+                    Button("删除声纹", role: .destructive) { model.clearVoiceprint() }
+                        .disabled(model.isEnrollingVoiceprint)
+                }
+            }
+            if !model.voiceprintEnrollmentStatus.isEmpty {
+                Text(model.voiceprintEnrollmentStatus)
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.muted)
+            }
+            Text("轻量过滤，不属于安全认证，无法防止他人播放你的录音。首次匹配会带来约 1.5 秒延迟。")
+                .font(.caption2)
+                .foregroundStyle(AppTheme.muted)
         }
     }
 }

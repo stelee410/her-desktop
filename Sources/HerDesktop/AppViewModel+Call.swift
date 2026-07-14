@@ -16,6 +16,10 @@ extension AppViewModel {
         agentLLMSpeechSynthesizer.stop()
         speakingMessageID = nil
 
+        callController.configureVoiceprint(
+            voiceprintProfile?.enabled == true ? voiceprintProfile?.embedding : nil
+        )
+
         isCallPresented = true
         callController.start(
             apiKey: config.agentRealtimeAPIKey,

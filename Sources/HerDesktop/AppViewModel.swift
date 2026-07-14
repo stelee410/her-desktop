@@ -235,6 +235,14 @@ final class AppViewModel: ObservableObject, AuditRecording {
     /// 打电话: realtime voice call over agentRealtime. See AppViewModel+Call.
     @Published var isCallPresented = false
     lazy var callController = RealtimeCallController()
+    let voiceprintStore: VoiceprintProfileStore
+    let voiceprintEnrollmentService = VoiceprintEnrollmentService()
+    @Published var voiceprintProfile: VoiceprintProfile?
+    @Published var voiceprintEnrollmentProgress = 0
+    @Published var voiceprintEnrollmentLevel = 0
+    @Published var voiceprintEnrollmentVoicedMilliseconds = 0
+    @Published var voiceprintEnrollmentStatus = ""
+    @Published var isEnrollingVoiceprint = false
     /// The in-call memo agent: periodically distills the live transcript
     /// into facts injected back into the realtime session.
     var callMemoTask: Task<Void, Never>?
@@ -312,6 +320,9 @@ final class AppViewModel: ObservableObject, AuditRecording {
     ) {
         let loaded = explicitConfig ?? ConfigLoader.load(cwd: cwd)
         self.runtimeCwd = cwd
+        let voiceprintStore = VoiceprintProfileStore(cwd: cwd)
+        self.voiceprintStore = voiceprintStore
+        self.voiceprintProfile = voiceprintStore.load()
         self.config = loaded
         self.agentMem = AgentMemClient(config: loaded, session: urlSession)
         self.agentLLM = agentLLM ?? AgentLLMClient(config: loaded, session: urlSession)

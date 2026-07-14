@@ -7,6 +7,47 @@ import SwiftUI
 /// Call-path diagnostics: `log show --predicate 'subsystem == "her.call"'`.
 let callLog = Logger(subsystem: "her.call", category: "realtime")
 
+/// URLSession does not guarantee that a WebSocket is open immediately after
+/// `resume()`. Route all protocol traffic through the delegate's didOpen
+/// callback so a slow handshake cannot race `session.start` / `receive()`.
+private final class RealtimeSocketDelegate: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
+    typealias OpenHandler = @Sendable (URLSessionWebSocketTask) -> Void
+    typealias CloseHandler = @Sendable (URLSessionWebSocketTask, URLSessionWebSocketTask.CloseCode) -> Void
+    typealias FailureHandler = @Sendable (URLSessionWebSocketTask, Error) -> Void
+
+    private let onOpen: OpenHandler
+    private let onClose: CloseHandler
+    private let onFailure: FailureHandler
+
+    init(onOpen: @escaping OpenHandler, onClose: @escaping CloseHandler, onFailure: @escaping FailureHandler) {
+        self.onOpen = onOpen
+        self.onClose = onClose
+        self.onFailure = onFailure
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        webSocketTask: URLSessionWebSocketTask,
+        didOpenWithProtocol protocol: String?
+    ) {
+        onOpen(webSocketTask)
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        webSocketTask: URLSessionWebSocketTask,
+        didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
+        reason: Data?
+    ) {
+        onClose(webSocketTask, closeCode)
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        guard let error, let webSocketTask = task as? URLSessionWebSocketTask else { return }
+        onFailure(webSocketTask, error)
+    }
+}
+
 /// 打电话: one realtime voice call over the agentRealtime WebSocket
 /// (wss://agentrealtime.oyii.ai/v1/realtime).
 ///
@@ -56,15 +97,33 @@ final class RealtimeCallController: ObservableObject {
         /// to distinguish "quiet room" from "all-zero broken capture".
         var peakAmplitude: Int16 = 0
         /// Half-duplex anti-echo (no VP on this machine): while assistant
-        /// audio plays — plus a short tail — mic chunks are dropped unless
-        /// they're loud enough to be deliberate barge-in speech rather than
-        /// speaker bleed.
+        /// audio plays — plus a short tail — mic chunks are dropped. The
+        /// deadline follows LOCAL scheduled playback, not output_audio.done
+        /// (that event only means the server finished sending bytes).
         var assistantPlaying = false
+        var scheduledPlaybackEnd: TimeInterval = 0
         var gateTailDeadline: TimeInterval = 0
-        static let bargeInThreshold: Int16 = 6_000
+        var voiceprintGate: CallVoiceprintGate?
+        static let playbackTail: TimeInterval = 0.75
+
+        func schedulePlayback(duration: TimeInterval, now: TimeInterval) {
+            scheduledPlaybackEnd = max(scheduledPlaybackEnd, now) + max(0, duration)
+            gateTailDeadline = scheduledPlaybackEnd + Self.playbackTail
+        }
+
+        func stopPlayback(now: TimeInterval, tail: TimeInterval) {
+            scheduledPlaybackEnd = now
+            gateTailDeadline = now + tail
+            assistantPlaying = false
+        }
+
+        func shouldDropMicrophone(at now: TimeInterval) -> Bool {
+            assistantPlaying || now < gateTailDeadline
+        }
     }
 
     private var tapShared: TapShared?
+    private var voiceprintEmbedding: [Float]?
     private var playbackChunks = 0
     private var micWatchdog: Task<Void, Never>?
     /// 嘟…嘟… while the session is being established.
@@ -83,7 +142,12 @@ final class RealtimeCallController: ObservableObject {
     private var engineStartRetries = 0
 
     private var webSocket: URLSessionWebSocketTask?
+    private var webSocketSession: URLSession?
+    private var webSocketDelegate: RealtimeSocketDelegate?
     private var receiveTask: Task<Void, Never>?
+    private var connectionTimeoutTask: Task<Void, Never>?
+    private var socketCloseGraceTask: Task<Void, Never>?
+    private var pendingSessionStartPayload: [String: Any]?
     /// Rebuilt from scratch on the VP fallback: an engine whose voice
     /// processing was toggled keeps a dirty graph and fails to restart
     /// (kAudioUnitErr -10875).
@@ -98,6 +162,10 @@ final class RealtimeCallController: ObservableObject {
 
     var duration: TimeInterval {
         startedAt.map { Date().timeIntervalSince($0) } ?? 0
+    }
+
+    func configureVoiceprint(_ embedding: [Float]?) {
+        voiceprintEmbedding = embedding?.isEmpty == false ? embedding : nil
     }
 
     // MARK: - Lifecycle
@@ -116,11 +184,7 @@ final class RealtimeCallController: ObservableObject {
 
         var components = URLComponents(url: Self.serviceURL, resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "api_key", value: apiKey)]
-        let task = URLSession.shared.webSocketTask(with: components.url!)
-        webSocket = task
-        task.resume()
-
-        sendEvent(type: "session.start", payload: [
+        pendingSessionStartPayload = [
             "agent_id": "omnia_default",
             "mode": "realtime",
             "model_profile": modelProfile.isEmpty ? "realtime_doubao" : modelProfile,
@@ -134,12 +198,80 @@ final class RealtimeCallController: ObservableObject {
             "instructions": instructions,
             "voice": voice.isEmpty ? nil : voice,
             "client": ["type": "macos", "version": "0.1.0"]
-        ])
+        ]
+        let delegate = RealtimeSocketDelegate(
+            onOpen: { [weak self] task in
+                Task { @MainActor in self?.socketDidOpen(task) }
+            },
+            onClose: { [weak self] task, code in
+                Task { @MainActor in self?.socketDidClose(task, code: code) }
+            },
+            onFailure: { [weak self] task, error in
+                Task { @MainActor in self?.socketDidFail(task, error: error) }
+            }
+        )
+        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        let task = session.webSocketTask(with: components.url!)
+        webSocketDelegate = delegate
+        webSocketSession = session
+        webSocket = task
+        task.resume()
+        connectionTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+            guard let self, !Task.isCancelled, self.state == .connecting else { return }
+            self.hangUp(reason: "连接通话服务超时，请检查网络后重试。")
+        }
+        startRingback()
+    }
 
+    private func socketDidOpen(_ task: URLSessionWebSocketTask) {
+        guard task === webSocket, state == .connecting, let payload = pendingSessionStartPayload else { return }
+        callLog.notice("websocket opened")
+        pendingSessionStartPayload = nil
+        // Start receiving before session.start. The server can reject a
+        // session immediately (for example insufficient credits) and close
+        // right after the error frame; sending first loses that real reason.
         receiveTask = Task { [weak self] in
             await self?.receiveLoop(task)
         }
-        startRingback()
+        sendEvent(type: "session.start", payload: payload)
+    }
+
+    private func socketDidClose(_ task: URLSessionWebSocketTask, code: URLSessionWebSocketTask.CloseCode) {
+        guard task === webSocket, isInCall else { return }
+        callLog.error("websocket closed code=\(code.rawValue, privacy: .public)")
+        // Give receiveLoop a moment to consume a final structured error frame.
+        // If it does, hangUp records that useful message and this task becomes
+        // a no-op because the call is already ended.
+        socketCloseGraceTask?.cancel()
+        socketCloseGraceTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard let self, !Task.isCancelled, task === self.webSocket, self.isInCall else { return }
+            self.hangUp(reason: "通话服务关闭了连接（代码 \(code.rawValue)），请重试。")
+        }
+    }
+
+    private func socketDidFail(_ task: URLSessionWebSocketTask, error: Error) {
+        guard task === webSocket, isInCall else { return }
+        callLog.error("websocket failed: \(error.localizedDescription, privacy: .public)")
+        hangUp(reason: Self.friendlyConnectionError(error))
+    }
+
+    nonisolated static func friendlyConnectionError(_ error: Error) -> String {
+        let nsError = error as NSError
+        switch (nsError.domain, nsError.code) {
+        case (NSURLErrorDomain, NSURLErrorTimedOut):
+            return "连接通话服务超时，请重试。"
+        case (NSURLErrorDomain, NSURLErrorNotConnectedToInternet):
+            return "当前网络不可用，请检查网络连接。"
+        case (NSURLErrorDomain, NSURLErrorNetworkConnectionLost):
+            return "网络连接中断，请重试。"
+        default:
+            if nsError.localizedDescription.localizedCaseInsensitiveContains("socket is not connected") {
+                return "尚未连接到通话服务，请重试。"
+            }
+            return "连接断开：\(nsError.localizedDescription)"
+        }
     }
 
     /// Injects a one-line fact into the session's working memory
@@ -151,18 +283,34 @@ final class RealtimeCallController: ObservableObject {
         callLog.notice("context fact sent (\(trimmed.count, privacy: .public) chars)")
     }
 
-    func hangUp(reason: String? = nil) {
+    func hangUp(reason: String? = nil, replacingGenericEndReason: Bool = false) {
         guard state != .idle else { return }
+        if case .ended = state {
+            // A transport failure and the server's final structured error can
+            // arrive on separate URLSession callbacks.  Preserve the later,
+            // actionable server reason instead of leaving the user with a
+            // generic "socket is not connected" message.
+            if replacingGenericEndReason {
+                state = .ended(reason: reason)
+            }
+            return
+        }
+        state = .ended(reason: reason)
         stopRingback()
         stopAudioEngine()
+        connectionTimeoutTask?.cancel()
+        connectionTimeoutTask = nil
+        socketCloseGraceTask?.cancel()
+        socketCloseGraceTask = nil
         receiveTask?.cancel()
         receiveTask = nil
+        pendingSessionStartPayload = nil
         webSocket?.cancel(with: .goingAway, reason: nil)
         webSocket = nil
+        webSocketSession?.invalidateAndCancel()
+        webSocketSession = nil
+        webSocketDelegate = nil
         assistantSpeaking = false
-        if case .ended = state {} else {
-            state = .ended(reason: reason)
-        }
     }
 
     func reset() {
@@ -245,7 +393,7 @@ final class RealtimeCallController: ObservableObject {
                 }
             } catch {
                 if !Task.isCancelled, isInCall {
-                    hangUp(reason: "连接断开：\(error.localizedDescription)")
+                    hangUp(reason: Self.friendlyConnectionError(error))
                 }
                 return
             }
@@ -261,6 +409,8 @@ final class RealtimeCallController: ObservableObject {
         callLog.notice("event \(type, privacy: .public)")
         switch type {
         case "session.created":
+            connectionTimeoutTask?.cancel()
+            connectionTimeoutTask = nil
             stopRingback()
             state = .active
             startedAt = Date()
@@ -287,9 +437,15 @@ final class RealtimeCallController: ObservableObject {
         case "output_audio.done":
             assistantSpeaking = false
             openAssistantLineID = nil
-            // Keep the mic gated briefly past the end of playback: the tail
-            // of her voice is still in the room.
-            tapShared?.gateTailDeadline = Date().timeIntervalSince1970 + 0.5
+            // This means the server finished SENDING audio, not that the
+            // locally queued player buffers finished. playAudioChunk tracks
+            // their real duration and keeps the microphone closed.
+            if let shared = tapShared {
+                shared.gateTailDeadline = max(
+                    shared.gateTailDeadline,
+                    Date().timeIntervalSince1970 + 0.5
+                )
+            }
             tapShared?.assistantPlaying = false
 
         case "output_audio.stop":
@@ -297,14 +453,22 @@ final class RealtimeCallController: ObservableObject {
             assistantSpeaking = false
             openAssistantLineID = nil
             playerNode.stop()
-            tapShared?.gateTailDeadline = Date().timeIntervalSince1970 + 0.3
-            tapShared?.assistantPlaying = false
+            tapShared?.stopPlayback(now: Date().timeIntervalSince1970, tail: 0.3)
 
         case "error":
             let message = payload["message"] as? String ?? "未知错误"
+            let code = payload["code"] as? String ?? "unknown"
             let recoverable = payload["recoverable"] as? Bool ?? false
-            if !recoverable {
-                hangUp(reason: message)
+            callLog.error("server error code=\(code, privacy: .public) recoverable=\(recoverable, privacy: .public) message=\(message, privacy: .public)")
+            // A depleted account cannot recover inside this socket even if a
+            // backend version labels the event recoverable.  End immediately
+            // with the actionable reason before the server's close produces a
+            // generic transport error.
+            if code == "insufficient_credits" || !recoverable {
+                hangUp(
+                    reason: code == "insufficient_credits" ? "余额不足，请充值后再试。" : message,
+                    replacingGenericEndReason: true
+                )
             }
 
         default:
@@ -395,6 +559,10 @@ final class RealtimeCallController: ObservableObject {
         let shared = TapShared()
         shared.muted = isMuted
         shared.socket = webSocket
+        if let voiceprintEmbedding {
+            shared.voiceprintGate = CallVoiceprintGate(enrolled: voiceprintEmbedding)
+            callLog.notice("voiceprint gate enabled")
+        }
         tapShared = shared
         // Software AEC only when the system's voice processing is off; VP
         // does its own echo cancellation.
@@ -561,14 +729,12 @@ final class RealtimeCallController: ObservableObject {
             let chunkPeak = Int16(min(unitPeak * 32_767, 32_767))
             if chunkPeak > shared.peakAmplitude { shared.peakAmplitude = chunkPeak }
 
-            // Half-duplex gate, now the FALLBACK layer: once the canceller
-            // demonstrably converged, soft speech may pass; before that the
-            // conservative threshold holds.
+            // Hard half-duplex gate. A loud speaker echo can be louder than
+            // deliberate barge-in speech, so amplitude thresholds cannot
+            // reliably distinguish them and were the source of self-talk
+            // loops. Re-open only after locally scheduled audio + room tail.
             let now = Date().timeIntervalSince1970
-            if shared.assistantPlaying || now < shared.gateTailDeadline {
-                let threshold: Int16 = (canceller?.isConverged == true) ? 2_500 : TapShared.bargeInThreshold
-                if chunkPeak < threshold { return }
-            }
+            if shared.shouldDropMicrophone(at: now) { return }
 
             // Back to little-endian PCM16 for the wire.
             var toPCM: Float = 32_767
@@ -579,14 +745,21 @@ final class RealtimeCallController: ObservableObject {
             var pcm = [Int16](repeating: 0, count: frames)
             vDSP_vfix16(samples, 1, &pcm, 1, vDSP_Length(frames))
             let data = pcm.withUnsafeBufferPointer { Data(buffer: $0) }
-            shared.framesSent += 1
-            if shared.framesSent == 1 || shared.framesSent % 100 == 0 {
-                callLog.notice("mic sent \(shared.framesSent, privacy: .public) chunks (last \(data.count, privacy: .public)B)")
+            let gated = shared.voiceprintGate?.accept(data)
+            if let score = gated?.score {
+                callLog.notice("voiceprint decision score=\(score, privacy: .public) accepted=\(!(gated?.rejected ?? true), privacy: .public)")
             }
-            shared.socket?.send(.data(data)) { error in
-                if let error, shared.sendErrorsLogged < 3 {
-                    shared.sendErrorsLogged += 1
-                    callLog.error("mic send failed: \(error.localizedDescription, privacy: .public)")
+            let outgoing = gated?.frames ?? [data]
+            for frame in outgoing {
+                shared.framesSent += 1
+                if shared.framesSent == 1 || shared.framesSent % 100 == 0 {
+                    callLog.notice("mic sent \(shared.framesSent, privacy: .public) chunks (last \(frame.count, privacy: .public)B)")
+                }
+                shared.socket?.send(.data(frame)) { error in
+                    if let error, shared.sendErrorsLogged < 3 {
+                        shared.sendErrorsLogged += 1
+                        callLog.error("mic send failed: \(error.localizedDescription, privacy: .public)")
+                    }
                 }
             }
         }
@@ -650,6 +823,10 @@ final class RealtimeCallController: ObservableObject {
                 channel[index] = Float(Int16(littleEndian: samples[index])) / 32_768
             }
         }
+        tapShared?.schedulePlayback(
+            duration: Double(frameCount) / format.sampleRate,
+            now: Date().timeIntervalSince1970
+        )
         playerNode.scheduleBuffer(buffer)
         playbackChunks += 1
         if playbackChunks == 1 || playbackChunks % 50 == 0 {
