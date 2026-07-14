@@ -1018,6 +1018,7 @@ private struct ComposerView: View {
     @State private var isFileImporterPresented = false
     @State private var isDropTargeted = false
     @FocusState private var isComposerFocused: Bool
+    @State private var isVideoCallPresented = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1078,15 +1079,8 @@ private struct ComposerView: View {
                         return .handled
                     }
 
-                Button {
-                    model.toggleDictation()
-                } label: {
-                    Image(systemName: model.connectionState == .listening ? "stop.circle.fill" : "mic.fill")
-                        .frame(width: 28, height: 28)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(AppTheme.coral)
-                .help(model.connectionState == .listening ? "Stop dictation" : "Start dictation")
+                videoCallButton
+                dictationButton
 
                 let hasInput = !session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     || !session.pendingAttachments.isEmpty
@@ -1149,6 +1143,55 @@ private struct ComposerView: View {
         .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isDropTargeted) { providers in
             importDroppedFiles(providers)
         }
+        .sheet(isPresented: $isVideoCallPresented) {
+            VideoCallView(
+                config: model.config,
+                persona: videoCallPersona,
+                displayName: videoCallDisplayName
+            )
+        }
+    }
+
+    private var videoCallButton: some View {
+        Button {
+            isVideoCallPresented = true
+        } label: {
+            Image(systemName: "video.fill")
+                .frame(width: 28, height: 28)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(model.config.hasViduKey ? AppTheme.coral : AppTheme.muted)
+        .help("视频通话（Vidu 数字人）")
+    }
+
+    private var dictationButton: some View {
+        Button {
+            model.toggleDictation()
+        } label: {
+            Image(systemName: model.connectionState == .listening ? "stop.circle.fill" : "mic.fill")
+                .frame(width: 28, height: 28)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(AppTheme.coral)
+        .help(model.connectionState == .listening ? "Stop dictation" : "Start dictation")
+    }
+
+    /// 人设优先取当前会话绑定的角色卡；没有角色卡时给一个陪伴向的默认人设。
+    private var videoCallPersona: String {
+        if let prompt = model.activeCharacterCard?.prompt.trimmingCharacters(in: .whitespacesAndNewlines),
+           !prompt.isEmpty {
+            return prompt
+        }
+        return "你是\(videoCallDisplayName)，用户的桌面 AI 伙伴。语气自然、温暖、简洁，像老朋友一样和用户实时视频聊天。"
+    }
+
+    private var videoCallDisplayName: String {
+        if let name = model.activeCharacterCard?.name.trimmingCharacters(in: .whitespacesAndNewlines),
+           !name.isEmpty {
+            return name
+        }
+        let configured = model.config.viduAvatarName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return configured.isEmpty ? model.agentProfile.displayName : configured
     }
 
     /// Inserts a newline at the cursor via the window's field editor, which is

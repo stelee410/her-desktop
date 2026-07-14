@@ -243,6 +243,22 @@ struct HerConfigurationFields: View {
                     AgentLLMVoicePicker(draft: $draft)
                 }
             }
+
+            fieldSection("视频通话（Vidu 数字人）", systemImage: "video") {
+                SecureField("Vidu API key（vda_…）", text: $draft.viduAPIKey)
+                TextField("API host（默认 api.vidu.cn）", text: $draft.viduHost)
+                Picker("通话模式", selection: $draft.viduCallMode) {
+                    Text("音视频").tag("video")
+                    Text("纯语音").tag("audio")
+                }
+                .pickerStyle(.segmented)
+                TextField("数字人形象图（图片 URL 或 data:image base64）", text: $draft.viduAvatarImageURI)
+                TextField("数字人名字（默认用角色卡名）", text: $draft.viduAvatarName)
+                TextField("音色（默认 Tina）", text: $draft.viduVoice)
+                Text("按通话时长计费（约 90 积分/分钟），单次最长 10 分钟。人设优先取当前会话的角色卡。")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.muted)
+            }
         }
         .textFieldStyle(.roundedBorder)
         .font(fieldFont)

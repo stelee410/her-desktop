@@ -62,6 +62,8 @@ cat > "$CONTENTS/Info.plist" <<'PLIST'
   <true/>
   <key>NSMicrophoneUsageDescription</key>
   <string>Her Desktop uses the microphone for local voice dictation when you press the mic button.</string>
+  <key>NSCameraUsageDescription</key>
+  <string>Her Desktop uses the camera during video calls with your AI companion.</string>
   <key>NSSpeechRecognitionUsageDescription</key>
   <string>Her Desktop uses speech recognition to turn your voice into composer text.</string>
 </dict>

@@ -602,9 +602,20 @@ struct HerAppConfig: Codable, Equatable {
     /// TTS model + speaker when the provider is "agentllm".
     var agentLLMTTSModel: String
     var agentLLMTTSVoice: String
+    /// Vidu-S1 实时数字人视频通话（独立于语音配置）。
+    var viduAPIKey: String
+    /// API host（国内 api.vidu.cn / 海外 api.vidu.com）。
+    var viduHost: String
+    /// "video" = 音视频，"audio" = 纯语音。
+    var viduCallMode: String
+    /// 数字人形象图（URL 或 data:image/...;base64）。
+    var viduAvatarImageURI: String
+    var viduAvatarName: String
+    var viduVoice: String
 
     var hasLLMKey: Bool { !agentLLMAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var hasMemKey: Bool { !agentMemAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var hasViduKey: Bool { !viduAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     init(
         agentLLMBaseURL: URL,
@@ -622,7 +633,13 @@ struct HerAppConfig: Codable, Equatable {
         agentLLMASRModel: String = "fun-asr-realtime",
         speechSynthesisProvider: String = "apple",
         agentLLMTTSModel: String = "doubao-tts",
-        agentLLMTTSVoice: String = "zh_female_cancan_mars_bigtts"
+        agentLLMTTSVoice: String = "zh_female_cancan_mars_bigtts",
+        viduAPIKey: String = "",
+        viduHost: String = "api.vidu.cn",
+        viduCallMode: String = "video",
+        viduAvatarImageURI: String = "",
+        viduAvatarName: String = "",
+        viduVoice: String = ""
     ) {
         self.agentLLMBaseURL = agentLLMBaseURL
         self.agentLLMAPIKey = agentLLMAPIKey
@@ -640,6 +657,12 @@ struct HerAppConfig: Codable, Equatable {
         self.speechSynthesisProvider = speechSynthesisProvider
         self.agentLLMTTSModel = agentLLMTTSModel
         self.agentLLMTTSVoice = agentLLMTTSVoice
+        self.viduAPIKey = viduAPIKey
+        self.viduHost = viduHost
+        self.viduCallMode = viduCallMode
+        self.viduAvatarImageURI = viduAvatarImageURI
+        self.viduAvatarName = viduAvatarName
+        self.viduVoice = viduVoice
     }
 
     enum CodingKeys: String, CodingKey {
@@ -659,6 +682,12 @@ struct HerAppConfig: Codable, Equatable {
         case speechSynthesisProvider
         case agentLLMTTSModel
         case agentLLMTTSVoice
+        case viduAPIKey
+        case viduHost
+        case viduCallMode
+        case viduAvatarImageURI
+        case viduAvatarName
+        case viduVoice
     }
 
     init(from decoder: Decoder) throws {
@@ -682,6 +711,12 @@ struct HerAppConfig: Codable, Equatable {
         speechSynthesisProvider = try container.decodeIfPresent(String.self, forKey: .speechSynthesisProvider) ?? "apple"
         agentLLMTTSModel = try container.decodeIfPresent(String.self, forKey: .agentLLMTTSModel) ?? "doubao-tts"
         agentLLMTTSVoice = try container.decodeIfPresent(String.self, forKey: .agentLLMTTSVoice) ?? "zh_female_cancan_mars_bigtts"
+        viduAPIKey = try container.decodeIfPresent(String.self, forKey: .viduAPIKey) ?? ""
+        viduHost = try container.decodeIfPresent(String.self, forKey: .viduHost) ?? "api.vidu.cn"
+        viduCallMode = try container.decodeIfPresent(String.self, forKey: .viduCallMode) ?? "video"
+        viduAvatarImageURI = try container.decodeIfPresent(String.self, forKey: .viduAvatarImageURI) ?? ""
+        viduAvatarName = try container.decodeIfPresent(String.self, forKey: .viduAvatarName) ?? ""
+        viduVoice = try container.decodeIfPresent(String.self, forKey: .viduVoice) ?? ""
     }
 
     static let empty = HerAppConfig(
@@ -713,6 +748,12 @@ struct HerAppConfigDraft: Equatable {
     var speechSynthesisProvider: String
     var agentLLMTTSModel: String
     var agentLLMTTSVoice: String
+    var viduAPIKey: String
+    var viduHost: String
+    var viduCallMode: String
+    var viduAvatarImageURI: String
+    var viduAvatarName: String
+    var viduVoice: String
 
     init(config: HerAppConfig) {
         self.agentLLMBaseURL = config.agentLLMBaseURL.absoluteString
@@ -731,6 +772,12 @@ struct HerAppConfigDraft: Equatable {
         self.speechSynthesisProvider = config.speechSynthesisProvider
         self.agentLLMTTSModel = config.agentLLMTTSModel
         self.agentLLMTTSVoice = config.agentLLMTTSVoice
+        self.viduAPIKey = config.viduAPIKey
+        self.viduHost = config.viduHost
+        self.viduCallMode = config.viduCallMode
+        self.viduAvatarImageURI = config.viduAvatarImageURI
+        self.viduAvatarName = config.viduAvatarName
+        self.viduVoice = config.viduVoice
     }
 
     func makeConfig() throws -> HerAppConfig {
@@ -759,7 +806,18 @@ struct HerAppConfigDraft: Equatable {
                 : agentLLMTTSModel.trimmingCharacters(in: .whitespacesAndNewlines),
             agentLLMTTSVoice: agentLLMTTSVoice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? "zh_female_cancan_mars_bigtts"
-                : agentLLMTTSVoice.trimmingCharacters(in: .whitespacesAndNewlines)
+                : agentLLMTTSVoice.trimmingCharacters(in: .whitespacesAndNewlines),
+            viduAPIKey: viduAPIKey.trimmingCharacters(in: .whitespacesAndNewlines),
+            viduHost: {
+                // Accept a bare host or a pasted URL; store the bare host.
+                let trimmed = viduHost.trimmingCharacters(in: .whitespacesAndNewlines)
+                let host = URL(string: trimmed)?.host ?? trimmed
+                return host.isEmpty ? "api.vidu.cn" : host
+            }(),
+            viduCallMode: viduCallMode == "audio" ? "audio" : "video",
+            viduAvatarImageURI: viduAvatarImageURI.trimmingCharacters(in: .whitespacesAndNewlines),
+            viduAvatarName: viduAvatarName.trimmingCharacters(in: .whitespacesAndNewlines),
+            viduVoice: viduVoice.trimmingCharacters(in: .whitespacesAndNewlines)
         )
     }
 

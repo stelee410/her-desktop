@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Her 视频通话</title>
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+  #stage { position: absolute; inset: 0; }
+  #remoteVideo {
+    width: 100%; height: 100%;
+    object-fit: contain; background: transparent;
+  }
+  /* 纯语音模式：居中头像 + 呼吸光圈 */
+  #audioAvatar {
+    display: none; position: absolute; left: 50%; top: 44%;
+    width: 180px; height: 180px; transform: translate(-50%, -50%);
+    border-radius: 50%; object-fit: cover;
+    box-shadow: 0 0 0 0 rgba(255, 122, 105, 0.55);
+    animation: pulse 2.4s ease-out infinite;
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(255, 122, 105, 0.55); }
+    70% { box-shadow: 0 0 0 34px rgba(255, 122, 105, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 122, 105, 0); }
+  }
+  /* 本地画中画（仅 video 模式） */
+  #localVideo {
+    display: none; position: absolute; right: 14px; bottom: 14px;
+    width: 168px; height: 96px; object-fit: cover;
+    border-radius: 10px; border: 1px solid rgba(255,255,255,0.25);
+    background: #111; transform: scaleX(-1);
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <video id="remoteVideo" autoplay playsinline></video>
+  <img id="audioAvatar" alt="">
+  <video id="localVideo" autoplay playsinline muted></video>
+</div>
+<script src="https://g.alicdn.com/apsara-media-box/imp-web-rtc/7.1.9/aliyun-rtc-sdk.js"></script>
+<script>
+(function () {
+  'use strict';
+  var engine = null;
+  var joined = false;
+
+  function post(event, detail) {
+    try {
+      window.webkit.messageHandlers.herCall.postMessage({ event: event, detail: detail || '' });
+    } catch (e) { /* Swift 侧未挂载时静默 */ }
+  }
+
+  function isSubscribed(state) { return state === 3 || state === 'subscribed'; }
+
+  async function join(cfg) {
+    if (joined) { return; }
+    joined = true;
+    if (typeof AliRtcEngine === 'undefined') {
+      post('error', 'RTC SDK 加载失败，请检查网络后重试');
+      return;
+    }
+    try {
+      var check = await AliRtcEngine.isSupported();
+      if (check && check.support === false) {
+        post('error', '当前环境不支持实时音视频：' + (check.reason || ''));
+        return;
+      }
+      engine = AliRtcEngine.getInstance();
+
+      engine.on('videoSubscribeStateChanged', function (uid, oldState, newState) {
+        if (isSubscribed(newState)) {
+          engine.setRemoteViewConfig(document.getElementById('remoteVideo'), uid, 1);
+          post('remoteVideo', uid);
+        }
+      });
+      engine.on('remoteUserOnLineNotify', function (uid) { post('remoteOnline', uid); });
+      engine.on('remoteUserOffLineNotify', function (uid, reason) {
+        post('remoteOffline', uid + ':' + reason);
+      });
+      engine.on('bye', function (code) { post('bye', String(code)); });
+
+      if (cfg.callMode === 'audio' && cfg.avatar) {
+        var img = document.getElementById('audioAvatar');
+        img.src = cfg.avatar;
+        img.style.display = 'block';
+      }
+
+      // Vidu 返回的是聚合 base64 token；第二参数为频道内用户名。
+      await engine.joinChannel(cfg.token, cfg.userId);
+      await engine.publishLocalAudioStream(true);
+      if (cfg.callMode === 'video') {
+        var local = document.getElementById('localVideo');
+        local.style.display = 'block';
+        engine.setLocalViewConfig(local, 1);
+        await engine.publishLocalVideoStream(true);
+      }
+      post('joined', cfg.userId);
+    } catch (e) {
+      post('error', (e && e.message) ? e.message : String(e));
+    }
+  }
+
+  async function leave() {
+    var current = engine;
+    engine = null;
+    if (!current) { return; }
+    try { await current.stopPreview(); } catch (e) { /* 未开启预览时忽略 */ }
+    try { await current.leaveChannel(); } catch (e) { /* 已断开时忽略 */ }
+    try { current.destroy(); } catch (e) { /* 重复销毁时忽略 */ }
+    post('left', '');
+  }
+
+  window.herCall = { join: join, leave: leave };
+  post('pageReady', '');
+})();
+</script>
+</body>
+</html>
