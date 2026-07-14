@@ -78,6 +78,25 @@ final class AppViewModelTests: XCTestCase {
         }
     }
 
+    final class FakeSpeechSynthesizer: NativeSpeechSynthesizing {
+        var spokenTexts: [String] = []
+        var stopCount = 0
+        private var continuation: CheckedContinuation<String, Error>?
+
+        func speak(_ text: String, voiceIdentifier: String?) async throws -> String {
+            spokenTexts.append(text)
+            return try await withCheckedThrowingContinuation { continuation in
+                self.continuation = continuation
+            }
+        }
+
+        func stop() {
+            stopCount += 1
+            continuation?.resume(returning: "stopped")
+            continuation = nil
+        }
+    }
+
     func testWorkspaceNavigationDefaultsToTodayAndCanChangeSections() {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("her-view-model-workspace-navigation-\(UUID().uuidString)", isDirectory: true)
@@ -297,6 +316,65 @@ final class AppViewModelTests: XCTestCase {
         XCTAssertEqual(model.dictationTranscript, "final voice note")
         XCTAssertEqual(model.draft, "before\nfinal voice note")
         XCTAssertFalse(model.messages.contains { $0.role == .user && $0.content.contains("final voice note") })
+    }
+
+    func testStartingDictationStopsAssistantPlaybackBeforeOpeningMicrophone() async {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-voice-barge-in-\(UUID().uuidString)", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.agentLLMAPIKey = "test-key"
+        let fakeSpeech = FakeSpeechSynthesizer()
+        let fakeDictation = FakeDictation()
+        let model = AppViewModel(
+            config: config,
+            cwd: root.path,
+            speechSynthesizer: fakeSpeech,
+            speechDictation: fakeDictation
+        )
+
+        let speaking = Task { await model.speakTextAloud("正在播报") }
+        await Task.yield()
+        XCTAssertEqual(model.connectionState, .speaking)
+        XCTAssertEqual(fakeSpeech.spokenTexts, ["正在播报"])
+
+        model.startDictation(localeIdentifier: "zh-CN")
+        await Task.yield()
+
+        XCTAssertGreaterThanOrEqual(fakeSpeech.stopCount, 1)
+        XCTAssertEqual(fakeDictation.startedLocale, "zh-CN")
+        XCTAssertEqual(model.connectionState, .listening)
+
+        fakeDictation.stop()
+        await speaking.value
+    }
+
+    func testStartingAssistantPlaybackStopsActiveMicrophoneCapture() async {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("her-view-model-voice-playback-gate-\(UUID().uuidString)", isDirectory: true)
+        var config = HerAppConfig.empty
+        config.agentLLMAPIKey = "test-key"
+        let fakeSpeech = FakeSpeechSynthesizer()
+        let fakeDictation = FakeDictation()
+        let model = AppViewModel(
+            config: config,
+            cwd: root.path,
+            speechSynthesizer: fakeSpeech,
+            speechDictation: fakeDictation
+        )
+
+        model.startDictation(localeIdentifier: "zh-CN")
+        await Task.yield()
+        XCTAssertEqual(model.connectionState, .listening)
+
+        let speaking = Task { await model.speakTextAloud("助手回复") }
+        await Task.yield()
+
+        XCTAssertNil(fakeDictation.continuation, "playback must close the microphone first")
+        XCTAssertEqual(model.connectionState, .speaking)
+        XCTAssertEqual(fakeSpeech.spokenTexts, ["助手回复"])
+
+        fakeSpeech.stop()
+        await speaking.value
     }
 
     func testSendRunsMultipleToolRoundsBeforeFinalAnswer() async throws {

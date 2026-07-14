@@ -14,6 +14,15 @@ extension AppViewModel {
 
     func startDictation(localeIdentifier: String = Locale.current.identifier) {
         guard connectionState != .listening else { return }
+        // Mic capture and local TTS must never overlap. macOS feeds speaker
+        // output back into many built-in/external microphones, so leaving TTS
+        // alive here lets the assistant transcribe its own reply and creates
+        // a conversation loop. Starting dictation is also our barge-in path:
+        // stop either playback backend immediately, then open the mic.
+        speechTask?.cancel()
+        speechTask = nil
+        baseSpeechSynthesizer.stop()
+        agentLLMSpeechSynthesizer.stop()
         dictationTask?.cancel()
         dictationBaseText = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         dictationTranscript = ""
@@ -198,6 +207,12 @@ extension AppViewModel {
     func speakTextAloud(_ text: String) async {
         let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanText.isEmpty else { return }
+        // Close the microphone before any speaker audio starts. This is the
+        // other half of the no-overlap invariant enforced by startDictation.
+        if connectionState == .listening {
+            isPushToTalking = false
+            stopDictation()
+        }
         let previousState = connectionState
         connectionState = .speaking
         do {
