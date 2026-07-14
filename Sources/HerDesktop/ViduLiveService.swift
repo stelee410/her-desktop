@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// Vidu-S1 实时数字人通话的 REST + WebSocket 信令层。音视频流本身走
@@ -161,6 +162,63 @@ enum ViduSignal {
         if let number = value as? NSNumber { return number.intValue }
         if let text = value as? String { return Int(text) }
         return nil
+    }
+}
+
+/// 把本地图片文件编码成 Vidu 接受的 `data:image/…;base64,` URI。
+/// Vidu 限制 base64 解码后 < 20MB；超限时先尝试 JPEG 重编码压一轮。
+enum ViduAvatarImageEncoder {
+    static let maxDecodedBytes = 20 * 1024 * 1024
+
+    enum EncodeError: LocalizedError {
+        case unsupportedFormat(String)
+        case tooLarge
+        case unreadable
+
+        var errorDescription: String? {
+            switch self {
+            case .unsupportedFormat(let ext):
+                return "不支持的图片格式 .\(ext)（支持 PNG/JPG/JPEG/WEBP）"
+            case .tooLarge:
+                return "图片压缩后仍超过 20MB，请换一张小一点的图"
+            case .unreadable:
+                return "读不出这张图片，请换一张试试"
+            }
+        }
+    }
+
+    static func mimeType(forPathExtension ext: String) -> String? {
+        switch ext.lowercased() {
+        case "png": return "image/png"
+        case "jpg", "jpeg": return "image/jpeg"
+        case "webp": return "image/webp"
+        default: return nil
+        }
+    }
+
+    static func dataURI(contentsOf url: URL) throws -> String {
+        guard let mime = mimeType(forPathExtension: url.pathExtension) else {
+            throw EncodeError.unsupportedFormat(url.pathExtension)
+        }
+        guard let data = try? Data(contentsOf: url) else {
+            throw EncodeError.unreadable
+        }
+        return try dataURI(data: data, mimeType: mime)
+    }
+
+    static func dataURI(data: Data, mimeType: String) throws -> String {
+        if data.count < maxDecodedBytes {
+            return "data:\(mimeType);base64,\(data.base64EncodedString())"
+        }
+        // 超限：用 JPEG 重编码换体积（头像场景画质损失可接受）。
+        guard let image = NSImage(data: data),
+              let tiff = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff),
+              let jpeg = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.8]),
+              jpeg.count < maxDecodedBytes else {
+            throw EncodeError.tooLarge
+        }
+        return "data:image/jpeg;base64,\(jpeg.base64EncodedString())"
     }
 }
 

@@ -124,6 +124,25 @@ final class ViduSignalTests: XCTestCase {
         XCTAssertTrue(config.hasViduKey)
     }
 
+    func testAvatarEncoderBuildsDataURIForSmallImages() throws {
+        let bytes = Data([0x89, 0x50, 0x4E, 0x47])
+        let uri = try ViduAvatarImageEncoder.dataURI(data: bytes, mimeType: "image/png")
+        XCTAssertEqual(uri, "data:image/png;base64,\(bytes.base64EncodedString())")
+    }
+
+    func testAvatarEncoderMimeTypes() {
+        XCTAssertEqual(ViduAvatarImageEncoder.mimeType(forPathExtension: "PNG"), "image/png")
+        XCTAssertEqual(ViduAvatarImageEncoder.mimeType(forPathExtension: "jpeg"), "image/jpeg")
+        XCTAssertEqual(ViduAvatarImageEncoder.mimeType(forPathExtension: "webp"), "image/webp")
+        XCTAssertNil(ViduAvatarImageEncoder.mimeType(forPathExtension: "gif"))
+    }
+
+    func testAvatarEncoderRejectsOversizedGarbage() {
+        // 超过 20MB 且无法按图片重编码 → 必须报错而不是把超限 payload 发出去。
+        let oversized = Data(count: ViduAvatarImageEncoder.maxDecodedBytes + 1)
+        XCTAssertThrowsError(try ViduAvatarImageEncoder.dataURI(data: oversized, mimeType: "image/png"))
+    }
+
     func testJoinPayloadIsValidJSON() throws {
         let payload = CallWebViewJoinPayloadProbe.payload(
             rtc: ViduRTCCredentials(appID: "a", channelID: "c", userID: "u", token: "t"),

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @EnvironmentObject private var model: AppViewModel
@@ -327,6 +328,93 @@ struct AgentLLMVoicePicker: View {
     }
 }
 
+/// 数字人形象图：本地选图（自动转 base64 data URI，Vidu 要求解码后 <20MB）
+/// 或直接粘贴图片 URL；旁边给一个当前值的缩略图预览。
+struct ViduAvatarPickerField: View {
+    @Binding var draft: HerAppConfigDraft
+    @State private var isImporterPresented = false
+    @State private var importError: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                avatarPreview
+                    .frame(width: 44, height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                    )
+                Button("选择图片…") {
+                    isImporterPresented = true
+                }
+                if !draft.viduAvatarImageURI.isEmpty {
+                    Button("清除") {
+                        draft.viduAvatarImageURI = ""
+                        importError = nil
+                    }
+                }
+            }
+            TextField("数字人形象图：上传，或粘贴图片 URL", text: $draft.viduAvatarImageURI)
+            if let importError {
+                Text(importError)
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.coral)
+            }
+        }
+        .fileImporter(
+            isPresented: $isImporterPresented,
+            allowedContentTypes: [.png, .jpeg, .webP],
+            allowsMultipleSelection: false
+        ) { result in
+            guard case .success(let urls) = result, let url = urls.first else { return }
+            let accessing = url.startAccessingSecurityScopedResource()
+            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+            do {
+                draft.viduAvatarImageURI = try ViduAvatarImageEncoder.dataURI(contentsOf: url)
+                importError = nil
+            } catch {
+                importError = error.localizedDescription
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var avatarPreview: some View {
+        let value = draft.viduAvatarImageURI.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let image = Self.decodeDataURI(value) {
+            Image(nsImage: image).resizable().scaledToFill()
+        } else if let url = URL(string: value), ["http", "https"].contains(url.scheme ?? "") {
+            AsyncImage(url: url) { phase in
+                if case .success(let image) = phase {
+                    image.resizable().scaledToFill()
+                } else {
+                    placeholder
+                }
+            }
+        } else {
+            placeholder
+        }
+    }
+
+    private var placeholder: some View {
+        ZStack {
+            Color.black.opacity(0.05)
+            Image(systemName: "person.crop.rectangle")
+                .foregroundStyle(AppTheme.muted)
+        }
+    }
+
+    private static func decodeDataURI(_ value: String) -> NSImage? {
+        guard value.hasPrefix("data:"),
+              let comma = value.firstIndex(of: ","),
+              let data = Data(base64Encoded: String(value[value.index(after: comma)...])) else {
+            return nil
+        }
+        return NSImage(data: data)
+    }
+}
+
 struct HerConfigurationFields: View {
     enum Presentation {
         case compact
@@ -406,7 +494,7 @@ struct HerConfigurationFields: View {
                     Text("纯语音").tag("audio")
                 }
                 .pickerStyle(.segmented)
-                TextField("数字人形象图（图片 URL 或 data:image base64）", text: $draft.viduAvatarImageURI)
+                ViduAvatarPickerField(draft: $draft)
                 TextField("数字人名字（默认用角色卡名）", text: $draft.viduAvatarName)
                 TextField("音色（默认 Tina）", text: $draft.viduVoice)
                 Text("按通话时长计费（约 90 积分/分钟），单次最长 10 分钟。人设优先取当前会话的角色卡。")
