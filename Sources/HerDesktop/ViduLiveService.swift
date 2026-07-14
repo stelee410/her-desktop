@@ -429,7 +429,8 @@ final class ViduCallModel: ObservableObject {
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.timeoutInterval = 30
+        // 实测 video 模式建会话（按形象图初始化数字人）要 40 秒以上。
+        request.timeoutInterval = 120
         request.setValue(ViduSignal.authorizationHeader(apiKey: apiKey), forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try ViduSignal.createLiveBody(

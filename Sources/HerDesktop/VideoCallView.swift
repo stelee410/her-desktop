@@ -120,7 +120,7 @@ struct VideoCallView: View {
     private var statusText: String {
         if let webError { return webError }
         switch call.phase {
-        case .idle, .creating: return "正在创建数字人…"
+        case .idle, .creating: return "正在创建数字人…（约需 1 分钟）"
         case .waitingAgent(let attempt):
             return attempt <= 1 ? "等待数字人上线…" : "等待数字人上线（第 \(attempt) 次尝试）…"
         case .live: return "通话中"
