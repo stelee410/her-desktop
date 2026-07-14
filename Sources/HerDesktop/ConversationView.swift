@@ -121,6 +121,7 @@ struct ConversationView: View {
                 // is what used to sweep past the top region and misfire the
                 // history trigger into a calibration tug-of-war.
                 .defaultScrollAnchor(.bottom)
+                .background(WorldBookBackdrop())
                 .coordinateSpace(name: "transcript")
                 .onPreferenceChange(TranscriptTopOffsetKey.self) { minY in
                     // minY is ~0 at the very top and goes negative as the
@@ -141,26 +142,50 @@ struct ConversationView: View {
                         settleAtBottom(proxy)
                     }
                 }
-                .onChange(of: session.messages.count) { _, _ in
-                    if let last = session.messages.last?.id {
-                        withAnimation { proxy.scrollTo(last, anchor: .bottom) }
-                    }
-                }
-                .onChange(of: session.messages.last.map { $0.content.count + $0.reasoning.count }) { _, _ in
-                    if let last = session.messages.last?.id {
-                        proxy.scrollTo(last, anchor: .bottom)
-                    }
-                }
-                .onChange(of: model.isAwaitingAssistantReply) { _, isAwaiting in
-                    if isAwaiting {
-                        withAnimation { proxy.scrollTo("typing-indicator", anchor: .bottom) }
-                    }
-                }
+                // No scripted scrolling past this point: landing at the
+                // bottom only happens when a conversation opens. Afterwards
+                // the bottom anchor alone decides — pinned while the user is
+                // at the bottom, hands-off once they've scrolled up to read
+                // history, so streaming never drags them back down.
             }
             ComposerView()
                 .padding(.horizontal, 54)
                 .padding(.bottom, 24)
         }
+        .sheet(isPresented: Binding(
+            get: { model.isCallPresented },
+            set: { presented in
+                if !presented { model.endVoiceCall() }
+            }
+        )) {
+            CallView(call: model.callController)
+                .environmentObject(model)
+        }
+        .sheet(isPresented: $model.isVideoCallPresented) {
+            VideoCallView(
+                config: model.config,
+                persona: videoCallPersona,
+                displayName: videoCallDisplayName
+            )
+        }
+    }
+
+    /// 人设优先取当前会话绑定的角色卡；没有角色卡时给一个陪伴向的默认人设。
+    private var videoCallPersona: String {
+        if let prompt = model.activeCharacterCard?.prompt.trimmingCharacters(in: .whitespacesAndNewlines),
+           !prompt.isEmpty {
+            return prompt
+        }
+        return "你是\(videoCallDisplayName)，用户的桌面 AI 伙伴。语气自然、温暖、简洁，像老朋友一样和用户实时视频聊天。"
+    }
+
+    private var videoCallDisplayName: String {
+        if let name = model.activeCharacterCard?.name.trimmingCharacters(in: .whitespacesAndNewlines),
+           !name.isEmpty {
+            return name
+        }
+        let configured = model.config.viduAvatarName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return configured.isEmpty ? model.agentProfile.displayName : configured
     }
 
     /// Pins the newest message to the bottom edge after a transcript load.
@@ -288,6 +313,7 @@ private struct RoleplaySelectors: View {
     var body: some View {
         let activeCard = model.activeCharacterCard
         let activeBook = model.activeWorldBook
+        let activeProject = model.activeProject
 
         Menu {
             Button("无角色") { model.setCharacterCard(nil) }
@@ -332,6 +358,28 @@ private struct RoleplaySelectors: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .help("为这个会话选择世界之书")
+
+        Menu {
+            Button("不归属项目") { model.setProject(nil) }
+            if model.projects.isEmpty {
+                Button("去创建项目…") { model.selectedSection = .projects }
+            }
+            ForEach(model.projects.filter { $0.status == .active || $0.id == activeProject?.id }) { project in
+                Button("\(project.emoji) \(project.name)\(project.id == activeProject?.id ? " ✓" : "")") {
+                    model.setProject(project)
+                }
+            }
+        } label: {
+            Label(
+                activeProject.map { "\($0.emoji) \($0.name)" } ?? "项目",
+                systemImage: "folder"
+            )
+            .font(.caption)
+            .foregroundStyle(activeProject == nil ? AppTheme.muted : AppTheme.coral)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("把这个会话归入一个项目；项目的目标、计划和工作目录会注入对话")
     }
 }
 
@@ -381,6 +429,28 @@ private struct ToolbarView: View {
             }
             .buttonStyle(.plain)
             .help(model.config.speakAssistantReplies ? "Disable spoken replies" : "Enable spoken replies")
+
+            Button {
+                model.startVoiceCall()
+            } label: {
+                Image(systemName: "phone.fill")
+                    .foregroundStyle(model.isCallPresented ? AppTheme.coral : AppTheme.muted)
+            }
+            .buttonStyle(.plain)
+            .help(model.config.hasRealtimeKey
+                ? "打电话（实时语音通话）"
+                : "打电话：先在设置里填写 agentRealtime API key")
+
+            Button {
+                model.isVideoCallPresented = true
+            } label: {
+                Image(systemName: "video.fill")
+                    .foregroundStyle(model.isVideoCallPresented ? AppTheme.coral : AppTheme.muted)
+            }
+            .buttonStyle(.plain)
+            .help(model.config.hasViduKey
+                ? "视频通话（Vidu 数字人）"
+                : "视频通话：先在设置里填写 Vidu API key")
 
             Button {
                 isStatusPopoverPresented.toggle()
@@ -660,8 +730,11 @@ private struct MessageBubble: View {
     var artifacts: [WebServiceArtifact] = []
 
     var body: some View {
-        HStack {
+        HStack(alignment: .top, spacing: 10) {
             if message.role == .user { Spacer(minLength: 70) }
+            if message.role == .assistant, let card = model.activeCharacterCard {
+                CharacterAvatarView(card: card)
+            }
             VStack(alignment: .leading, spacing: 8) {
                 if !message.reasoning.isEmpty {
                     ReasoningSection(
@@ -719,17 +792,18 @@ private struct MessageBubble: View {
                     if message.role == .assistant,
                        !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                        session.streamingAssistantMessageID != message.id {
+                        let isSpeakingThisMessage = model.speakingMessageID == message.id
                         Button {
-                            model.toggleSpeakMessage(message.content)
+                            model.toggleSpeakMessage(message.content, messageID: message.id)
                         } label: {
-                            Image(systemName: model.connectionState == .speaking
+                            Image(systemName: isSpeakingThisMessage
                                 ? "speaker.wave.2.circle.fill"
                                 : "speaker.wave.2")
-                                .font(.caption)
-                                .foregroundStyle(model.connectionState == .speaking ? AppTheme.coral : AppTheme.muted)
+                                .font(.system(size: 14))
+                                .foregroundStyle(isSpeakingThisMessage ? AppTheme.coral : AppTheme.muted)
                         }
                         .buttonStyle(.plain)
-                        .help(model.connectionState == .speaking ? "停止播报" : "朗读这条回复")
+                        .help(isSpeakingThisMessage ? "停止播报" : "朗读这条回复")
                     }
                 }
             }
@@ -749,6 +823,55 @@ private struct MessageBubble: View {
 /// A local web app referenced in the transcript: header with an open
 /// action, plus a live embedded widget for recent messages when the app
 /// declares one.
+/// The active character's face beside their bubbles: avatar image when set,
+/// otherwise the card emoji on the rose disc.
+private struct CharacterAvatarView: View {
+    @EnvironmentObject private var model: AppViewModel
+    var card: CharacterCard
+
+    var body: some View {
+        Group {
+            if let url = model.roleplayAssetURL(card.avatarPath),
+               let avatar = RoleplayImageCache.image(at: url) {
+                Image(nsImage: avatar)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                ZStack {
+                    Circle().fill(AppTheme.rose.opacity(0.8))
+                    Text(card.emoji.isEmpty ? "🎭" : card.emoji)
+                        .font(.system(size: 15))
+                }
+            }
+        }
+        .frame(width: 30, height: 30)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(Color.black.opacity(0.06), lineWidth: 1))
+        .help(card.name)
+    }
+}
+
+/// The active world book's chat background: the image fills the transcript
+/// area under a cream wash that keeps bubbles and text readable.
+private struct WorldBookBackdrop: View {
+    @EnvironmentObject private var model: AppViewModel
+
+    var body: some View {
+        if let book = model.activeWorldBook,
+           let url = model.roleplayAssetURL(book.backgroundPath),
+           let backdrop = RoleplayImageCache.image(at: url) {
+            GeometryReader { geo in
+                Image(nsImage: backdrop)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .clipped()
+                    .overlay(AppTheme.cream.opacity(0.5))
+            }
+        }
+    }
+}
+
 private struct WebAppMessageCard: View {
     @EnvironmentObject private var model: AppViewModel
     var app: WebAppManifest
@@ -1018,7 +1141,6 @@ private struct ComposerView: View {
     @State private var isFileImporterPresented = false
     @State private var isDropTargeted = false
     @FocusState private var isComposerFocused: Bool
-    @State private var isVideoCallPresented = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1079,7 +1201,6 @@ private struct ComposerView: View {
                         return .handled
                     }
 
-                videoCallButton
                 dictationButton
 
                 let hasInput = !session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -1143,25 +1264,6 @@ private struct ComposerView: View {
         .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isDropTargeted) { providers in
             importDroppedFiles(providers)
         }
-        .sheet(isPresented: $isVideoCallPresented) {
-            VideoCallView(
-                config: model.config,
-                persona: videoCallPersona,
-                displayName: videoCallDisplayName
-            )
-        }
-    }
-
-    private var videoCallButton: some View {
-        Button {
-            isVideoCallPresented = true
-        } label: {
-            Image(systemName: "video.fill")
-                .frame(width: 28, height: 28)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(model.config.hasViduKey ? AppTheme.coral : AppTheme.muted)
-        .help("视频通话（Vidu 数字人）")
     }
 
     private var dictationButton: some View {
@@ -1174,24 +1276,6 @@ private struct ComposerView: View {
         .buttonStyle(.plain)
         .foregroundStyle(AppTheme.coral)
         .help(model.connectionState == .listening ? "Stop dictation" : "Start dictation")
-    }
-
-    /// 人设优先取当前会话绑定的角色卡；没有角色卡时给一个陪伴向的默认人设。
-    private var videoCallPersona: String {
-        if let prompt = model.activeCharacterCard?.prompt.trimmingCharacters(in: .whitespacesAndNewlines),
-           !prompt.isEmpty {
-            return prompt
-        }
-        return "你是\(videoCallDisplayName)，用户的桌面 AI 伙伴。语气自然、温暖、简洁，像老朋友一样和用户实时视频聊天。"
-    }
-
-    private var videoCallDisplayName: String {
-        if let name = model.activeCharacterCard?.name.trimmingCharacters(in: .whitespacesAndNewlines),
-           !name.isEmpty {
-            return name
-        }
-        let configured = model.config.viduAvatarName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return configured.isEmpty ? model.agentProfile.displayName : configured
     }
 
     /// Inserts a newline at the cursor via the window's field editor, which is

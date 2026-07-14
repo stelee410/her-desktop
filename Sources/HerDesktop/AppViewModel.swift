@@ -6,6 +6,10 @@ import SwiftUI
 final class AppViewModel: ObservableObject, AuditRecording {
     @Published var config: HerAppConfig
     @Published var connectionState: ConnectionState
+    /// The transcript message currently being read aloud via its 朗读 button,
+    /// so only that bubble's speaker shows the playing state (auto-speak
+    /// leaves this nil).
+    @Published var speakingMessageID: UUID?
     @Published var memorySignal: MemorySignal
     @Published var agentProfile: AgentProfile
     @Published var plugins: [PluginManifest]
@@ -224,6 +228,26 @@ final class AppViewModel: ObservableObject, AuditRecording {
     @Published var characterCards: [CharacterCard] = []
     @Published var worldBooks: [WorldBook] = []
     lazy var roleplayStore = RoleplayStore(cwd: runtimeCwd)
+    /// 项目: ongoing work units — goal, brief, shared plan checklist, and a
+    /// working directory for deliverables. See AppViewModel+Projects.
+    @Published var projects: [Project] = []
+    lazy var projectStore = ProjectStore(cwd: runtimeCwd)
+    /// 打电话: realtime voice call over agentRealtime. See AppViewModel+Call.
+    @Published var isCallPresented = false
+    lazy var callController = RealtimeCallController()
+    /// 视频通话: Vidu-S1 digital human call. See VideoCallView.
+    @Published var isVideoCallPresented = false
+    let voiceprintStore: VoiceprintProfileStore
+    let voiceprintEnrollmentService = VoiceprintEnrollmentService()
+    @Published var voiceprintProfile: VoiceprintProfile?
+    @Published var voiceprintEnrollmentProgress = 0
+    @Published var voiceprintEnrollmentLevel = 0
+    @Published var voiceprintEnrollmentVoicedMilliseconds = 0
+    @Published var voiceprintEnrollmentStatus = ""
+    @Published var isEnrollingVoiceprint = false
+    /// The in-call memo agent: periodically distills the live transcript
+    /// into facts injected back into the realtime session.
+    var callMemoTask: Task<Void, Never>?
     /// Heartbeat: scheduled tasks (reminders / timed agent turns) checked by
     /// a periodic tick. See AppViewModel+Heartbeat.
     @Published var heartbeatTasks: [HeartbeatTask] = []
@@ -298,6 +322,9 @@ final class AppViewModel: ObservableObject, AuditRecording {
     ) {
         let loaded = explicitConfig ?? ConfigLoader.load(cwd: cwd)
         self.runtimeCwd = cwd
+        let voiceprintStore = VoiceprintProfileStore(cwd: cwd)
+        self.voiceprintStore = voiceprintStore
+        self.voiceprintProfile = voiceprintStore.load()
         self.config = loaded
         self.agentMem = AgentMemClient(config: loaded, session: urlSession)
         self.agentLLM = agentLLM ?? AgentLLMClient(config: loaded, session: urlSession)
@@ -417,6 +444,9 @@ final class AppViewModel: ObservableObject, AuditRecording {
         speechTask?.cancel()
         baseSpeechSynthesizer.stop()
         agentLLMSpeechSynthesizer.stop()
+        if isCallPresented {
+            callController.hangUp()
+        }
         // Land any queued transcript/index/audit writes before exit.
         conversationStore.flushPendingIO()
         auditStore.flushPendingIO()
@@ -451,6 +481,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
         startWebAppServerIfNeeded()
         startHeartbeat()
         loadRoleplayAssets()
+        loadProjects()
         installPushToTalkMonitors()
         installPasteMonitor()
         await reloadPlugins()

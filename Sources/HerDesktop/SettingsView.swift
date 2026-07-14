@@ -43,8 +43,12 @@ struct SettingsView: View {
             Divider()
 
             ScrollView {
-                HerConfigurationFields(draft: $draft, presentation: .settings)
-                    .padding(.trailing, 8)
+                VStack(alignment: .leading, spacing: 16) {
+                    HerConfigurationFields(draft: $draft, presentation: .settings)
+                    Divider()
+                    VoiceprintSettingsSection()
+                }
+                .padding(.trailing, 8)
             }
 
             if let lastError = model.lastError {
@@ -122,9 +126,146 @@ struct SettingsView: View {
     }
 }
 
+private struct VoiceprintSettingsSection: View {
+    @EnvironmentObject private var model: AppViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("声纹识别（本地）", systemImage: "person.wave.2")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppTheme.ink)
+            if let profile = model.voiceprintProfile {
+                Toggle(
+                    "通话时只接受我的声音",
+                    isOn: Binding(
+                        get: { profile.enabled },
+                        set: { model.setVoiceprintEnabled($0) }
+                    )
+                )
+                Text("已录入 · \(profile.createdAt.formatted(date: .abbreviated, time: .shortened)) · 模板仅保存在本机")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.muted)
+            } else {
+                Text("尚未录入。录入后，每段语音会先在本机匹配，只有匹配的声音才会发送给通话服务。")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.muted)
+            }
+            if model.isEnrollingVoiceprint {
+                ProgressView(value: Double(model.voiceprintEnrollmentProgress), total: 100)
+                ProgressView(
+                    value: min(Double(model.voiceprintEnrollmentLevel) / 1_200, 1),
+                    label: { Text("麦克风音量") }
+                )
+                Text(
+                    "\(model.voiceprintEnrollmentProgress)% · "
+                    + (model.voiceprintEnrollmentLevel >= EnrollmentCollector.minimumVoiceLevel
+                       ? "已检测到说话声"
+                       : "声音偏低，请靠近麦克风")
+                    + " · 有效语音 \(String(format: "%.1f", Double(model.voiceprintEnrollmentVoicedMilliseconds) / 1_000)) 秒"
+                )
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.muted)
+            }
+            HStack {
+                Button(model.voiceprintProfile == nil ? "录入声纹" : "重新录入") {
+                    Task { await model.enrollVoiceprint() }
+                }
+                .disabled(model.isEnrollingVoiceprint || model.isCallPresented)
+                if model.voiceprintProfile != nil {
+                    Button("删除声纹", role: .destructive) { model.clearVoiceprint() }
+                        .disabled(model.isEnrollingVoiceprint)
+                }
+            }
+            if !model.voiceprintEnrollmentStatus.isEmpty {
+                Text(model.voiceprintEnrollmentStatus)
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.muted)
+            }
+            Text("轻量过滤，不属于安全认证，无法防止他人播放你的录音。首次匹配会带来约 1.5 秒延迟。")
+                .font(.caption2)
+                .foregroundStyle(AppTheme.muted)
+        }
+    }
+}
+
 /// Speaker dropdown for AgentLLM TTS: loads the live voice catalog from the
 /// endpoint (`/v1beta/volc/tts/voices`); falls back to a plain text field
 /// when the list can't be fetched (no key yet, offline, …).
+/// 打电话音色: fetched from agentRealtime's /v1/voices for the selected
+/// realtime model — the two models have different catalogs, so switching the
+/// model reloads the list and drops a voice that no longer applies.
+struct AgentRealtimeVoicePicker: View {
+    @Binding var draft: HerAppConfigDraft
+    @State private var voices: [AgentRealtimeVoiceCatalog.Voice] = []
+    @State private var loadFailed = false
+    @State private var isLoading = false
+
+    var body: some View {
+        Group {
+            if !voices.isEmpty {
+                Picker("音色", selection: $draft.agentRealtimeVoice) {
+                    Text("服务默认").tag("")
+                    ForEach(voices) { voice in
+                        Text(voiceLabel(voice)).tag(voice.id)
+                    }
+                }
+            } else {
+                TextField("音色 ID（留空用服务默认）", text: $draft.agentRealtimeVoice)
+                if isLoading {
+                    Text("正在加载可用音色…")
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.muted)
+                } else if loadFailed, !draft.agentRealtimeAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("音色列表加载失败（检查 key/网络），可手动填写音色 ID。")
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.muted)
+                }
+            }
+        }
+        .task(id: draft.agentRealtimeAPIKey + "|" + draft.agentRealtimeModelProfile) {
+            await loadVoices()
+        }
+    }
+
+    private func voiceLabel(_ voice: AgentRealtimeVoiceCatalog.Voice) -> String {
+        let gender: String
+        switch voice.gender {
+        case "male": gender = "男"
+        case "female": gender = "女"
+        default: gender = ""
+        }
+        return gender.isEmpty ? voice.label : "\(voice.label)（\(gender)）"
+    }
+
+    private func loadVoices() async {
+        let key = draft.agentRealtimeAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else {
+            voices = []
+            loadFailed = false
+            return
+        }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let fetched = try await AgentRealtimeVoiceCatalog.fetch(
+                apiKey: key,
+                modelProfile: draft.agentRealtimeModelProfile
+            )
+            voices = fetched
+            loadFailed = fetched.isEmpty
+            // A voice from the other model's catalog would be rejected by
+            // the session; fall back to the service default.
+            if !draft.agentRealtimeVoice.isEmpty,
+               !fetched.isEmpty,
+               !fetched.contains(where: { $0.id == draft.agentRealtimeVoice }) {
+                draft.agentRealtimeVoice = ""
+            }
+        } catch {
+            loadFailed = true
+        }
+    }
+}
+
 struct AgentLLMVoicePicker: View {
     @Binding var draft: HerAppConfigDraft
     @State private var voices: [AgentLLMVoiceCatalog.Voice] = []
@@ -207,6 +348,19 @@ struct HerConfigurationFields: View {
             fieldSection("Optional Memory", systemImage: "brain.head.profile") {
                 TextField("AgentMem base URL", text: $draft.agentMemBaseURL)
                 SecureField("AgentMem API key", text: $draft.agentMemAPIKey)
+            }
+
+            fieldSection("打电话（agentRealtime）", systemImage: "phone") {
+                SecureField("agentRealtime API key（ar_live_…）", text: $draft.agentRealtimeAPIKey)
+                Picker("模型", selection: $draft.agentRealtimeModelProfile) {
+                    Text("Realtime · 豆包").tag("realtime_doubao")
+                    Text("Realtime · Qwen-Omni").tag("realtime_qwen_omni")
+                }
+                .pickerStyle(.segmented)
+                AgentRealtimeVoicePicker(draft: $draft)
+                Text("实时语音通话：在会话工具栏点电话图标，和当前角色开始通话。音色按所选模型自动加载。")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.muted)
             }
 
             fieldSection("Local Labels & Plugins", systemImage: "puzzlepiece.extension") {

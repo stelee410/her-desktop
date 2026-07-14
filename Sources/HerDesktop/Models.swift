@@ -25,12 +25,12 @@ enum WorkspaceSection: String, CaseIterable, Identifiable, Codable, Equatable {
 
     var title: String {
         switch self {
-        case .today: return "Today"
-        case .memory: return "Memory"
-        case .projects: return "Projects"
-        case .apps: return "Apps"
-        case .tools: return "Tools"
-        case .agents: return "Agents"
+        case .today: return "今天"
+        case .memory: return "记忆"
+        case .projects: return "项目"
+        case .apps: return "应用"
+        case .tools: return "工具"
+        case .agents: return "智能体"
         case .characters: return "角色卡"
         case .worldBooks: return "世界之书"
         }
@@ -602,7 +602,13 @@ struct HerAppConfig: Codable, Equatable {
     /// TTS model + speaker when the provider is "agentllm".
     var agentLLMTTSModel: String
     var agentLLMTTSVoice: String
-    /// Vidu-S1 实时数字人视频通话（独立于语音配置）。
+    /// 打电话: agentRealtime (realtime voice call) access key, model profile
+    /// (realtime_doubao / realtime_qwen_omni), and optional voice id. The
+    /// service URL is fixed (agentrealtime.oyii.ai).
+    var agentRealtimeAPIKey: String
+    var agentRealtimeModelProfile: String
+    var agentRealtimeVoice: String
+    /// Vidu-S1 实时数字人视频通话（独立于打电话/语音配置）。
     var viduAPIKey: String
     /// API host（国内 api.vidu.cn / 海外 api.vidu.com）。
     var viduHost: String
@@ -615,6 +621,7 @@ struct HerAppConfig: Codable, Equatable {
 
     var hasLLMKey: Bool { !agentLLMAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var hasMemKey: Bool { !agentMemAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var hasRealtimeKey: Bool { !agentRealtimeAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var hasViduKey: Bool { !viduAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     init(
@@ -634,6 +641,9 @@ struct HerAppConfig: Codable, Equatable {
         speechSynthesisProvider: String = "apple",
         agentLLMTTSModel: String = "doubao-tts",
         agentLLMTTSVoice: String = "zh_female_cancan_mars_bigtts",
+        agentRealtimeAPIKey: String = "",
+        agentRealtimeModelProfile: String = "realtime_doubao",
+        agentRealtimeVoice: String = "",
         viduAPIKey: String = "",
         viduHost: String = "api.vidu.cn",
         viduCallMode: String = "video",
@@ -657,6 +667,9 @@ struct HerAppConfig: Codable, Equatable {
         self.speechSynthesisProvider = speechSynthesisProvider
         self.agentLLMTTSModel = agentLLMTTSModel
         self.agentLLMTTSVoice = agentLLMTTSVoice
+        self.agentRealtimeAPIKey = agentRealtimeAPIKey
+        self.agentRealtimeModelProfile = agentRealtimeModelProfile
+        self.agentRealtimeVoice = agentRealtimeVoice
         self.viduAPIKey = viduAPIKey
         self.viduHost = viduHost
         self.viduCallMode = viduCallMode
@@ -682,6 +695,9 @@ struct HerAppConfig: Codable, Equatable {
         case speechSynthesisProvider
         case agentLLMTTSModel
         case agentLLMTTSVoice
+        case agentRealtimeAPIKey
+        case agentRealtimeModelProfile
+        case agentRealtimeVoice
         case viduAPIKey
         case viduHost
         case viduCallMode
@@ -711,6 +727,9 @@ struct HerAppConfig: Codable, Equatable {
         speechSynthesisProvider = try container.decodeIfPresent(String.self, forKey: .speechSynthesisProvider) ?? "apple"
         agentLLMTTSModel = try container.decodeIfPresent(String.self, forKey: .agentLLMTTSModel) ?? "doubao-tts"
         agentLLMTTSVoice = try container.decodeIfPresent(String.self, forKey: .agentLLMTTSVoice) ?? "zh_female_cancan_mars_bigtts"
+        agentRealtimeAPIKey = try container.decodeIfPresent(String.self, forKey: .agentRealtimeAPIKey) ?? ""
+        agentRealtimeModelProfile = try container.decodeIfPresent(String.self, forKey: .agentRealtimeModelProfile) ?? "realtime_doubao"
+        agentRealtimeVoice = try container.decodeIfPresent(String.self, forKey: .agentRealtimeVoice) ?? ""
         viduAPIKey = try container.decodeIfPresent(String.self, forKey: .viduAPIKey) ?? ""
         viduHost = try container.decodeIfPresent(String.self, forKey: .viduHost) ?? "api.vidu.cn"
         viduCallMode = try container.decodeIfPresent(String.self, forKey: .viduCallMode) ?? "video"
@@ -748,6 +767,9 @@ struct HerAppConfigDraft: Equatable {
     var speechSynthesisProvider: String
     var agentLLMTTSModel: String
     var agentLLMTTSVoice: String
+    var agentRealtimeAPIKey: String
+    var agentRealtimeModelProfile: String
+    var agentRealtimeVoice: String
     var viduAPIKey: String
     var viduHost: String
     var viduCallMode: String
@@ -772,6 +794,9 @@ struct HerAppConfigDraft: Equatable {
         self.speechSynthesisProvider = config.speechSynthesisProvider
         self.agentLLMTTSModel = config.agentLLMTTSModel
         self.agentLLMTTSVoice = config.agentLLMTTSVoice
+        self.agentRealtimeAPIKey = config.agentRealtimeAPIKey
+        self.agentRealtimeModelProfile = config.agentRealtimeModelProfile
+        self.agentRealtimeVoice = config.agentRealtimeVoice
         self.viduAPIKey = config.viduAPIKey
         self.viduHost = config.viduHost
         self.viduCallMode = config.viduCallMode
@@ -807,6 +832,9 @@ struct HerAppConfigDraft: Equatable {
             agentLLMTTSVoice: agentLLMTTSVoice.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? "zh_female_cancan_mars_bigtts"
                 : agentLLMTTSVoice.trimmingCharacters(in: .whitespacesAndNewlines),
+            agentRealtimeAPIKey: agentRealtimeAPIKey.trimmingCharacters(in: .whitespacesAndNewlines),
+            agentRealtimeModelProfile: agentRealtimeModelProfile == "realtime_qwen_omni" ? "realtime_qwen_omni" : "realtime_doubao",
+            agentRealtimeVoice: agentRealtimeVoice.trimmingCharacters(in: .whitespacesAndNewlines),
             viduAPIKey: viduAPIKey.trimmingCharacters(in: .whitespacesAndNewlines),
             viduHost: {
                 // Accept a bare host or a pasted URL; store the bare host.

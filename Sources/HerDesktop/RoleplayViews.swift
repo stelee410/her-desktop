@@ -1,4 +1,54 @@
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
+
+/// Disk-image cache for roleplay avatars/backgrounds. Filenames are unique
+/// per import, so entries never go stale — a replaced image gets a new key.
+enum RoleplayImageCache {
+    nonisolated(unsafe) private static let cache = NSCache<NSString, NSImage>()
+
+    static func image(at url: URL) -> NSImage? {
+        let key = url.path as NSString
+        if let hit = cache.object(forKey: key) { return hit }
+        guard let image = NSImage(contentsOf: url) else { return nil }
+        cache.setObject(image, forKey: key)
+        return image
+    }
+
+    /// A pre-scaled thumbnail. Small UI slots must NOT receive the full
+    /// image: some hosts (Menu labels, for one) size by the image's native
+    /// dimensions and blow a photo up over the whole window.
+    static func thumbnail(at url: URL, maxDimension: CGFloat) -> NSImage? {
+        let key = "\(url.path)#thumb\(Int(maxDimension))" as NSString
+        if let hit = cache.object(forKey: key) { return hit }
+        guard let full = image(at: url) else { return nil }
+        let size = full.size
+        guard size.width > 0, size.height > 0 else { return nil }
+        let scale = min(1, maxDimension / max(size.width, size.height))
+        let target = NSSize(width: size.width * scale, height: size.height * scale)
+        let thumb = NSImage(size: target)
+        thumb.lockFocus()
+        full.draw(
+            in: NSRect(origin: .zero, size: target),
+            from: .zero,
+            operation: .copy,
+            fraction: 1
+        )
+        thumb.unlockFocus()
+        cache.setObject(thumb, forKey: key)
+        return thumb
+    }
+}
+
+/// Runs the shared security-scope dance for a fileImporter pick and imports
+/// the image into the workspace; returns the stored filename.
+@MainActor
+func importPickedRoleplayImage(_ result: Result<URL, Error>, prefix: String, model: AppViewModel) -> String? {
+    guard case .success(let url) = result else { return nil }
+    let scoped = url.startAccessingSecurityScopedResource()
+    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+    return model.importRoleplayAsset(from: url, prefix: prefix)
+}
 
 // MARK: - 角色卡
 
@@ -24,6 +74,7 @@ struct CharactersWorkspaceView: View {
                         ForEach(model.characterCards) { card in
                             RoleplayAssetRow(
                                 emoji: card.emoji,
+                                avatarURL: model.roleplayAssetURL(card.avatarPath),
                                 name: card.name,
                                 summary: card.summary.isEmpty
                                     ? String(card.prompt.prefix(60))
@@ -46,10 +97,12 @@ struct CharactersWorkspaceView: View {
 
 private struct CharacterCardEditor: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var model: AppViewModel
     @State var card: CharacterCard
     let onSave: (CharacterCard) -> Void
     @State private var usesDedicatedMemory: Bool
     @State private var pane: Pane = .persona
+    @State private var isPickingAvatar = false
     @FocusState private var nameFocused: Bool
 
     private enum Pane: String, CaseIterable, Identifiable {
@@ -78,13 +131,47 @@ private struct CharacterCardEditor: View {
                                 endPoint: .bottomTrailing
                             )
                         )
-                    TextField("🎭", text: $card.emoji)
-                        .font(.system(size: 22))
-                        .multilineTextAlignment(.center)
-                        .textFieldStyle(.plain)
-                        .frame(width: 36)
+                    if let url = model.roleplayAssetURL(card.avatarPath),
+                       let avatar = RoleplayImageCache.image(at: url) {
+                        Image(nsImage: avatar)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 48, height: 48)
+                            .clipShape(Circle())
+                    } else {
+                        TextField("🎭", text: $card.emoji)
+                            .font(.system(size: 22))
+                            .multilineTextAlignment(.center)
+                            .textFieldStyle(.plain)
+                            .frame(width: 36)
+                    }
                 }
                 .frame(width: 48, height: 48)
+                .overlay(alignment: .bottomTrailing) {
+                    Menu {
+                        Button(card.avatarPath.isEmpty ? "选择头像图片…" : "更换头像图片…") {
+                            isPickingAvatar = true
+                        }
+                        if !card.avatarPath.isEmpty {
+                            Button("移除头像，改用 emoji") { card.avatarPath = "" }
+                        }
+                    } label: {
+                        Image(systemName: "photo.circle.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(AppTheme.coral)
+                            .background(Circle().fill(.white))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .offset(x: 5, y: 5)
+                    .help("头像图片；未设置时用 emoji")
+                }
+                .fileImporter(isPresented: $isPickingAvatar, allowedContentTypes: [.image]) { result in
+                    if let name = importPickedRoleplayImage(result, prefix: "avatar", model: model) {
+                        card.avatarPath = name
+                    }
+                }
 
                 VStack(alignment: .leading, spacing: 2) {
                     TextField("角色名", text: $card.name)
@@ -267,9 +354,11 @@ struct WorldBooksWorkspaceView: View {
 
 private struct WorldBookEditor: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var model: AppViewModel
     @State var book: WorldBook
     let onSave: (WorldBook) -> Void
     @State private var selectedEntryID: UUID?
+    @State private var isPickingBackground = false
     @FocusState private var nameFocused: Bool
 
     init(book: WorldBook, onSave: @escaping (WorldBook) -> Void) {
@@ -311,6 +400,61 @@ private struct WorldBookEditor: View {
                         .foregroundStyle(AppTheme.muted)
                 }
                 Spacer()
+
+                // Chat background: shown behind the transcript of any
+                // conversation that adopts this world. A plain Button with a
+                // pre-scaled thumbnail — an image inside a Menu label renders
+                // at native size on macOS and covered the whole editor.
+                Button {
+                    isPickingBackground = true
+                } label: {
+                    if let url = model.roleplayAssetURL(book.backgroundPath),
+                       let backdrop = RoleplayImageCache.thumbnail(at: url, maxDimension: 152) {
+                        Image(nsImage: backdrop)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 76, height: 46)
+                            .clipped()
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                            )
+                    } else {
+                        VStack(spacing: 3) {
+                            Image(systemName: "photo")
+                                .font(.system(size: 13))
+                            Text("聊天背景")
+                                .font(.system(size: 9))
+                        }
+                        .foregroundStyle(AppTheme.muted)
+                        .frame(width: 76, height: 46)
+                        .background(Color.black.opacity(0.035))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+                .buttonStyle(.plain)
+                .overlay(alignment: .topTrailing) {
+                    if !book.backgroundPath.isEmpty {
+                        Button {
+                            book.backgroundPath = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 12))
+                                .foregroundStyle(AppTheme.muted)
+                                .background(Circle().fill(.white))
+                        }
+                        .buttonStyle(.plain)
+                        .offset(x: 5, y: -5)
+                        .help("移除背景")
+                    }
+                }
+                .help("启用这个世界的会话，聊天区会铺上这张背景；点击更换")
+                .fileImporter(isPresented: $isPickingBackground, allowedContentTypes: [.image]) { result in
+                    if let name = importPickedRoleplayImage(result, prefix: "backdrop", model: model) {
+                        book.backgroundPath = name
+                    }
+                }
             }
             .padding(.horizontal, 24)
             .padding(.top, 20)
@@ -493,6 +637,7 @@ private struct WorldBookEntryPanel: View {
 
 private struct RoleplayAssetRow: View {
     var emoji: String
+    var avatarURL: URL?
     var name: String
     var summary: String
     var onEdit: () -> Void
@@ -500,8 +645,16 @@ private struct RoleplayAssetRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Text(emoji.isEmpty ? "🎭" : emoji)
-                .font(.title3)
+            if let avatarURL, let avatar = RoleplayImageCache.image(at: avatarURL) {
+                Image(nsImage: avatar)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 28, height: 28)
+                    .clipShape(Circle())
+            } else {
+                Text(emoji.isEmpty ? "🎭" : emoji)
+                    .font(.title3)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
                     .font(.subheadline.weight(.semibold))

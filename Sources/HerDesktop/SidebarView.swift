@@ -65,30 +65,44 @@ struct SidebarView: View {
         .background(Color(red: 0.95, green: 0.96, blue: 0.95))
     }
 
+    /// Conversations grouped by project: each project with conversations
+    /// gets a small header, everything unassigned goes under 散聊 (header
+    /// shown only when project groups exist).
+    private var projectGroups: [(project: Project, conversations: [ConversationSummary])] {
+        model.projects.compactMap { project in
+            let conversations = session.sortedConversations.filter { $0.projectID == project.id.uuidString }
+            return conversations.isEmpty ? nil : (project, conversations)
+        }
+    }
+
+    private var ungroupedConversations: [ConversationSummary] {
+        let projectIDs = Set(model.projects.map { $0.id.uuidString })
+        return session.sortedConversations.filter { conversation in
+            guard let projectID = conversation.projectID else { return true }
+            return !projectIDs.contains(projectID)
+        }
+    }
+
     private var conversationListSection: some View {
         DisclosureGroup(isExpanded: $isConversationListExpanded) {
             ScrollView {
                 // Lazy: only visible rows build; a long history built every
                 // row (with hover/rename state) eagerly.
                 LazyVStack(alignment: .leading, spacing: 2) {
-                    ForEach(session.sortedConversations) { conversation in
-                        ConversationListRow(
-                            conversation: conversation,
-                            selected: conversation.id == session.activeConversationID,
-                            onSelect: {
-                                model.switchConversation(to: conversation.id)
-                                model.selectedSection = .today
-                            },
-                            onTogglePin: {
-                                model.togglePinConversation(conversation.id)
-                            },
-                            onRename: { newTitle in
-                                model.renameConversation(conversation.id, to: newTitle)
-                            },
-                            onDelete: {
-                                conversationPendingDeletion = conversation
-                            }
-                        )
+                    ForEach(projectGroups, id: \.project.id) { group in
+                        ProjectGroupHeader(project: group.project) {
+                            model.selectedSection = .projects
+                        }
+                        ForEach(group.conversations) { conversation in
+                            conversationRow(conversation)
+                                .padding(.leading, 10)
+                        }
+                    }
+                    if !projectGroups.isEmpty, !ungroupedConversations.isEmpty {
+                        ProjectGroupHeader(project: nil, onOpen: nil)
+                    }
+                    ForEach(ungroupedConversations) { conversation in
+                        conversationRow(conversation)
                     }
                 }
                 .padding(.top, 4)
@@ -134,10 +148,63 @@ struct SidebarView: View {
         }
     }
 
+    private func conversationRow(_ conversation: ConversationSummary) -> some View {
+        ConversationListRow(
+            conversation: conversation,
+            selected: conversation.id == session.activeConversationID,
+            onSelect: {
+                model.switchConversation(to: conversation.id)
+                model.selectedSection = .today
+            },
+            onTogglePin: {
+                model.togglePinConversation(conversation.id)
+            },
+            onRename: { newTitle in
+                model.renameConversation(conversation.id, to: newTitle)
+            },
+            onDelete: {
+                conversationPendingDeletion = conversation
+            }
+        )
+    }
+
     private func initials(_ name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let first = trimmed.first else { return "H" }
         return String(first).uppercased()
+    }
+}
+
+/// A small group header in the conversation list: a project (clickable —
+/// jumps to the 项目 page) or 散聊 for unassigned conversations (nil project).
+private struct ProjectGroupHeader: View {
+    var project: Project?
+    var onOpen: (() -> Void)?
+
+    var body: some View {
+        Button(action: { onOpen?() }) {
+            HStack(spacing: 6) {
+                Text(project.map { $0.emoji.isEmpty ? "📁" : $0.emoji } ?? "💬")
+                    .font(.system(size: 11))
+                Text(project?.name ?? "散聊")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppTheme.muted)
+                    .lineLimit(1)
+                if let project, project.plan != nil {
+                    Text("\(Int(project.progress * 100))%")
+                        .font(.system(size: 9).monospacedDigit())
+                        .foregroundStyle(AppTheme.muted.opacity(0.7))
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
+            .padding(.bottom, 2)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(onOpen == nil)
+        .help(project == nil ? "未归属项目的会话" : "打开项目页")
     }
 }
 

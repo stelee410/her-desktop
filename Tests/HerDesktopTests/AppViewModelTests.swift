@@ -109,7 +109,7 @@ final class AppViewModelTests: XCTestCase {
 
         XCTAssertEqual(
             WorkspaceSection.allCases.map(\.title),
-            ["Today", "Memory", "Projects", "Apps", "Tools", "Agents", "角色卡", "世界之书"]
+            ["今天", "记忆", "项目", "应用", "工具", "智能体", "角色卡", "世界之书"]
         )
     }
 

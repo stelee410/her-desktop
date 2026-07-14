@@ -224,7 +224,7 @@ private struct CallWebView: NSViewRepresentable {
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "herCall")
     }
 
-    static func joinPayload(rtc: ViduRTCCredentials, callMode: String, avatarImageURI: String) -> String {
+    nonisolated static func joinPayload(rtc: ViduRTCCredentials, callMode: String, avatarImageURI: String) -> String {
         let object: [String: String] = [
             "token": rtc.token,
             "userId": rtc.userID,

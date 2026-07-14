@@ -70,6 +70,24 @@ extension AppViewModel {
         persistConversationIndex()
     }
 
+    // MARK: - Visual assets (avatars / chat backgrounds)
+
+    /// Copies a picked image into `.her/roleplay-assets/`; returns the stored
+    /// filename for the card/book to keep, or nil on failure.
+    func importRoleplayAsset(from url: URL, prefix: String) -> String? {
+        do {
+            return try roleplayStore.importAsset(from: url, prefix: prefix)
+        } catch {
+            lastError = "图片导入失败：\(error.localizedDescription)"
+            return nil
+        }
+    }
+
+    /// Resolves a stored asset filename to a readable URL, or nil.
+    func roleplayAssetURL(_ name: String) -> URL? {
+        roleplayStore.assetURL(named: name)
+    }
+
     // MARK: - Per-conversation selection
 
     var activeConversationSummary: ConversationSummary? {

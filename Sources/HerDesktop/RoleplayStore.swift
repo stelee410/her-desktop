@@ -6,6 +6,9 @@ struct CharacterCard: Identifiable, Codable, Equatable {
     var id: UUID = UUID()
     var name: String
     var emoji: String = "🎭"
+    /// Avatar image filename under `.her/roleplay-assets/`. Empty → the
+    /// emoji stands in as the avatar.
+    var avatarPath: String = ""
     /// One-line summary shown in lists/pickers.
     var summary: String = ""
     /// The card body injected into the system prompt: persona, personality,
@@ -25,6 +28,7 @@ struct CharacterCard: Identifiable, Codable, Equatable {
         id: UUID = UUID(),
         name: String,
         emoji: String = "🎭",
+        avatarPath: String = "",
         summary: String = "",
         prompt: String = "",
         greeting: String = "",
@@ -35,6 +39,7 @@ struct CharacterCard: Identifiable, Codable, Equatable {
         self.id = id
         self.name = name
         self.emoji = emoji
+        self.avatarPath = avatarPath
         self.summary = summary
         self.prompt = prompt
         self.greeting = greeting
@@ -50,6 +55,7 @@ struct CharacterCard: Identifiable, Codable, Equatable {
         id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         name = try container.decodeIfPresent(String.self, forKey: .name) ?? "角色"
         emoji = try container.decodeIfPresent(String.self, forKey: .emoji) ?? "🎭"
+        avatarPath = try container.decodeIfPresent(String.self, forKey: .avatarPath) ?? ""
         summary = try container.decodeIfPresent(String.self, forKey: .summary) ?? ""
         prompt = try container.decodeIfPresent(String.self, forKey: .prompt) ?? ""
         greeting = try container.decodeIfPresent(String.self, forKey: .greeting) ?? ""
@@ -89,9 +95,47 @@ struct WorldBook: Identifiable, Codable, Equatable {
     var name: String
     var emoji: String = "📖"
     var summary: String = ""
+    /// Chat-background image filename under `.her/roleplay-assets/`. Empty →
+    /// conversations in this world keep the default backdrop.
+    var backgroundPath: String = ""
     var entries: [Entry] = []
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
+
+    init(
+        id: UUID = UUID(),
+        name: String,
+        emoji: String = "📖",
+        summary: String = "",
+        backgroundPath: String = "",
+        entries: [Entry] = [],
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.name = name
+        self.emoji = emoji
+        self.summary = summary
+        self.backgroundPath = backgroundPath
+        self.entries = entries
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    /// Tolerant decoding, same contract as CharacterCard: books written
+    /// before a field existed load with defaults instead of tripping the
+    /// corrupt-file path.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? "世界"
+        emoji = try container.decodeIfPresent(String.self, forKey: .emoji) ?? "📖"
+        summary = try container.decodeIfPresent(String.self, forKey: .summary) ?? ""
+        backgroundPath = try container.decodeIfPresent(String.self, forKey: .backgroundPath) ?? ""
+        entries = try container.decodeIfPresent([Entry].self, forKey: .entries) ?? []
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
+    }
 
     /// Entries that apply given the recent conversation text: always-on ones
     /// plus keyword entries whose keyword appears (case-insensitive).
@@ -137,6 +181,29 @@ final class RoleplayStore {
             fileManager.backUpSiblingFile(at: fileURL, suffix: "corrupt-\(Int(Date().timeIntervalSince1970))")
             return ([], [])
         }
+    }
+
+    /// Where avatar/background images live, next to roleplay.json.
+    var assetsDirectory: URL {
+        fileURL.deletingLastPathComponent().appendingPathComponent("roleplay-assets", isDirectory: true)
+    }
+
+    /// Copies an image into the workspace under a fresh unique name (so a
+    /// replaced avatar never aliases a stale cache entry) and returns the
+    /// stored filename. Cards keep working if the source file later moves.
+    func importAsset(from source: URL, prefix: String) throws -> String {
+        try fileManager.createDirectory(at: assetsDirectory, withIntermediateDirectories: true)
+        let ext = source.pathExtension.isEmpty ? "png" : source.pathExtension.lowercased()
+        let name = "\(prefix)-\(UUID().uuidString).\(ext)"
+        try fileManager.copyItem(at: source, to: assetsDirectory.appendingPathComponent(name))
+        return name
+    }
+
+    /// Resolves a stored filename to a readable URL, or nil when unset/gone.
+    func assetURL(named name: String) -> URL? {
+        guard !name.isEmpty else { return nil }
+        let url = assetsDirectory.appendingPathComponent(name)
+        return fileManager.fileExists(atPath: url.path) ? url : nil
     }
 
     func save(cards: [CharacterCard], books: [WorldBook]) throws {

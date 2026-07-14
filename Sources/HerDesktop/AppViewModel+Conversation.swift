@@ -320,7 +320,8 @@ extension AppViewModel {
                 agentLoopSummary: agentLoopSummary(),
                 runtimeContext: PromptRuntimeContext.current(config: config, cwd: runtimeCwd),
                 companionContext: companionPromptContext(),
-                roleplayContext: roleplayPromptSection()
+                roleplayContext: roleplayPromptSection(),
+                activeProjectContext: projectPromptSection()
             )
             let catalog = CapabilityToolCatalog.build(from: plugins)
             var llmMessages = conversationContextBuilder.build(systemPrompt: prompt, messages: messages)
