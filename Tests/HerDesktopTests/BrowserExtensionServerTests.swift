@@ -90,3 +90,29 @@ final class BrowserExtensionServerTests: XCTestCase {
         }
     }
 }
+
+extension BrowserExtensionServerTests {
+    func testPersistentTokenSurvivesReload() throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("her-ext-token-\(UUID().uuidString).txt")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let first = BrowserExtensionServer.loadOrCreatePersistentToken(file: file)
+        XCTAssertGreaterThanOrEqual(first.count, 16)
+        // 第二次读取拿到同一个令牌，而不是重新生成。
+        XCTAssertEqual(BrowserExtensionServer.loadOrCreatePersistentToken(file: file), first)
+    }
+
+    func testRotateTokenInvalidatesOldOne() {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("her-ext-token-\(UUID().uuidString).txt")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let server = BrowserExtensionServer(token: "old-token", tokenFile: file)
+        let fresh = server.rotateToken()
+        XCTAssertNotEqual(fresh, "old-token")
+        XCTAssertEqual(server.sharedToken, fresh)
+        let rejected = server.handle(method: "POST", path: "/ext/hello", query: ["token": "old-token"], body: [:])
+        XCTAssertEqual(rejected.status, 401)
+        let accepted = server.handle(method: "POST", path: "/ext/hello", query: ["token": fresh], body: [:])
+        XCTAssertEqual(accepted.status, 200)
+    }
+}

@@ -14,7 +14,7 @@ final class BrowserExtensionServer: @unchecked Sendable {
         var paramsJSON: Data
     }
 
-    private let token: String
+    private var token: String // guarded by `lock`
     private let queue = DispatchQueue(label: "HerDesktop.BrowserExtensionServer")
     private let lock = NSLock()
     private var listener: NWListener?
@@ -26,11 +26,57 @@ final class BrowserExtensionServer: @unchecked Sendable {
 
     private(set) var port: UInt16?
 
-    init(token: String = UUID().uuidString.replacingOccurrences(of: "-", with: "")) {
-        self.token = token
+    private let tokenFile: URL
+
+    /// 令牌持久化在 App Support：重装/重启 app 都不变，扩展只需配置一次。
+    /// 想作废旧令牌时用 `rotateToken()` 手动刷新。
+    init(token: String? = nil, tokenFile: URL = BrowserExtensionServer.persistentTokenFile) {
+        self.tokenFile = tokenFile
+        self.token = token ?? Self.loadOrCreatePersistentToken(file: tokenFile)
     }
 
-    var sharedToken: String { token }
+    var sharedToken: String {
+        lock.lock(); defer { lock.unlock() }
+        return token
+    }
+
+    /// 生成并持久化一个新令牌；已配置旧令牌的扩展会立刻 401。
+    @discardableResult
+    func rotateToken() -> String {
+        let fresh = Self.makeToken()
+        lock.lock()
+        token = fresh
+        lock.unlock()
+        Self.persistToken(fresh, to: tokenFile)
+        return fresh
+    }
+
+    static var persistentTokenFile: URL {
+        HerWorkspacePaths.applicationSupportRuntimeDirectory()
+            .appendingPathComponent("extension-token.txt")
+    }
+
+    static func loadOrCreatePersistentToken(file: URL = persistentTokenFile) -> String {
+        if let raw = try? String(contentsOf: file, encoding: .utf8) {
+            let existing = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if existing.count >= 16 { return existing }
+        }
+        let fresh = makeToken()
+        persistToken(fresh, to: file)
+        return fresh
+    }
+
+    private static func makeToken() -> String {
+        UUID().uuidString.replacingOccurrences(of: "-", with: "")
+    }
+
+    private static func persistToken(_ token: String, to file: URL = persistentTokenFile) {
+        try? FileManager.default.createDirectory(
+            at: file.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? token.write(to: file, atomically: true, encoding: .utf8)
+    }
 
     var isExtensionConnected: Bool {
         lock.lock(); defer { lock.unlock() }
@@ -132,7 +178,7 @@ final class BrowserExtensionServer: @unchecked Sendable {
 
     func handle(method: String, path: String, query: [String: String], body: [String: Any]) -> Response {
         let provided = query["token"] ?? (body["token"] as? String) ?? ""
-        guard SecurityPrimitives.constantTimeEquals(provided, token) else {
+        guard SecurityPrimitives.constantTimeEquals(provided, sharedToken) else {
             return Response(status: 401, json: ["ok": false, "error": "invalid token"])
         }
         switch (method, path) {

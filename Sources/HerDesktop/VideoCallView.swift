@@ -5,17 +5,18 @@ import WebKit
 /// 用阿里云 ARTC Web SDK 负责音视频推拉流与渲染。
 struct VideoCallView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var model: AppViewModel
 
     let config: HerAppConfig
-    let persona: String
     let displayName: String
 
     @StateObject private var call: ViduCallModel
+    @StateObject private var transcriber = VideoCallTranscriber()
     @State private var webError: String?
+    @State private var hasFinalized = false
 
-    init(config: HerAppConfig, persona: String, displayName: String) {
+    init(config: HerAppConfig, displayName: String) {
         self.config = config
-        self.persona = persona
         self.displayName = displayName
         _call = StateObject(wrappedValue: ViduCallModel(
             apiKey: config.viduAPIKey,
@@ -50,6 +51,8 @@ struct VideoCallView: View {
         .frame(minWidth: 520, minHeight: 660)
         .task {
             guard isConfigured else { return }
+            // 开场简报：角色卡 + 世界书 + AgentMem 召回 + 近期聊天。
+            let persona = await model.videoCallPersona()
             call.start(
                 persona: persona,
                 imageURI: config.viduAvatarImageURI,
@@ -57,8 +60,33 @@ struct VideoCallView: View {
                 voice: config.viduVoice
             )
         }
+        .onChange(of: call.phase) { _, phase in
+            switch phase {
+            case .live:
+                // 计费开始的同时开并行转写（独立 ASR 会话）。
+                transcriber.start(config: config)
+            case .ended, .failed:
+                finalizeCall()
+            case .idle, .creating, .waitingAgent:
+                break
+            }
+        }
         .onDisappear {
             if call.isActive { call.hangUp() }
+            finalizeCall()
+        }
+    }
+
+    /// 通话收尾（幂等）：收口转写，把总结/记录交回 AppViewModel。
+    private func finalizeCall() {
+        guard !hasFinalized else { return }
+        hasFinalized = true
+        let seconds = call.liveStartedAt.map { Int(Date().timeIntervalSince($0)) } ?? 0
+        let model = self.model
+        let transcriber = self.transcriber
+        Task {
+            let transcript = await transcriber.finish()
+            model.videoCallDidEnd(transcript: transcript, seconds: seconds)
         }
     }
 

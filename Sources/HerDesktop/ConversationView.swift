@@ -164,28 +164,10 @@ struct ConversationView: View {
         .sheet(isPresented: $model.isVideoCallPresented) {
             VideoCallView(
                 config: model.config,
-                persona: videoCallPersona,
-                displayName: videoCallDisplayName
+                displayName: model.videoCallDisplayName
             )
+            .environmentObject(model)
         }
-    }
-
-    /// 人设优先取当前会话绑定的角色卡；没有角色卡时给一个陪伴向的默认人设。
-    private var videoCallPersona: String {
-        if let prompt = model.activeCharacterCard?.prompt.trimmingCharacters(in: .whitespacesAndNewlines),
-           !prompt.isEmpty {
-            return prompt
-        }
-        return "你是\(videoCallDisplayName)，用户的桌面 AI 伙伴。语气自然、温暖、简洁，像老朋友一样和用户实时视频聊天。"
-    }
-
-    private var videoCallDisplayName: String {
-        if let name = model.activeCharacterCard?.name.trimmingCharacters(in: .whitespacesAndNewlines),
-           !name.isEmpty {
-            return name
-        }
-        let configured = model.config.viduAvatarName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return configured.isEmpty ? model.agentProfile.displayName : configured
     }
 
     /// Pins the newest message to the bottom edge after a transcript load.
@@ -442,7 +424,7 @@ private struct ToolbarView: View {
                 : "打电话：先在设置里填写 agentRealtime API key")
 
             Button {
-                model.isVideoCallPresented = true
+                model.startVideoCall()
             } label: {
                 Image(systemName: "video.fill")
                     .foregroundStyle(model.isVideoCallPresented ? AppTheme.coral : AppTheme.muted)

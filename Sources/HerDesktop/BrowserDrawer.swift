@@ -10,6 +10,8 @@ struct BrowserDrawer: View {
     @EnvironmentObject private var chrome: UIChrome
     @ObservedObject private var controller: BrowserController
     @State private var pollTimer: Timer?
+    /// Bumped after rotateToken so the everyday panel re-reads the token.
+    @State private var tokenEpoch = 0
 
     init(controller: BrowserController) {
         self.controller = controller
@@ -120,7 +122,18 @@ struct BrowserDrawer: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+
+                Button {
+                    model.browserExtensionServer.rotateToken()
+                    tokenEpoch += 1
+                } label: {
+                    Label("刷新令牌", systemImage: "arrow.triangle.2.circlepath").font(.caption2)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("生成新令牌（旧令牌立即失效，需要在扩展选项里重新粘贴）")
             }
+            .id(tokenEpoch)
             Button {
                 model.openBrowserExtensionFolder()
             } label: {
