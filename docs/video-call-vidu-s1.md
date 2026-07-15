@@ -75,3 +75,16 @@
 3. **600s 硬上限**：续场会有形象/上下文重置感（短期记忆在 Vidu 侧，重建会话即丢失），需要把上下文压进 persona 或接受断点
 4. **video 模式 NOT_READY 必现**：重试逻辑不是可选项
 5. **WS 心跳**：确认 URLSessionWebSocketTask 对服务端 ping 的自动 pong（URLSession 默认会回 pong，但需实测 15s 判死规则）
+
+## 七、实测补充（2026-07-15，WS 探测）
+
+用脚本开真实 audio 会话（42 秒，63 积分）实测 WS 下行：**纯控制面**。
+conn_init_ack 和 hangup 回执之外零内容帧——发 text_msg 逗数字人说话也没有
+任何转写/回复文本下推。结论：
+
+- 上下文注入唯一入口 = 建会话时的 `avatar.persona`（不限字符数）。
+- 通话文本 Vidu 不提供，要自建 ASR（并行采集麦克风喂 DashScope）。
+- 通话中注入唯一通道 = type 99 text_msg（数字人会当用户消息回应，
+  非静默注入；【记忆】前缀协议待实测 = P3，暂缓）。
+- audio 模式不加入 RTC 频道也能 conn_init 成功并计费（42s=63 积分）。
+- 实测账号单次时长上限 7200s（文档写 600s）。
