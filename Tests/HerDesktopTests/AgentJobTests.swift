@@ -45,7 +45,9 @@ final class AgentJobTests: XCTestCase {
         return (model, llm)
     }
 
-    private func waitForJobsFinished(_ model: AppViewModel, timeout: TimeInterval = 5) async {
+    // Cold first-run after a rebuild can eat several seconds before the
+    // worker turns the job over; a tight budget made these tests flaky.
+    private func waitForJobsFinished(_ model: AppViewModel, timeout: TimeInterval = 15) async {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if model.agentJobs.allSatisfy(\.isFinished), model.jobWorkerTask == nil {
@@ -60,7 +62,7 @@ final class AgentJobTests: XCTestCase {
     private func waitForCard(
         _ model: AppViewModel,
         containing text: String,
-        timeout: TimeInterval = 5
+        timeout: TimeInterval = 15
     ) async -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {

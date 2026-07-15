@@ -73,4 +73,13 @@ enum CapabilityID {
     static let productExportDiagnostics = "product.exportDiagnostics"
     static let reflectionSnapshot = "reflection.snapshot"
     static let workspacePlan = "workspace.plan"
+
+    // Office documents
+    static let officePdfRead = "office.pdf.read"
+    static let officePdfMerge = "office.pdf.merge"
+    static let officeDocxRead = "office.docx.read"
+    static let officeDocxGenerate = "office.docx.generate"
+    static let officeXlsxRead = "office.xlsx.read"
+    static let officeXlsxWrite = "office.xlsx.write"
+    static let officePptGenerate = "office.ppt.generate"
 }

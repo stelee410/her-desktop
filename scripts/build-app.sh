@@ -86,7 +86,7 @@ for manifest in "${bundled_manifests[@]}"; do
   fi
 done
 
-for resource in workspace-plan.SKILL.md partner-brief.SKILL.md; do
+for resource in workspace-plan.SKILL.md partner-brief.SKILL.md office_tool.py; do
   if [[ ! -f "$RESOURCES/$RESOURCE_BUNDLE_NAME/$resource" ]]; then
     echo "Missing bundled plugin resource: $resource" >&2
     exit 1

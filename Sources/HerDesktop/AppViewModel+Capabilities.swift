@@ -341,6 +341,27 @@ extension AppViewModel {
         CapabilityID.webappRequest: { model, invocation in
             await model.requestWebAppBackendCapability(arguments: invocation.arguments)
         },
+        CapabilityID.officePdfRead: { model, invocation in
+            model.readPDFCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.officePdfMerge: { model, invocation in
+            model.mergePDFCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.officeDocxRead: { model, invocation in
+            await model.readDocxCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.officeDocxGenerate: { model, invocation in
+            await model.generateDocxCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.officeXlsxRead: { model, invocation in
+            await model.readXlsxCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.officeXlsxWrite: { model, invocation in
+            await model.writeXlsxCapability(arguments: invocation.arguments)
+        },
+        CapabilityID.officePptGenerate: { model, invocation in
+            await model.generatePPTCapability(arguments: invocation.arguments)
+        },
         CapabilityID.scheduleCreate: { model, invocation in
             model.createScheduledTaskCapability(arguments: invocation.arguments)
         },

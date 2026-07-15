@@ -1,0 +1,250 @@
+{
+  "author": "Her",
+  "capabilities": [
+    {
+      "adapter": {
+        "type": "native"
+      },
+      "description": "Extract the text of a PDF file (native PDFKit, per-page markers). Scanned PDFs without a text layer return a note instead of text.",
+      "id": "office.pdf.read",
+      "inputSchema": {
+        "properties": {
+          "max_chars": {
+            "description": "Maximum characters to return (default 20000).",
+            "type": "integer"
+          },
+          "path": {
+            "description": "Absolute path, ~ path, or workspace-relative path of the PDF.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "invocation": "office.pdf.read",
+      "kind": "native",
+      "requiresApproval": false,
+      "title": "读取 PDF",
+      "usageHint": "用户给了 PDF 或提到某个 PDF 的内容时用它取正文；扫描件没有文本层会明确说明。"
+    },
+    {
+      "adapter": {
+        "type": "native"
+      },
+      "description": "Merge multiple PDF files into one, saved under office-exports and revealed in Finder.",
+      "id": "office.pdf.merge",
+      "inputSchema": {
+        "properties": {
+          "paths": {
+            "description": "Two or more PDF paths, merged in order.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "output_name": {
+            "description": "Optional output file name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "paths"
+        ],
+        "type": "object"
+      },
+      "invocation": "office.pdf.merge",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "合并 PDF",
+      "usageHint": "合并多个 PDF 成一个文件时用；按 paths 顺序拼接页面。"
+    },
+    {
+      "adapter": {
+        "type": "native"
+      },
+      "description": "Extract the text of a .docx Word document (paragraphs and tables).",
+      "id": "office.docx.read",
+      "inputSchema": {
+        "properties": {
+          "max_chars": {
+            "description": "Maximum characters to return (default 20000).",
+            "type": "integer"
+          },
+          "path": {
+            "description": "Path of the .docx file.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "invocation": "office.docx.read",
+      "kind": "native",
+      "requiresApproval": false,
+      "title": "读取 Word",
+      "usageHint": "读取 .docx 内容时用；老的 .doc 格式不支持，请让用户先转存为 .docx。"
+    },
+    {
+      "adapter": {
+        "type": "native"
+      },
+      "description": "Generate a .docx from markdown (# headings, - bullets, numbered lists, **bold**). Saved to office-exports.",
+      "id": "office.docx.generate",
+      "inputSchema": {
+        "properties": {
+          "markdown": {
+            "description": "Document body in simple markdown.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Optional document title.",
+            "type": "string"
+          },
+          "output_name": {
+            "description": "Optional output file name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "markdown"
+        ],
+        "type": "object"
+      },
+      "invocation": "office.docx.generate",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "生成 Word 文档",
+      "usageHint": "用户要一份 Word/文档交付物时用；先把内容组织成 markdown 再调用。"
+    },
+    {
+      "adapter": {
+        "type": "native"
+      },
+      "description": "Read a .xlsx workbook: sheet names, row count, and the first rows as pipe-separated text.",
+      "id": "office.xlsx.read",
+      "inputSchema": {
+        "properties": {
+          "max_rows": {
+            "description": "Maximum rows to return (default 60).",
+            "type": "integer"
+          },
+          "path": {
+            "description": "Path of the .xlsx file.",
+            "type": "string"
+          },
+          "sheet": {
+            "description": "Optional sheet name; defaults to the active sheet.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "invocation": "office.xlsx.read",
+      "kind": "native",
+      "requiresApproval": false,
+      "title": "读取 Excel",
+      "usageHint": "查看表格数据时用；先读默认工作表，需要其他 sheet 再带 sheet 参数。"
+    },
+    {
+      "adapter": {
+        "type": "native"
+      },
+      "description": "Create a .xlsx from a 2D rows array (first row as headers). Saved to office-exports.",
+      "id": "office.xlsx.write",
+      "inputSchema": {
+        "properties": {
+          "rows": {
+            "description": "2D array of cell values; first row should be headers.",
+            "items": {
+              "items": {},
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "sheet_name": {
+            "description": "Optional sheet name (default Sheet1).",
+            "type": "string"
+          },
+          "output_name": {
+            "description": "Optional output file name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rows"
+        ],
+        "type": "object"
+      },
+      "invocation": "office.xlsx.write",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "生成 Excel",
+      "usageHint": "用户要表格交付物（清单、对比、统计）时用；rows 第一行放表头。"
+    },
+    {
+      "adapter": {
+        "type": "native"
+      },
+      "description": "Generate a .pptx deck from a slides outline. Each slide: {title, bullets, notes?}. Optional deck title/subtitle add a cover slide. Saved to office-exports.",
+      "id": "office.ppt.generate",
+      "inputSchema": {
+        "properties": {
+          "slides": {
+            "description": "Slide list: [{title, bullets: [string], notes?}].",
+            "items": {
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "bullets": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "notes": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "title": {
+            "description": "Optional deck title (adds a cover slide).",
+            "type": "string"
+          },
+          "subtitle": {
+            "description": "Optional cover subtitle.",
+            "type": "string"
+          },
+          "output_name": {
+            "description": "Optional output file name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slides"
+        ],
+        "type": "object"
+      },
+      "invocation": "office.ppt.generate",
+      "kind": "native",
+      "requiresApproval": true,
+      "title": "生成 PPT",
+      "usageHint": "用户要演示文稿时用：先和用户对齐大纲，再把每页组织成 title+bullets 调用；备注放 notes。"
+    }
+  ],
+  "description": "Office document tools: read/merge PDF natively, and generate/read Word, Excel, PowerPoint files through a local Python sidecar (bootstrapped on first use).",
+  "id": "builtin.office-tools",
+  "name": "Office 文档工具",
+  "systemPromptAddendum": "处理 PDF/Word/Excel/PPT 文件优先用 office.* 能力而不是 shell。生成类能力的产物保存在 workspace 的 office-exports/ 目录并自动在访达中显示；回复里给出完整路径。首次使用生成类能力会自动安装本地 Python 环境（约 1 分钟），提前告知用户。",
+  "version": "0.1.0"
+}

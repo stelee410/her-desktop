@@ -237,6 +237,8 @@ final class AppViewModel: ObservableObject, AuditRecording {
     lazy var callController = RealtimeCallController()
     /// 视频通话: Vidu-S1 digital human call. See VideoCallView.
     @Published var isVideoCallPresented = false
+    /// Office 文档工具（pptx/docx/xlsx 的 Python sidecar）。See AppViewModel+Office.
+    lazy var officeToolRunner = OfficeToolRunner(cwd: runtimeCwd)
     let voiceprintStore: VoiceprintProfileStore
     let voiceprintEnrollmentService = VoiceprintEnrollmentService()
     @Published var voiceprintProfile: VoiceprintProfile?

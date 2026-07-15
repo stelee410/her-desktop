@@ -135,7 +135,10 @@ final class BuiltInPluginContractTests: XCTestCase {
                 "terminal.read",
                 "browser.open",
                 "browser.read",
-                "browser.detect"
+                "browser.detect",
+                "office.pdf.read",
+                "office.docx.read",
+                "office.xlsx.read"
             ].contains(capability.id)
         }
         return false
