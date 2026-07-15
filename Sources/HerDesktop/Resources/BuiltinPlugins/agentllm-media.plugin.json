@@ -3,7 +3,7 @@
   "capabilities" : [
     {
       "adapter" : {
-        "bodyTemplate" : "{\n  \"model\": {{json:model|linkyun-image-default}},\n  \"prompt\": {{json:prompt}},\n  \"size\": {{json:size|1024x1024}},\n  \"n\": 1\n}",
+        "bodyTemplate" : "{\n  \"model\": {{json:model|gpt-image-2}},\n  \"prompt\": {{json:prompt}},\n  \"size\": {{json:size|1024x1024}},\n  \"n\": 1\n}",
         "headers" : {
           "Authorization" : "Bearer {{agent_llm_api_key}}",
           "Content-Type" : "application/json"
@@ -17,7 +17,7 @@
       "inputSchema" : {
         "properties" : {
           "model" : {
-            "description" : "Optional image model route alias. Defaults to linkyun-image-default; the deployment also lists gpt-image-2 and nano-banana-pro-preview (availability depends on server-side routes).",
+            "description" : "Optional image model route alias. Defaults to gpt-image-2; the deployment also lists linkyun-image-default and nano-banana-pro-preview (availability depends on server-side routes).",
             "type" : "string"
           },
           "prompt" : {
