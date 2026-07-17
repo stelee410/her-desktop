@@ -241,6 +241,10 @@ final class AppViewModel: ObservableObject, AuditRecording {
     lazy var officeToolRunner = OfficeToolRunner(cwd: runtimeCwd)
     /// 会话级模型菜单的候选（agentLLM 上实际存在的精选主力模型）。
     @Published var chatModelOptions: [AgentLLMChatModelOption] = []
+    /// 连接器（微信桥）。See AppViewModel+Connector.
+    lazy var connectorLiveServer = ConnectorLiveServer()
+    var wechatBridgeProcess: Process?
+    @Published var wechatConnectorStatus = "未启用"
     let voiceprintStore: VoiceprintProfileStore
     let voiceprintEnrollmentService = VoiceprintEnrollmentService()
     @Published var voiceprintProfile: VoiceprintProfile?
@@ -463,6 +467,9 @@ final class AppViewModel: ObservableObject, AuditRecording {
         if browserExtensionServerCreated {
             browserExtensionServer.stop()
         }
+        if wechatBridgeProcess != nil {
+            stopWeChatConnector()
+        }
     }
 
     /// Launch bootstrap in a model-owned task. SwiftUI `.task` cancels its
@@ -488,6 +495,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
         loadProjects()
         installPushToTalkMonitors()
         installPasteMonitor()
+        startWeChatConnectorIfEnabled()
         await reloadPlugins()
         await refreshServiceHealth()
     }
@@ -673,6 +681,9 @@ final class AppViewModel: ObservableObject, AuditRecording {
         refreshWebServiceArtifacts()
         workPlan = (try? workPlanStore.load()) ?? nil
         rebuildRunningTasks()
+        // 连接器跟随配置：参数可能变了，先停再按新配置启动。
+        if wechatBridgeProcess != nil { stopWeChatConnector() }
+        startWeChatConnectorIfEnabled()
     }
 
     func refreshPluginHealth() {

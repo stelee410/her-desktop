@@ -619,6 +619,15 @@ struct HerAppConfig: Codable, Equatable {
     var viduAvatarName: String
     var viduVoice: String
 
+    /// 微信连接器（infiniti-weixin-bridge）：把微信消息桥进 Her。
+    var wechatConnectorEnabled: Bool
+    /// 桥的工程目录（含 dist/cli.js）。
+    var wechatBridgeDirectory: String
+    /// 群聊里触发的 @ 名字（逗号分隔，透传给桥的 --bot-name）。
+    var wechatBotNames: String
+    /// 群聊策略：ignore / mention / all。
+    var wechatGroupMode: String
+
     var hasLLMKey: Bool { !agentLLMAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var hasMemKey: Bool { !agentMemAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var hasRealtimeKey: Bool { !agentRealtimeAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -649,7 +658,11 @@ struct HerAppConfig: Codable, Equatable {
         viduCallMode: String = "video",
         viduAvatarImageURI: String = "",
         viduAvatarName: String = "",
-        viduVoice: String = ""
+        viduVoice: String = "",
+        wechatConnectorEnabled: Bool = false,
+        wechatBridgeDirectory: String = "",
+        wechatBotNames: String = "",
+        wechatGroupMode: String = "mention"
     ) {
         self.agentLLMBaseURL = agentLLMBaseURL
         self.agentLLMAPIKey = agentLLMAPIKey
@@ -676,6 +689,10 @@ struct HerAppConfig: Codable, Equatable {
         self.viduAvatarImageURI = viduAvatarImageURI
         self.viduAvatarName = viduAvatarName
         self.viduVoice = viduVoice
+        self.wechatConnectorEnabled = wechatConnectorEnabled
+        self.wechatBridgeDirectory = wechatBridgeDirectory
+        self.wechatBotNames = wechatBotNames
+        self.wechatGroupMode = wechatGroupMode
     }
 
     enum CodingKeys: String, CodingKey {
@@ -704,6 +721,10 @@ struct HerAppConfig: Codable, Equatable {
         case viduAvatarImageURI
         case viduAvatarName
         case viduVoice
+        case wechatConnectorEnabled
+        case wechatBridgeDirectory
+        case wechatBotNames
+        case wechatGroupMode
     }
 
     init(from decoder: Decoder) throws {
@@ -736,6 +757,10 @@ struct HerAppConfig: Codable, Equatable {
         viduAvatarImageURI = try container.decodeIfPresent(String.self, forKey: .viduAvatarImageURI) ?? ""
         viduAvatarName = try container.decodeIfPresent(String.self, forKey: .viduAvatarName) ?? ""
         viduVoice = try container.decodeIfPresent(String.self, forKey: .viduVoice) ?? ""
+        wechatConnectorEnabled = try container.decodeIfPresent(Bool.self, forKey: .wechatConnectorEnabled) ?? false
+        wechatBridgeDirectory = try container.decodeIfPresent(String.self, forKey: .wechatBridgeDirectory) ?? ""
+        wechatBotNames = try container.decodeIfPresent(String.self, forKey: .wechatBotNames) ?? ""
+        wechatGroupMode = try container.decodeIfPresent(String.self, forKey: .wechatGroupMode) ?? "mention"
     }
 
     static let empty = HerAppConfig(
@@ -776,6 +801,10 @@ struct HerAppConfigDraft: Equatable {
     var viduAvatarImageURI: String
     var viduAvatarName: String
     var viduVoice: String
+    var wechatConnectorEnabled: Bool
+    var wechatBridgeDirectory: String
+    var wechatBotNames: String
+    var wechatGroupMode: String
 
     init(config: HerAppConfig) {
         self.agentLLMBaseURL = config.agentLLMBaseURL.absoluteString
@@ -803,6 +832,10 @@ struct HerAppConfigDraft: Equatable {
         self.viduAvatarImageURI = config.viduAvatarImageURI
         self.viduAvatarName = config.viduAvatarName
         self.viduVoice = config.viduVoice
+        self.wechatConnectorEnabled = config.wechatConnectorEnabled
+        self.wechatBridgeDirectory = config.wechatBridgeDirectory
+        self.wechatBotNames = config.wechatBotNames
+        self.wechatGroupMode = config.wechatGroupMode
     }
 
     func makeConfig() throws -> HerAppConfig {
@@ -845,7 +878,11 @@ struct HerAppConfigDraft: Equatable {
             viduCallMode: viduCallMode == "audio" ? "audio" : "video",
             viduAvatarImageURI: viduAvatarImageURI.trimmingCharacters(in: .whitespacesAndNewlines),
             viduAvatarName: viduAvatarName.trimmingCharacters(in: .whitespacesAndNewlines),
-            viduVoice: viduVoice.trimmingCharacters(in: .whitespacesAndNewlines)
+            viduVoice: viduVoice.trimmingCharacters(in: .whitespacesAndNewlines),
+            wechatConnectorEnabled: wechatConnectorEnabled,
+            wechatBridgeDirectory: (wechatBridgeDirectory.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath,
+            wechatBotNames: wechatBotNames.trimmingCharacters(in: .whitespacesAndNewlines),
+            wechatGroupMode: ["ignore", "mention", "all"].contains(wechatGroupMode) ? wechatGroupMode : "mention"
         )
     }
 
