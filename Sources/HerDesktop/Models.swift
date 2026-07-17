@@ -18,6 +18,7 @@ enum WorkspaceSection: String, CaseIterable, Identifiable, Codable, Equatable {
     case apps
     case tools
     case agents
+    case connections
     case characters
     case worldBooks
 
@@ -31,6 +32,7 @@ enum WorkspaceSection: String, CaseIterable, Identifiable, Codable, Equatable {
         case .apps: return "应用"
         case .tools: return "工具"
         case .agents: return "智能体"
+        case .connections: return "连接"
         case .characters: return "角色卡"
         case .worldBooks: return "世界之书"
         }
@@ -44,6 +46,7 @@ enum WorkspaceSection: String, CaseIterable, Identifiable, Codable, Equatable {
         case .apps: return "macwindow.on.rectangle"
         case .tools: return "square.grid.2x2"
         case .agents: return "circle.hexagongrid"
+        case .connections: return "link"
         case .characters: return "theatermasks"
         case .worldBooks: return "book.closed"
         }

@@ -330,24 +330,6 @@ struct AgentLLMVoicePicker: View {
 
 /// 数字人形象图：本地选图（自动转 base64 data URI，Vidu 要求解码后 <20MB）
 /// 或直接粘贴图片 URL；旁边给一个当前值的缩略图预览。
-/// 微信桥的实时状态（运行中/退出原因），跟随 AppViewModel。
-private struct ConnectorStatusLine: View {
-    @EnvironmentObject private var model: AppViewModel
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(model.wechatBridgeProcess != nil ? Color.green : AppTheme.muted)
-                .frame(width: 7, height: 7)
-            Text(model.wechatConnectorStatus)
-                .font(.caption2)
-                .foregroundStyle(AppTheme.muted)
-                .lineLimit(2)
-                .textSelection(.enabled)
-        }
-    }
-}
-
 struct ViduAvatarPickerField: View {
     @Binding var draft: HerAppConfigDraft
     @State private var isImporterPresented = false
@@ -520,21 +502,6 @@ struct HerConfigurationFields: View {
                     .foregroundStyle(AppTheme.muted)
             }
 
-            fieldSection("连接器（微信）", systemImage: "link") {
-                Toggle("启用微信桥（infiniti-weixin-bridge）", isOn: $draft.wechatConnectorEnabled)
-                TextField("桥目录（含 dist/cli.js）", text: $draft.wechatBridgeDirectory)
-                TextField("群聊 @ 触发名（逗号分隔，可留空）", text: $draft.wechatBotNames)
-                Picker("群聊策略", selection: $draft.wechatGroupMode) {
-                    Text("忽略群聊").tag("ignore")
-                    Text("仅 @ 我时").tag("mention")
-                    Text("全部消息").tag("all")
-                }
-                .pickerStyle(.segmented)
-                ConnectorStatusLine()
-                Text("首次使用先在终端执行 infiniti-weixin-bridge login 扫码登录。消息会进入侧栏的「📱 微信」会话，可为它绑定角色卡和模型。")
-                    .font(.caption2)
-                    .foregroundStyle(AppTheme.muted)
-            }
         }
         .textFieldStyle(.roundedBorder)
         .font(fieldFont)
