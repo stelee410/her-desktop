@@ -862,17 +862,9 @@ private struct MessageBubble: View {
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(Color.black.opacity(0.05), lineWidth: 1)
             )
+            // 不挂 .contextMenu：它把 LazyVStack 的行包进额外容器，长对话
+            // 里批量行失效时会整屏短暂画空（发消息瞬间白屏）。悬停按钮够用。
             .onHover { isHovering = $0 }
-            .contextMenu {
-                Button("复制") {
-                    let pasteboard = NSPasteboard.general
-                    pasteboard.clearContents()
-                    pasteboard.setString(message.content, forType: .string)
-                }
-                Button("删除", role: .destructive) {
-                    model.deleteMessage(message.id)
-                }
-            }
             if message.role != .user { Spacer(minLength: 70) }
         }
     }
