@@ -38,19 +38,35 @@ extension AppViewModel {
             return
         }
 
+        // 启动前清掉指向本端口的残留桥（app 上次被强杀留下的孤儿）：
+        // 两个桥同时轮询会对同一条微信消息各回一遍。
+        Self.killStaleBridges()
+
+        // sh 看门狗包一层：app 进程消失（包括崩溃/SIGKILL）后 5 秒内
+        // 桥自杀——微信桥绝不能比 Her 活得久。参数走位置变量，免去引号地狱。
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: node)
-        var arguments = [
-            cli.path, "start",
-            "--live-ws", "ws://127.0.0.1:\(Self.connectorLivePort)",
-            "--no-watch-inbox",
-            "--group-mode", config.wechatGroupMode
-        ]
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
         let botNames = config.wechatBotNames.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !botNames.isEmpty {
-            arguments += ["--bot-name", botNames]
-        }
-        process.arguments = arguments
+        let watchdogScript = """
+        if [ -n "$5" ]; then
+          "$1" "$2" start --live-ws "$3" --no-watch-inbox --group-mode "$4" --bot-name "$5" &
+        else
+          "$1" "$2" start --live-ws "$3" --no-watch-inbox --group-mode "$4" &
+        fi
+        CHILD=$!
+        trap 'kill "$CHILD" 2>/dev/null' TERM INT EXIT
+        while kill -0 "$6" 2>/dev/null && kill -0 "$CHILD" 2>/dev/null; do sleep 5; done
+        kill "$CHILD" 2>/dev/null
+        wait "$CHILD" 2>/dev/null
+        """
+        process.arguments = [
+            "-c", watchdogScript, "sh",
+            node, cli.path,
+            "ws://127.0.0.1:\(Self.connectorLivePort)",
+            config.wechatGroupMode,
+            botNames,
+            String(ProcessInfo.processInfo.processIdentifier)
+        ]
         process.currentDirectoryURL = URL(fileURLWithPath: bridgeDirectory)
 
         let logURL = HerWorkspacePaths.logsDirectory(cwd: runtimeCwd)
@@ -89,12 +105,23 @@ extension AppViewModel {
             process.terminationHandler = nil
             process.terminate()
             wechatBridgeProcess = nil
+            // 包装 sh 的 trap 会带走 node；再兜底清一次防信号竞争。
+            Self.killStaleBridges()
             audit(type: "connector.wechat_stopped", summary: "WeChat bridge stopped.")
         }
         connectorLiveServer.stop()
         if !config.wechatConnectorEnabled {
             wechatConnectorStatus = "未启用"
         }
+    }
+
+    /// 只清理指向我们端口的桥进程，不误伤用户手动跑的其他实例。
+    private static func killStaleBridges() {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+        process.arguments = ["-f", "cli.js start --live-ws ws://127.0.0.1:\(connectorLivePort)"]
+        try? process.run()
+        process.waitUntilExit()
     }
 
     private static func resolveNodeExecutable() -> String? {
