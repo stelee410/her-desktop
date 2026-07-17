@@ -747,6 +747,7 @@ private struct MessageBubble: View {
     var message: ChatMessage
     var artifacts: [WebServiceArtifact] = []
     @State private var isHovering = false
+    @State private var isConfirmingDelete = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -841,16 +842,35 @@ private struct MessageBubble: View {
                         .opacity(isHovering ? 1 : 0)
                         .disabled(message.content.isEmpty)
 
+                        // 两段式删除：第一次点亮出红色确认，再点才真删。
+                        // 不用弹窗——presentation 容器挂在 Lazy 行上会整屏画空。
                         Button {
-                            model.deleteMessage(message.id)
+                            if isConfirmingDelete {
+                                model.deleteMessage(message.id)
+                            } else {
+                                isConfirmingDelete = true
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                                    isConfirmingDelete = false
+                                }
+                            }
                         } label: {
-                            Image(systemName: "trash")
-                                .font(.system(size: 12))
-                                .foregroundStyle(AppTheme.muted)
+                            if isConfirmingDelete {
+                                Label("确认删除", systemImage: "trash.fill")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 2)
+                                    .background(Color.red)
+                                    .clipShape(Capsule())
+                            } else {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(AppTheme.muted)
+                            }
                         }
                         .buttonStyle(.plain)
-                        .help("删除这条消息（会同时从存档移除）")
-                        .opacity(isHovering ? 1 : 0)
+                        .help(isConfirmingDelete ? "再点一次确认删除" : "删除这条消息（需二次确认）")
+                        .opacity(isHovering || isConfirmingDelete ? 1 : 0)
                     }
                 }
             }
@@ -864,7 +884,10 @@ private struct MessageBubble: View {
             )
             // 不挂 .contextMenu：它把 LazyVStack 的行包进额外容器，长对话
             // 里批量行失效时会整屏短暂画空（发消息瞬间白屏）。悬停按钮够用。
-            .onHover { isHovering = $0 }
+            .onHover { hovering in
+                isHovering = hovering
+                if !hovering { isConfirmingDelete = false }
+            }
             if message.role != .user { Spacer(minLength: 70) }
         }
     }
