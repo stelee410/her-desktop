@@ -24,7 +24,7 @@ enum AgentLLMModelCatalog {
         .init(id: "deepseek-v4-pro", tagline: "DeepSeek · 推理性价比之王"),
         .init(id: "deepseek-reasoner", tagline: "DeepSeek 慢思考 · 数学与逻辑推演强"),
         .init(id: "qwen3.7-max", tagline: "通义旗舰 · 中文理解与创作出色"),
-        .init(id: "grok-4.3", tagline: "xAI · 风格直率，时事感强"),
+        .init(id: "grok-4.5", tagline: "xAI 旗舰 · 编程与 agent 任务强，回答高效"),
         .init(id: "MiniMax-M2.7", tagline: "MiniMax · 中文对话自然，角色扮演出彩")
     ]
 
