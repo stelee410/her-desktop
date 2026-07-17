@@ -5,6 +5,9 @@ enum ServiceError: LocalizedError {
     case invalidResponse
     case httpStatus(Int, String)
     case decoding(String)
+    /// 网关偶发返回 200 + 空响应体（无任何 SSE 事件）。这类失败还没有
+    /// 产生任何内容，客户端可以安全地重试一次。
+    case emptyStreamBody
 
     var errorDescription: String? {
         switch self {
@@ -16,6 +19,8 @@ enum ServiceError: LocalizedError {
             return "HTTP \(status): \(SecretRedactor.redact(body))"
         case .decoding(let message):
             return "Decoding failed: \(message)"
+        case .emptyStreamBody:
+            return "AgentLLM 返回了空响应（网关瞬时故障），重试后仍失败。"
         }
     }
 }
@@ -535,7 +540,13 @@ final class AgentLLMClient: AgentLLMChatting {
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(config.agentLLMAPIKey)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        return try await streamChat(request: request, onEvent: onEvent)
+        do {
+            return try await streamChat(request: request, onEvent: onEvent)
+        } catch ServiceError.emptyStreamBody {
+            // 还没收到任何流事件就断了 —— 重试不会产生重复内容。
+            try await Task.sleep(nanoseconds: 800_000_000)
+            return try await streamChat(request: request, onEvent: onEvent)
+        }
     }
 
     private func streamChat(
@@ -645,10 +656,20 @@ final class AgentLLMClient: AgentLLMChatting {
         onEvent: @escaping @MainActor (AgentLLMStreamEvent) -> Void
     ) throws -> AgentLLMChatResponse.Choice.Message {
         let trimmed = rawBody.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty,
-              let data = trimmed.data(using: .utf8),
-              let decoded = try? JSONDecoder().decode(AgentLLMChatResponse.self, from: data) else {
-            throw ServiceError.decoding("AgentLLM returned an unrecognized streaming response.")
+        guard !trimmed.isEmpty else {
+            throw ServiceError.emptyStreamBody
+        }
+        guard let data = trimmed.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode(AgentLLMChatResponse.self, from: data),
+              !decoded.choices.isEmpty else {
+            // 网关在 200 里塞错误 JSON（{"detail"/"error"/"message": …}）时，
+            // 把真实原因透出来，而不是笼统的"unrecognized"。
+            if let text = Self.gatewayErrorText(from: trimmed) {
+                throw ServiceError.decoding("AgentLLM 网关错误：\(text)")
+            }
+            throw ServiceError.decoding(
+                "AgentLLM returned an unrecognized streaming response: \(String(trimmed.prefix(160)))"
+            )
         }
         var message = decoded.choices.first?.message ?? .init(role: "assistant", content: "")
         if message.finishReason == nil {
@@ -666,6 +687,21 @@ final class AgentLLMClient: AgentLLMChatting {
             onEvent(.contentDelta(content))
         }
         return message
+    }
+
+    private static func gatewayErrorText(from body: String) -> String? {
+        guard let data = body.data(using: .utf8),
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            return nil
+        }
+        for key in ["detail", "message", "error"] {
+            if let text = object[key] as? String, !text.isEmpty { return text }
+            if let nested = object[key] as? [String: Any],
+               let text = nested["message"] as? String, !text.isEmpty {
+                return text
+            }
+        }
+        return nil
     }
 
     private func bytes(for request: URLRequest, attempts: Int = 2) async throws -> (URLSession.AsyncBytes, URLResponse) {

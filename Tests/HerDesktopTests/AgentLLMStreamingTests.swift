@@ -6,11 +6,16 @@ final class AgentLLMStreamingTests: XCTestCase {
     final class StreamingMockURLProtocol: URLProtocol {
         nonisolated(unsafe) static var responseBody: Data = Data()
         nonisolated(unsafe) static var statusCode: Int = 200
+        /// Non-empty: each request pops the next body (retry-behavior tests).
+        nonisolated(unsafe) static var responseQueue: [Data] = []
+        nonisolated(unsafe) static var requestCount = 0
 
         override class func canInit(with request: URLRequest) -> Bool { true }
         override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
         override func startLoading() {
+            Self.requestCount += 1
+            let body = Self.responseQueue.isEmpty ? Self.responseBody : Self.responseQueue.removeFirst()
             let response = HTTPURLResponse(
                 url: request.url!,
                 statusCode: Self.statusCode,
@@ -18,11 +23,17 @@ final class AgentLLMStreamingTests: XCTestCase {
                 headerFields: ["Content-Type": "text/event-stream"]
             )!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: Self.responseBody)
+            client?.urlProtocol(self, didLoad: body)
             client?.urlProtocolDidFinishLoading(self)
         }
 
         override func stopLoading() {}
+    }
+
+    override func setUp() {
+        super.setUp()
+        StreamingMockURLProtocol.responseQueue = []
+        StreamingMockURLProtocol.requestCount = 0
     }
 
     private func makeClient() -> AgentLLMClient {
@@ -126,5 +137,41 @@ final class AgentLLMStreamingTests: XCTestCase {
         XCTAssertEqual(message.content, "plain reply")
         XCTAssertEqual(message.reasoningContent, "quick")
         XCTAssertEqual(contentEvents, "plain reply")
+    }
+}
+
+extension AgentLLMStreamingTests {
+    func testEmptyStreamBodyRetriesOnceThenSucceeds() async throws {
+        StreamingMockURLProtocol.statusCode = 200
+        StreamingMockURLProtocol.responseQueue = [
+            Data(), // 网关瞬时故障：200 空体
+            Data("data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"好的\"},\"index\":0}]}\n\ndata: [DONE]\n".utf8)
+        ]
+        let message = try await makeClient().chat(messages: [.user("hi")], tools: []) { _ in }
+        XCTAssertEqual(message.content, "好的")
+        XCTAssertEqual(StreamingMockURLProtocol.requestCount, 2)
+    }
+
+    func testEmptyStreamBodyFailsAfterOneRetry() async {
+        StreamingMockURLProtocol.statusCode = 200
+        StreamingMockURLProtocol.responseQueue = [Data(), Data()]
+        do {
+            _ = try await makeClient().chat(messages: [.user("hi")], tools: []) { _ in }
+            XCTFail("empty bodies must fail after one retry")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("空响应"), error.localizedDescription)
+            XCTAssertEqual(StreamingMockURLProtocol.requestCount, 2)
+        }
+    }
+
+    func testGatewayErrorJSONInsideHTTP200IsSurfaced() async {
+        StreamingMockURLProtocol.statusCode = 200
+        StreamingMockURLProtocol.responseBody = Data(#"{"detail":"No route for model gemini-3.5-flash"}"#.utf8)
+        do {
+            _ = try await makeClient().chat(messages: [.user("hi")], tools: []) { _ in }
+            XCTFail("gateway error body must surface as an error")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("No route for model"), error.localizedDescription)
+        }
     }
 }
