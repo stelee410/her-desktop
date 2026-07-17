@@ -14,6 +14,7 @@ enum AgentLLMModelCatalog {
     static let curated: [AgentLLMChatModelOption] = [
         .init(id: "linkyun-default", tagline: "默认路由 · 质量/速度/成本均衡"),
         .init(id: "linkyun-smart", tagline: "智能路由 · 难题自动升级更强模型"),
+        .init(id: "M2-her", tagline: "Her 专属路由 · 基于 MiniMax M2 的陪伴对话调优"),
         .init(id: "claude-fable-5", tagline: "Anthropic 旗舰 · 复杂推理与代码最稳"),
         .init(id: "claude-sonnet", tagline: "Anthropic 主力 · 写作/代码/工具调用均衡"),
         .init(id: "claude-haiku", tagline: "Anthropic 轻量 · 快且便宜，适合简单任务"),
