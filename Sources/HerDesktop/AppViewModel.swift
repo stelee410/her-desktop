@@ -239,6 +239,8 @@ final class AppViewModel: ObservableObject, AuditRecording {
     @Published var isVideoCallPresented = false
     /// Office 文档工具（pptx/docx/xlsx 的 Python sidecar）。See AppViewModel+Office.
     lazy var officeToolRunner = OfficeToolRunner(cwd: runtimeCwd)
+    /// 会话级模型菜单的候选（agentLLM 上实际存在的精选主力模型）。
+    @Published var chatModelOptions: [AgentLLMChatModelOption] = []
     let voiceprintStore: VoiceprintProfileStore
     let voiceprintEnrollmentService = VoiceprintEnrollmentService()
     @Published var voiceprintProfile: VoiceprintProfile?

@@ -11,6 +11,8 @@ struct ConversationSummary: Identifiable, Codable, Equatable {
     var worldBookID: String?
     /// The project this conversation belongs to (at most one).
     var projectID: String?
+    /// Per-conversation chat model; nil follows the global config model.
+    var modelOverride: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -21,6 +23,7 @@ struct ConversationSummary: Identifiable, Codable, Equatable {
         case characterCardID = "character_card_id"
         case worldBookID = "world_book_id"
         case projectID = "project_id"
+        case modelOverride = "model_override"
     }
 }
 

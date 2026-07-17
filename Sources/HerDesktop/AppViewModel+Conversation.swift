@@ -33,6 +33,39 @@ extension AppViewModel {
         saveSessionSnapshot()
     }
 
+    // MARK: - Per-conversation model override
+
+    /// 这个会话的专属模型；nil 跟随全局设置。
+    var activeModelOverride: String? {
+        let raw = activeConversationSummary?.modelOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (raw?.isEmpty == false) ? raw : nil
+    }
+
+    func setModelOverride(_ modelID: String?) {
+        guard let index = conversations.firstIndex(where: { $0.id == activeConversationID }) else { return }
+        conversations[index].modelOverride = modelID
+        persistConversationIndex()
+        audit(
+            type: "session.model_override",
+            summary: modelID.map { "Conversation switched to model \($0)." } ?? "Conversation reverted to the global model.",
+            metadata: ["sessionID": activeConversationID, "model": modelID ?? "default"]
+        )
+    }
+
+    /// 顶栏模型菜单的数据源：agentLLM 上实际存在的精选主力模型。
+    func refreshChatModelOptions(force: Bool = false) async {
+        guard chatModelOptions.isEmpty || force, config.hasLLMKey else { return }
+        do {
+            chatModelOptions = try await AgentLLMModelCatalog.fetch(
+                baseURL: config.agentLLMBaseURL,
+                apiKey: config.agentLLMAPIKey,
+                session: urlSession
+            )
+        } catch {
+            audit(type: "models.catalog_failed", summary: error.localizedDescription)
+        }
+    }
+
     func switchConversation(to id: String) {
         guard id != activeConversationID, conversations.contains(where: { $0.id == id }) else { return }
         stopDictation()
@@ -458,6 +491,7 @@ extension AppViewModel {
             let message = try await agentLLM.chat(
                 messages: llmMessages,
                 tools: currentCatalog.tools,
+                modelOverride: activeModelOverride,
                 onEvent: { [weak self] event in
                     self?.applyAssistantStreamEvent(event)
                 }

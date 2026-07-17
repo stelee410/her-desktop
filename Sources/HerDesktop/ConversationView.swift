@@ -362,6 +362,38 @@ private struct RoleplaySelectors: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .help("把这个会话归入一个项目；项目的目标、计划和工作目录会注入对话")
+
+        modelSelector
+    }
+
+    /// 会话级模型：只影响这个对话的主回合；后台任务/摘要仍用全局模型。
+    private var modelSelector: some View {
+        let override = model.activeModelOverride
+        return Menu {
+            Button("默认 · \(model.config.agentLLMModel)\(override == nil ? " ✓" : "")") {
+                model.setModelOverride(nil)
+            }
+            if model.chatModelOptions.isEmpty {
+                Text("模型列表加载中…")
+            } else {
+                Divider()
+                ForEach(model.chatModelOptions) { option in
+                    Button("\(option.id) — \(option.tagline)\(option.id == override ? " ✓" : "")") {
+                        model.setModelOverride(option.id)
+                    }
+                }
+            }
+        } label: {
+            Label(override ?? "模型", systemImage: "cpu")
+                .font(.caption)
+                .foregroundStyle(override == nil ? AppTheme.muted : AppTheme.coral)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("为这个会话单独选择模型（不影响其他会话和全局设置）")
+        .task {
+            await model.refreshChatModelOptions()
+        }
     }
 }
 

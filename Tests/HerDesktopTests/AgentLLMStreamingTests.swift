@@ -9,12 +9,14 @@ final class AgentLLMStreamingTests: XCTestCase {
         /// Non-empty: each request pops the next body (retry-behavior tests).
         nonisolated(unsafe) static var responseQueue: [Data] = []
         nonisolated(unsafe) static var requestCount = 0
+        nonisolated(unsafe) static var lastRequestBody: Data?
 
         override class func canInit(with request: URLRequest) -> Bool { true }
         override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
         override func startLoading() {
             Self.requestCount += 1
+            Self.lastRequestBody = Self.bodyData(of: request)
             let body = Self.responseQueue.isEmpty ? Self.responseBody : Self.responseQueue.removeFirst()
             let response = HTTPURLResponse(
                 url: request.url!,
@@ -28,6 +30,24 @@ final class AgentLLMStreamingTests: XCTestCase {
         }
 
         override func stopLoading() {}
+
+        /// URLSession hands protocols the body as a stream, not httpBody.
+        private static func bodyData(of request: URLRequest) -> Data? {
+            if let body = request.httpBody { return body }
+            guard let stream = request.httpBodyStream else { return nil }
+            stream.open()
+            defer { stream.close() }
+            var data = Data()
+            let size = 16384
+            let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: size)
+            defer { buffer.deallocate() }
+            while stream.hasBytesAvailable {
+                let read = stream.read(buffer, maxLength: size)
+                guard read > 0 else { break }
+                data.append(buffer, count: read)
+            }
+            return data
+        }
     }
 
     override func setUp() {
@@ -173,5 +193,22 @@ extension AgentLLMStreamingTests {
         } catch {
             XCTAssertTrue(error.localizedDescription.contains("No route for model"), error.localizedDescription)
         }
+    }
+}
+
+extension AgentLLMStreamingTests {
+    func testModelOverrideReplacesConfiguredModelInRequestBody() async throws {
+        StreamingMockURLProtocol.statusCode = 200
+        StreamingMockURLProtocol.responseBody = Data("data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"index\":0}]}\n\ndata: [DONE]\n".utf8)
+        let client = makeClient()
+        _ = try await client.chat(messages: [.user("hi")], tools: [], modelOverride: "claude-sonnet") { _ in }
+        let body = try XCTUnwrap(StreamingMockURLProtocol.lastRequestBody)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(object["model"] as? String, "claude-sonnet")
+
+        _ = try await client.chat(messages: [.user("hi")], tools: [], modelOverride: "  ") { _ in }
+        let body2 = try XCTUnwrap(StreamingMockURLProtocol.lastRequestBody)
+        let object2 = try XCTUnwrap(JSONSerialization.jsonObject(with: body2) as? [String: Any])
+        XCTAssertEqual(object2["model"] as? String, HerAppConfig.empty.agentLLMModel)
     }
 }

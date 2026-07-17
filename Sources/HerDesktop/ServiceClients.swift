@@ -382,9 +382,27 @@ protocol AgentLLMChatting {
         tools: [[String: Any]],
         onEvent: @escaping @MainActor (AgentLLMStreamEvent) -> Void
     ) async throws -> AgentLLMChatResponse.Choice.Message
+
+    /// 会话级模型覆盖（nil = 用全局配置的模型）。默认实现忽略覆盖，
+    /// 所以测试里的假客户端无需关心。
+    func chat(
+        messages: [AgentLLMMessage],
+        tools: [[String: Any]],
+        modelOverride: String?,
+        onEvent: @escaping @MainActor (AgentLLMStreamEvent) -> Void
+    ) async throws -> AgentLLMChatResponse.Choice.Message
 }
 
 extension AgentLLMChatting {
+    func chat(
+        messages: [AgentLLMMessage],
+        tools: [[String: Any]],
+        modelOverride: String?,
+        onEvent: @escaping @MainActor (AgentLLMStreamEvent) -> Void
+    ) async throws -> AgentLLMChatResponse.Choice.Message {
+        try await chat(messages: messages, tools: tools, onEvent: onEvent)
+    }
+
     func chat(messages: [AgentLLMMessage], tools: [[String: Any]] = []) async throws -> AgentLLMChatResponse.Choice.Message {
         try await chat(messages: messages, tools: tools, onEvent: { _ in })
     }
@@ -518,10 +536,20 @@ final class AgentLLMClient: AgentLLMChatting {
         tools: [[String: Any]],
         onEvent: @escaping @MainActor (AgentLLMStreamEvent) -> Void
     ) async throws -> AgentLLMChatResponse.Choice.Message {
+        try await chat(messages: messages, tools: tools, modelOverride: nil, onEvent: onEvent)
+    }
+
+    func chat(
+        messages: [AgentLLMMessage],
+        tools: [[String: Any]],
+        modelOverride: String?,
+        onEvent: @escaping @MainActor (AgentLLMStreamEvent) -> Void
+    ) async throws -> AgentLLMChatResponse.Choice.Message {
         guard config.hasLLMKey else { throw ServiceError.missingAPIKey("AgentLLM") }
         let url = config.agentLLMBaseURL.appending(path: "/v1/chat/completions")
+        let overridden = modelOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
         var body: [String: Any] = [
-            "model": config.agentLLMModel,
+            "model": (overridden?.isEmpty == false ? overridden! : config.agentLLMModel),
             "messages": try messages.map { try $0.jsonObject() },
             "temperature": 0.7,
             "stream": true
