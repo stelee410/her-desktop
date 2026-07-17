@@ -83,3 +83,29 @@ final class MessageDeleteTests: XCTestCase {
         XCTAssertEqual(model.messages.count, 1)
     }
 }
+
+@MainActor
+final class SpeechSanitizerTests: XCTestCase {
+    func testStripsFullWidthAndHalfWidthParentheticals() {
+        let text = "（沉默了几秒）\n说实话……我就是被你吸引了。(心动值 72)\n（微微低头）好啦。"
+        XCTAssertEqual(
+            AppViewModel.strippingParentheticals(from: text),
+            "说实话……我就是被你吸引了。\n好啦。"
+        )
+    }
+
+    func testStripsNestedAndKeepsUnpaired() {
+        XCTAssertEqual(
+            AppViewModel.strippingParentheticals(from: "你好（外层（内层）还有）世界"),
+            "你好世界"
+        )
+        XCTAssertEqual(
+            AppViewModel.strippingParentheticals(from: "半个括号 (不配对 保留"),
+            "半个括号 (不配对 保留"
+        )
+    }
+
+    func testAllParentheticalMessageBecomesEmpty() {
+        XCTAssertEqual(AppViewModel.strippingParentheticals(from: "（抬头看着你）"), "")
+    }
+}

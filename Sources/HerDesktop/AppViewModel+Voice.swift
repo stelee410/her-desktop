@@ -205,7 +205,9 @@ extension AppViewModel {
     /// Speak arbitrary text now (per-message 朗读 button + auto-speak both
     /// land here) through the configured TTS backend.
     func speakTextAloud(_ text: String) async {
-        let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // 括号里的内容（角色扮演的动作/心情舞台指示）不播报。
+        let cleanText = Self.strippingParentheticals(from: text)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanText.isEmpty else { return }
         // Close the microphone before any speaker audio starts. This is the
         // other half of the no-overlap invariant enforced by startDictation.
@@ -238,6 +240,25 @@ extension AppViewModel {
         if !Task.isCancelled, connectionState == .speaking {
             connectionState = previousState == .thinking || previousState == .working ? .ready : previousState
         }
+    }
+
+    /// 去掉全角（…）/半角 (…) 括注：角色扮演回复里的舞台指示念出来
+    /// 很出戏。由内向外循环剥离，嵌套括号也能清干净；未配对的括号
+    /// 原样保留。多余的空行和行内连续空格顺手收拢。
+    static func strippingParentheticals(from text: String) -> String {
+        var result = text
+        let pattern = #"（[^（）]*）|\([^()]*\)"#
+        while let range = result.range(of: pattern, options: .regularExpression) {
+            result.removeSubrange(range)
+        }
+        let lines = result
+            .components(separatedBy: .newlines)
+            .map { line in
+                line.replacingOccurrences(of: #"[ \t]{2,}"#, with: " ", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespaces)
+            }
+            .filter { !$0.isEmpty }
+        return lines.joined(separator: "\n")
     }
 
     /// Toggle for the per-bubble 朗读 button: tap to speak, tap again to
