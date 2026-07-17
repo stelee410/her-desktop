@@ -591,10 +591,14 @@ private struct VoicePresenceView: View {
                 .scaleEffect(y: waveScale)
                 .animation(.easeInOut(duration: 0.6), value: waveScale)
             }
+            // Scoped `.animation(value:)` instead of `withAnimation` in
+            // onAppear: a repeatForever transaction opened by withAnimation
+            // leaks into whatever else updates in the same cycle — the
+            // enclosing ScrollView picked it up and its scrollbar oscillated
+            // forever in step with this breathing.
+            .animation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true), value: breathing)
             .onAppear {
-                withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true)) {
-                    breathing = true
-                }
+                breathing = true
             }
             Text(greeting)
                 .font(.system(size: 30, weight: .regular))
