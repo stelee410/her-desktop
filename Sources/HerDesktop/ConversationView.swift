@@ -746,6 +746,7 @@ private struct MessageBubble: View {
     @EnvironmentObject private var model: AppViewModel
     var message: ChatMessage
     var artifacts: [WebServiceArtifact] = []
+    @State private var isHovering = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -823,6 +824,34 @@ private struct MessageBubble: View {
                         .buttonStyle(.plain)
                         .help(isSpeakingThisMessage ? "停止播报" : "朗读这条回复")
                     }
+                    // 复制/删除：悬停出现（占位常驻，不引起布局跳动）。
+                    // 流式中的消息不给按钮——内容还没定型。
+                    if session.streamingAssistantMessageID != message.id {
+                        Button {
+                            let pasteboard = NSPasteboard.general
+                            pasteboard.clearContents()
+                            pasteboard.setString(message.content, forType: .string)
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                                .font(.system(size: 12))
+                                .foregroundStyle(AppTheme.muted)
+                        }
+                        .buttonStyle(.plain)
+                        .help("复制这条消息")
+                        .opacity(isHovering ? 1 : 0)
+                        .disabled(message.content.isEmpty)
+
+                        Button {
+                            model.deleteMessage(message.id)
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 12))
+                                .foregroundStyle(AppTheme.muted)
+                        }
+                        .buttonStyle(.plain)
+                        .help("删除这条消息（会同时从存档移除）")
+                        .opacity(isHovering ? 1 : 0)
+                    }
                 }
             }
             .padding(.horizontal, 16)
@@ -833,6 +862,17 @@ private struct MessageBubble: View {
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(Color.black.opacity(0.05), lineWidth: 1)
             )
+            .onHover { isHovering = $0 }
+            .contextMenu {
+                Button("复制") {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(message.content, forType: .string)
+                }
+                Button("删除", role: .destructive) {
+                    model.deleteMessage(message.id)
+                }
+            }
             if message.role != .user { Spacer(minLength: 70) }
         }
     }

@@ -33,6 +33,23 @@ extension AppViewModel {
         saveSessionSnapshot()
     }
 
+    /// 删除单条消息（气泡上的删除按钮）。同步清理它挂着的待审批项，
+    /// 避免留下无处点按的孤儿审批。
+    func deleteMessage(_ id: UUID) {
+        guard streamingAssistantMessageID != id,
+              let index = messages.firstIndex(where: { $0.id == id }) else { return }
+        let removed = messages.remove(at: index)
+        if let approvalID = removed.approvalID {
+            pendingApprovals.removeAll { $0.id == approvalID }
+        }
+        saveSessionSnapshot()
+        audit(
+            type: "session.message_deleted",
+            summary: "Deleted a \(removed.role.rawValue) message from the transcript.",
+            metadata: ["sessionID": activeConversationID, "chars": String(removed.content.count)]
+        )
+    }
+
     // MARK: - Per-conversation model override
 
     /// 这个会话的专属模型；nil 跟随全局设置。

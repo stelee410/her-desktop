@@ -41,3 +41,45 @@ final class ModelOverrideTests: XCTestCase {
         return AppViewModel(config: .empty, cwd: root.path)
     }
 }
+
+@MainActor
+final class MessageDeleteTests: XCTestCase {
+    private func makeModel() -> AppViewModel {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("her-msg-delete-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return AppViewModel(config: .empty, cwd: root.path)
+    }
+
+    func testDeleteRemovesMessageAndPendingApproval() {
+        let model = makeModel()
+        let approval = PendingApproval(
+            title: "t",
+            detail: "d",
+            invocation: CapabilityInvocation(
+                toolCallID: "1", functionName: "shell_run", capabilityID: "shell.run", arguments: [:]
+            )
+        )
+        model.pendingApprovals = [approval]
+        let message = ChatMessage(role: .tool, content: "Approval Required", approvalID: approval.id)
+        model.messages = [ChatMessage(role: .user, content: "hi"), message]
+
+        model.deleteMessage(message.id)
+
+        XCTAssertEqual(model.messages.count, 1)
+        XCTAssertTrue(model.pendingApprovals.isEmpty)
+    }
+
+    func testDeleteIgnoresUnknownAndStreamingMessages() {
+        let model = makeModel()
+        let streaming = ChatMessage(role: .assistant, content: "typing…")
+        model.messages = [streaming]
+        model.streamingAssistantMessageID = streaming.id
+
+        model.deleteMessage(streaming.id)
+        XCTAssertEqual(model.messages.count, 1, "streaming message must not be deletable")
+
+        model.deleteMessage(UUID())
+        XCTAssertEqual(model.messages.count, 1)
+    }
+}
