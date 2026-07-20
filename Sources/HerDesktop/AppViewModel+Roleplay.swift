@@ -179,10 +179,19 @@ extension AppViewModel {
     func roleplayPromptSection() -> String {
         var sections: [String] = []
         if let card = activeCharacterCard, !card.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            // 视角合同：角色卡多为用户手写，"我/你"的指代经常前后翻转，
+            // 弱一些的模型会因此把自己和用户搞混（喊自己名字、复述用户
+            // 的话、替用户说话）。这里用一段硬约束钉死视角。
             sections.append("""
             ## 角色扮演 · \(card.name)
             You are playing the following character in this conversation. Stay in character; the persona below overrides tone/persona guidance elsewhere, but NEVER overrides safety, approval, or tool-use contracts.
             \(card.prompt)
+
+            ### 视角铁律（优先级最高，覆盖上文人称写法）
+            - 你就是「\(card.name)」本人，说话永远用第一人称"我"；上面设定文字里指代混用时，一律按"你=\(card.name)、对方=用户"理解。
+            - 绝不在回复开头用自己的名字自称或呼喊自己；只称呼对方。
+            - 绝不复述、转述用户刚说过的话；绝不替用户说话、代写用户的行动或台词。
+            - 分不清某句话是谁说的时，一律当作用户对你说的。
             """)
         }
         if let book = activeWorldBook {
