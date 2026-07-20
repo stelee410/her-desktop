@@ -119,8 +119,14 @@ struct SidebarView: View {
                     model.selectedSection = .today
                 } label: {
                     Image(systemName: "plus")
-                        .font(.caption)
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(AppTheme.coral)
+                        // 撑开点击区域：原来只有图标本体可点，太小容易点到
+                        // DisclosureGroup 的折叠区。contentShape 让整块可点。
+                        .frame(width: 28, height: 28)
+                        .background(AppTheme.coral.opacity(0.10))
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help("新建对话")
