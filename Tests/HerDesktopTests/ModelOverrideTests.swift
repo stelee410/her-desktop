@@ -109,3 +109,35 @@ final class SpeechSanitizerTests: XCTestCase {
         XCTAssertEqual(AppViewModel.strippingParentheticals(from: "（抬头看着你）"), "")
     }
 }
+
+@MainActor
+final class NewConversationAfterDeleteTests: XCTestCase {
+    private func makeModel() -> AppViewModel {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("her-newconv-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return AppViewModel(config: .empty, cwd: root.path)
+    }
+
+    func testNewConversationWorksAfterDeletingActive() async {
+        let model = makeModel()
+        // 起点：造几个会话
+        model.newLocalConversation()
+        model.newLocalConversation()
+        let baseline = model.conversations.count
+        XCTAssertGreaterThanOrEqual(baseline, 2)
+
+        // 删除当前活动会话
+        let activeID = model.activeConversationID
+        await model.deleteConversation(activeID, compactingIntoMemory: false)
+        XCTAssertFalse(model.conversations.contains { $0.id == activeID })
+        let afterDelete = model.conversations.count
+
+        // 关键断言：删除后新建仍然能增加一个会话
+        model.newLocalConversation()
+        XCTAssertEqual(model.conversations.count, afterDelete + 1,
+                       "新建对话在删除之后必须仍然创建新会话")
+        XCTAssertFalse(model.isLoadingConversation,
+                       "删除后不应残留 isLoadingConversation=true 卡住状态")
+    }
+}

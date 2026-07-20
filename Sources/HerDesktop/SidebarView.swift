@@ -32,6 +32,14 @@ struct SidebarView: View {
 
             Divider().opacity(0.5)
 
+            // 新建对话用与导航项完全相同的 NavItem 结构——那些导航项一直
+            // 能正常点击，避免之前自定义头部按钮踩到的命中测试问题。
+            NavItem(icon: "plus.circle", title: "新建对话") {
+                model.newLocalConversation()
+                model.selectedSection = .today
+            }
+            .foregroundStyle(AppTheme.coral)
+
             conversationListSection
 
             Spacer()
@@ -110,13 +118,22 @@ struct SidebarView: View {
         // 「+」按钮在 macOS 上收不到点击。改成手动头部——折叠区和按钮
         // 是两个独立控件，各管各的。
         VStack(alignment: .leading, spacing: 0) {
-            ConversationListHeader(
-                isExpanded: $isConversationListExpanded,
-                onNew: {
-                    model.newLocalConversation()
-                    model.selectedSection = .today
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { isConversationListExpanded.toggle() }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: isConversationListExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(AppTheme.muted)
+                    Text("对话")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.ink)
+                    Spacer()
                 }
-            )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, 4)
 
             if isConversationListExpanded {
                 ScrollView {
@@ -301,46 +318,6 @@ private struct ConversationListRow: View {
 /// 「对话」分组头部：折叠开关 + 新建按钮。抽成独立 struct 与 NavItem
 /// 同构——内联在 conversationListSection 里的等价按钮收不到点击（疑似
 /// SwiftUI 对内联闭包按钮的命中测试问题），抽出后正常。
-private struct ConversationListHeader: View {
-    @Binding var isExpanded: Bool
-    var onNew: () -> Void
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(AppTheme.muted)
-                    Text("对话")
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.ink)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            // Spacer 在两个按钮之间——不能塞进折叠按钮的 label，否则它撑满
-            // 整行、contentShape 盖住 + 的命中区，+ 就永远点不到。
-            Spacer()
-
-            Button(action: onNew) {
-                Image(systemName: "plus")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AppTheme.coral)
-                    .frame(width: 28, height: 28)
-                    .background(AppTheme.coral.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 7))
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("新建对话")
-        }
-    }
-}
-
 private struct NavItem: View {
     var icon: String
     var title: String

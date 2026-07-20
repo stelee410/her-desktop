@@ -428,7 +428,8 @@ private struct ToolbarView: View {
                         .foregroundStyle(AppTheme.coral)
                 }
                 .buttonStyle(.plain)
-                .help("新建对话")
+                .keyboardShortcut("n", modifiers: .command)
+                .help("新建对话（⌘N）")
 
                 RoleplaySelectors()
             }
