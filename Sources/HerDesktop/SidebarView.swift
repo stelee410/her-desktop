@@ -63,6 +63,28 @@ struct SidebarView: View {
         // whole sidebar on every re-render and every animation frame, which was
         // the main source of sidebar/open-close lag.
         .background(Color(red: 0.95, green: 0.96, blue: 0.95))
+        // 删除确认对话框挂在 SidebarView 最外层，而不是会话列表子树上：
+        // macOS 的 confirmationDialog 关闭后会在其所在子树留下一个吞点击
+        // 的隐形遮罩——挂在列表子树上会导致删除后「+」新建按钮点不动。
+        .confirmationDialog(
+            "删除对话",
+            isPresented: Binding(
+                get: { conversationPendingDeletion != nil },
+                set: { if !$0 { conversationPendingDeletion = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: conversationPendingDeletion
+        ) { conversation in
+            Button("Compact 并保存记忆后删除") {
+                Task { await model.deleteConversation(conversation.id, compactingIntoMemory: true) }
+            }
+            Button("直接删除", role: .destructive) {
+                Task { await model.deleteConversation(conversation.id, compactingIntoMemory: false) }
+            }
+            Button("取消", role: .cancel) {}
+        } message: { conversation in
+            Text("要删除「\(conversation.title)」吗？删除前可以先把这段对话 compact 成摘要写入长期记忆。")
+        }
     }
 
     /// Conversations grouped by project: each project with conversations
@@ -84,74 +106,45 @@ struct SidebarView: View {
     }
 
     private var conversationListSection: some View {
-        DisclosureGroup(isExpanded: $isConversationListExpanded) {
-            ScrollView {
-                // Lazy: only visible rows build; a long history built every
-                // row (with hover/rename state) eagerly.
-                LazyVStack(alignment: .leading, spacing: 2) {
-                    ForEach(projectGroups, id: \.project.id) { group in
-                        ProjectGroupHeader(project: group.project) {
-                            model.selectedSection = .projects
-                        }
-                        ForEach(group.conversations) { conversation in
-                            conversationRow(conversation)
-                                .padding(.leading, 10)
-                        }
-                    }
-                    if !projectGroups.isEmpty, !ungroupedConversations.isEmpty {
-                        ProjectGroupHeader(project: nil, onOpen: nil)
-                    }
-                    ForEach(ungroupedConversations) { conversation in
-                        conversationRow(conversation)
-                    }
-                }
-                .padding(.top, 4)
-            }
-            .frame(maxHeight: 340)
-        } label: {
-            HStack {
-                Text("对话")
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.ink)
-                Spacer()
-                Button {
+        // 不用 DisclosureGroup：它的 label 会吞掉点击用于折叠，里面的
+        // 「+」按钮在 macOS 上收不到点击。改成手动头部——折叠区和按钮
+        // 是两个独立控件，各管各的。
+        VStack(alignment: .leading, spacing: 0) {
+            ConversationListHeader(
+                isExpanded: $isConversationListExpanded,
+                onNew: {
                     model.newLocalConversation()
                     model.selectedSection = .today
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(AppTheme.coral)
-                        // 撑开点击区域：原来只有图标本体可点，太小容易点到
-                        // DisclosureGroup 的折叠区。contentShape 让整块可点。
-                        .frame(width: 28, height: 28)
-                        .background(AppTheme.coral.opacity(0.10))
-                        .clipShape(RoundedRectangle(cornerRadius: 7))
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .help("新建对话")
+            )
+
+            if isConversationListExpanded {
+                ScrollView {
+                    // Lazy: only visible rows build; a long history built every
+                    // row (with hover/rename state) eagerly.
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        ForEach(projectGroups, id: \.project.id) { group in
+                            ProjectGroupHeader(project: group.project) {
+                                model.selectedSection = .projects
+                            }
+                            ForEach(group.conversations) { conversation in
+                                conversationRow(conversation)
+                                    .padding(.leading, 10)
+                            }
+                        }
+                        if !projectGroups.isEmpty, !ungroupedConversations.isEmpty {
+                            ProjectGroupHeader(project: nil, onOpen: nil)
+                        }
+                        ForEach(ungroupedConversations) { conversation in
+                            conversationRow(conversation)
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+                .frame(maxHeight: 340)
             }
         }
         .tint(AppTheme.muted)
-        .confirmationDialog(
-            "删除对话",
-            isPresented: Binding(
-                get: { conversationPendingDeletion != nil },
-                set: { if !$0 { conversationPendingDeletion = nil } }
-            ),
-            titleVisibility: .visible,
-            presenting: conversationPendingDeletion
-        ) { conversation in
-            Button("Compact 并保存记忆后删除") {
-                Task { await model.deleteConversation(conversation.id, compactingIntoMemory: true) }
-            }
-            Button("直接删除", role: .destructive) {
-                Task { await model.deleteConversation(conversation.id, compactingIntoMemory: false) }
-            }
-            Button("取消", role: .cancel) {}
-        } message: { conversation in
-            Text("要删除「\(conversation.title)」吗？删除前可以先把这段对话 compact 成摘要写入长期记忆。")
-        }
     }
 
     private func conversationRow(_ conversation: ConversationSummary) -> some View {
@@ -302,6 +295,49 @@ private struct ConversationListRow: View {
     private func commitRename() {
         isRenaming = false
         onRename(draftTitle)
+    }
+}
+
+/// 「对话」分组头部：折叠开关 + 新建按钮。抽成独立 struct 与 NavItem
+/// 同构——内联在 conversationListSection 里的等价按钮收不到点击（疑似
+/// SwiftUI 对内联闭包按钮的命中测试问题），抽出后正常。
+private struct ConversationListHeader: View {
+    @Binding var isExpanded: Bool
+    var onNew: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(AppTheme.muted)
+                    Text("对话")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.ink)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            // Spacer 在两个按钮之间——不能塞进折叠按钮的 label，否则它撑满
+            // 整行、contentShape 盖住 + 的命中区，+ 就永远点不到。
+            Spacer()
+
+            Button(action: onNew) {
+                Image(systemName: "plus")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppTheme.coral)
+                    .frame(width: 28, height: 28)
+                    .background(AppTheme.coral.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("新建对话")
+        }
     }
 }
 
