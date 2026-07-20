@@ -245,6 +245,8 @@ final class AppViewModel: ObservableObject, AuditRecording {
     lazy var connectorLiveServer = ConnectorLiveServer()
     var wechatBridgeProcess: Process?
     @Published var wechatConnectorStatus = "未启用"
+    lazy var telegramConnector = TelegramConnector(session: urlSession)
+    @Published var telegramConnectorStatus = "未启用"
     let voiceprintStore: VoiceprintProfileStore
     let voiceprintEnrollmentService = VoiceprintEnrollmentService()
     @Published var voiceprintProfile: VoiceprintProfile?
@@ -470,6 +472,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
         if wechatBridgeProcess != nil {
             stopWeChatConnector()
         }
+        stopTelegramConnector()
     }
 
     /// Launch bootstrap in a model-owned task. SwiftUI `.task` cancels its
@@ -496,6 +499,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
         installPushToTalkMonitors()
         installPasteMonitor()
         startWeChatConnectorIfEnabled()
+        startTelegramConnectorIfEnabled()
         await reloadPlugins()
         await refreshServiceHealth()
     }
@@ -684,6 +688,8 @@ final class AppViewModel: ObservableObject, AuditRecording {
         // 连接器跟随配置：参数可能变了，先停再按新配置启动。
         if wechatBridgeProcess != nil { stopWeChatConnector() }
         startWeChatConnectorIfEnabled()
+        stopTelegramConnector()
+        startTelegramConnectorIfEnabled()
     }
 
     func refreshPluginHealth() {

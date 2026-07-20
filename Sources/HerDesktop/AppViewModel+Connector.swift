@@ -6,7 +6,75 @@ import Foundation
 /// 落在一个专属「微信」会话里，在侧栏可见、可绑角色卡。
 extension AppViewModel {
     static let wechatConversationID = "connector-wechat"
+    static let telegramConversationID = "connector-telegram"
     static let connectorLivePort: UInt16 = 8788
+
+    // MARK: - Telegram
+
+    func startTelegramConnectorIfEnabled() {
+        let token = config.telegramBotToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard config.telegramConnectorEnabled, !token.isEmpty else {
+            stopTelegramConnector()
+            return
+        }
+        guard !telegramConnector.isRunning else { return }
+        let allowed = TelegramAPI.parseAllowedChatIDs(config.telegramAllowedChatIDs)
+        telegramConnector.start(token: token, allowedChatIDs: allowed) { [weak self] message in
+            self?.handleTelegramMessage(message, token: token)
+        }
+        telegramConnectorStatus = "Telegram 运行中（长轮询）"
+        // 顺带校验 token 并显示 bot 名（不阻塞轮询）。
+        Task { [weak self] in
+            guard let self else { return }
+            if let username = try? await telegramConnector.validate(token: token) {
+                telegramConnectorStatus = "Telegram 运行中 · @\(username)"
+            } else {
+                telegramConnectorStatus = "Telegram token 可能无效——收不到消息请检查 token。"
+            }
+        }
+        audit(type: "connector.telegram_started", summary: "Telegram connector started.")
+    }
+
+    func stopTelegramConnector() {
+        if telegramConnector.isRunning {
+            telegramConnector.stop()
+            audit(type: "connector.telegram_stopped", summary: "Telegram connector stopped.")
+        }
+        if !config.telegramConnectorEnabled {
+            telegramConnectorStatus = "未启用"
+        }
+    }
+
+    private func handleTelegramMessage(_ message: TelegramAPI.IncomingMessage, token: String) {
+        let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        // /start 等 bot 命令：给个引导，不喂给模型。
+        if text == "/start" {
+            telegramConnector.sendMessage(token: token, chatID: message.chatID, text: "你好，我是 Her。直接发消息就能聊天～（你的 chat_id 是 \(message.chatID)，可在设置里加入白名单）")
+            return
+        }
+        guard config.hasLLMKey else {
+            telegramConnector.sendMessage(token: token, chatID: message.chatID, text: "Her 还没配置好模型服务，请先在电脑上完成设置。")
+            return
+        }
+        let connector = telegramConnector
+        let chatID = message.chatID
+        // Telegram 不流式：只在 done 时把最终文本发回原 chat。
+        let reply: @Sendable (String, Bool) -> Void = { fullRaw, done in
+            guard done, !fullRaw.isEmpty else { return }
+            connector.sendMessage(token: token, chatID: chatID, text: fullRaw)
+        }
+        Task { @MainActor [weak self] in
+            await self?.runConnectorTurn(
+                text: text,
+                conversationID: Self.telegramConversationID,
+                conversationTitle: "✈️ Telegram",
+                platformName: "Telegram",
+                auditPrefix: "telegram",
+                reply: reply
+            )
+        }
+    }
 
     // MARK: - Lifecycle
 
@@ -154,23 +222,37 @@ extension AppViewModel {
             return
         }
         Task { @MainActor [weak self] in
-            await self?.runConnectorTurn(text: text, reply: reply)
+            await self?.runConnectorTurn(
+                text: text,
+                conversationID: Self.wechatConversationID,
+                conversationTitle: "📱 微信",
+                platformName: "微信",
+                auditPrefix: "wechat",
+                reply: reply
+            )
         }
     }
 
-    private func runConnectorTurn(
+    /// 平台无关的一轮连接器回合：无工具的流式回复 + 记忆召回 + 落专属会话。
+    /// 微信、Telegram 等各平台把消息路由到这里，只需给不同的会话/文案。
+    func runConnectorTurn(
         text: String,
+        conversationID: String,
+        conversationTitle: String,
+        platformName: String,
+        auditPrefix: String,
         reply: @escaping @Sendable (String, Bool) -> Void
     ) async {
-        ensureWeChatConversation()
-        let conversationID = Self.wechatConversationID
+        ensureConnectorConversation(id: conversationID, title: conversationTitle)
         var transcript = await loadConnectorTranscript(id: conversationID)
         let userMessage = ChatMessage(role: .user, content: text)
         transcript.append(userMessage)
         appendToConnectorConversation(userMessage, id: conversationID, transcript: transcript)
 
         let recalled = await retrieveMemory(for: text)
-        var llmMessages: [AgentLLMMessage] = [.system(connectorSystemPrompt(recalled: recalled))]
+        var llmMessages: [AgentLLMMessage] = [
+            .system(connectorSystemPrompt(recalled: recalled, conversationID: conversationID, platformName: platformName))
+        ]
         for message in transcript.suffix(16) where !message.localOnly && !message.content.isEmpty {
             llmMessages.append(message.role == .user ? .user(message.content) : .assistant(content: message.content, toolCalls: []))
         }
@@ -200,19 +282,19 @@ extension AppViewModel {
             transcript.append(assistantMessage)
             appendToConnectorConversation(assistantMessage, id: conversationID, transcript: transcript)
             audit(
-                type: "connector.wechat_reply",
-                summary: "Replied to a WeChat message.",
+                type: "connector.\(auditPrefix)_reply",
+                summary: "Replied to a \(platformName) message.",
                 metadata: ["chars": String(finalText.count)]
             )
         } catch {
             reply("（出错了：\(error.localizedDescription)）", true)
-            audit(type: "connector.wechat_reply_failed", summary: error.localizedDescription)
+            audit(type: "connector.\(auditPrefix)_reply_failed", summary: error.localizedDescription)
         }
     }
 
-    private func connectorSystemPrompt(recalled: String) -> String {
+    private func connectorSystemPrompt(recalled: String, conversationID: String, platformName: String) -> String {
         var parts: [String] = []
-        let summary = conversations.first { $0.id == Self.wechatConversationID }
+        let summary = conversations.first { $0.id == conversationID }
         if let raw = summary?.characterCardID,
            let cardID = UUID(uuidString: raw),
            let card = characterCards.first(where: { $0.id == cardID }),
@@ -224,19 +306,19 @@ extension AppViewModel {
         if !recalled.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             parts.append("你对用户的长期记忆（自然运用，不要照本宣科）：\n\(String(recalled.prefix(1200)))")
         }
-        parts.append("你正在通过微信和用户聊天。像发微信一样回复：简短、口语化、直接说重点；不要用 markdown 标记（会原样显示）；不要念动作或括号舞台指示。")
+        parts.append("你正在通过\(platformName)和用户聊天。像发消息一样回复：简短、口语化、直接说重点；不要用 markdown 标记（会原样显示）；不要念动作或括号舞台指示。")
         return parts.joined(separator: "\n\n")
     }
 
     // MARK: - Conversation plumbing
 
     /// 专属会话在侧栏可见，用户可以点开围观、绑角色卡、选模型。
-    private func ensureWeChatConversation() {
-        guard !conversations.contains(where: { $0.id == Self.wechatConversationID }) else { return }
+    private func ensureConnectorConversation(id: String, title: String) {
+        guard !conversations.contains(where: { $0.id == id }) else { return }
         conversations.insert(
             ConversationSummary(
-                id: Self.wechatConversationID,
-                title: "📱 微信",
+                id: id,
+                title: title,
                 pinned: false,
                 createdAt: Date(),
                 updatedAt: Date()

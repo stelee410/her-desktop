@@ -630,6 +630,12 @@ struct HerAppConfig: Codable, Equatable {
     var wechatBotNames: String
     /// 群聊策略：ignore / mention / all。
     var wechatGroupMode: String
+    /// Telegram 连接器：官方 Bot API（HTTP 长轮询），无需外部进程。
+    var telegramConnectorEnabled: Bool
+    /// @BotFather 给的 bot token（形如 123456:ABC...）。
+    var telegramBotToken: String
+    /// 允许对话的 chat_id 白名单（逗号分隔，留空=不限）。
+    var telegramAllowedChatIDs: String
 
     var hasLLMKey: Bool { !agentLLMAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var hasMemKey: Bool { !agentMemAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -665,7 +671,10 @@ struct HerAppConfig: Codable, Equatable {
         wechatConnectorEnabled: Bool = false,
         wechatBridgeDirectory: String = "",
         wechatBotNames: String = "",
-        wechatGroupMode: String = "mention"
+        wechatGroupMode: String = "mention",
+        telegramConnectorEnabled: Bool = false,
+        telegramBotToken: String = "",
+        telegramAllowedChatIDs: String = ""
     ) {
         self.agentLLMBaseURL = agentLLMBaseURL
         self.agentLLMAPIKey = agentLLMAPIKey
@@ -696,6 +705,9 @@ struct HerAppConfig: Codable, Equatable {
         self.wechatBridgeDirectory = wechatBridgeDirectory
         self.wechatBotNames = wechatBotNames
         self.wechatGroupMode = wechatGroupMode
+        self.telegramConnectorEnabled = telegramConnectorEnabled
+        self.telegramBotToken = telegramBotToken
+        self.telegramAllowedChatIDs = telegramAllowedChatIDs
     }
 
     enum CodingKeys: String, CodingKey {
@@ -728,6 +740,9 @@ struct HerAppConfig: Codable, Equatable {
         case wechatBridgeDirectory
         case wechatBotNames
         case wechatGroupMode
+        case telegramConnectorEnabled
+        case telegramBotToken
+        case telegramAllowedChatIDs
     }
 
     init(from decoder: Decoder) throws {
@@ -764,6 +779,9 @@ struct HerAppConfig: Codable, Equatable {
         wechatBridgeDirectory = try container.decodeIfPresent(String.self, forKey: .wechatBridgeDirectory) ?? ""
         wechatBotNames = try container.decodeIfPresent(String.self, forKey: .wechatBotNames) ?? ""
         wechatGroupMode = try container.decodeIfPresent(String.self, forKey: .wechatGroupMode) ?? "mention"
+        telegramConnectorEnabled = try container.decodeIfPresent(Bool.self, forKey: .telegramConnectorEnabled) ?? false
+        telegramBotToken = try container.decodeIfPresent(String.self, forKey: .telegramBotToken) ?? ""
+        telegramAllowedChatIDs = try container.decodeIfPresent(String.self, forKey: .telegramAllowedChatIDs) ?? ""
     }
 
     static let empty = HerAppConfig(
@@ -808,6 +826,9 @@ struct HerAppConfigDraft: Equatable {
     var wechatBridgeDirectory: String
     var wechatBotNames: String
     var wechatGroupMode: String
+    var telegramConnectorEnabled: Bool
+    var telegramBotToken: String
+    var telegramAllowedChatIDs: String
 
     init(config: HerAppConfig) {
         self.agentLLMBaseURL = config.agentLLMBaseURL.absoluteString
@@ -839,6 +860,9 @@ struct HerAppConfigDraft: Equatable {
         self.wechatBridgeDirectory = config.wechatBridgeDirectory
         self.wechatBotNames = config.wechatBotNames
         self.wechatGroupMode = config.wechatGroupMode
+        self.telegramConnectorEnabled = config.telegramConnectorEnabled
+        self.telegramBotToken = config.telegramBotToken
+        self.telegramAllowedChatIDs = config.telegramAllowedChatIDs
     }
 
     func makeConfig() throws -> HerAppConfig {
@@ -885,7 +909,10 @@ struct HerAppConfigDraft: Equatable {
             wechatConnectorEnabled: wechatConnectorEnabled,
             wechatBridgeDirectory: (wechatBridgeDirectory.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath,
             wechatBotNames: wechatBotNames.trimmingCharacters(in: .whitespacesAndNewlines),
-            wechatGroupMode: ["ignore", "mention", "all"].contains(wechatGroupMode) ? wechatGroupMode : "mention"
+            wechatGroupMode: ["ignore", "mention", "all"].contains(wechatGroupMode) ? wechatGroupMode : "mention",
+            telegramConnectorEnabled: telegramConnectorEnabled,
+            telegramBotToken: telegramBotToken.trimmingCharacters(in: .whitespacesAndNewlines),
+            telegramAllowedChatIDs: telegramAllowedChatIDs.trimmingCharacters(in: .whitespacesAndNewlines)
         )
     }
 

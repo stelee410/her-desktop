@@ -11,11 +11,22 @@ struct ConnectionsWorkspaceView: View {
     @State private var groupMode = "mention"
     @State private var isSaving = false
 
+    @State private var tgEnabled = false
+    @State private var tgToken = ""
+    @State private var tgAllowed = ""
+    @State private var tgSaving = false
+
     private var isDirty: Bool {
         enabled != model.config.wechatConnectorEnabled
             || bridgeDirectory != model.config.wechatBridgeDirectory
             || botNames != model.config.wechatBotNames
             || groupMode != model.config.wechatGroupMode
+    }
+
+    private var tgDirty: Bool {
+        tgEnabled != model.config.telegramConnectorEnabled
+            || tgToken != model.config.telegramBotToken
+            || tgAllowed != model.config.telegramAllowedChatIDs
     }
 
     var body: some View {
@@ -26,8 +37,12 @@ struct ConnectionsWorkspaceView: View {
                     value: model.wechatBridgeProcess != nil ? "运行中" : (model.config.wechatConnectorEnabled ? "未运行" : "未启用"),
                     icon: "message"
                 )
-                WorkspaceMetric(title: "本地端口", value: "\(AppViewModel.connectorLivePort)", icon: "network")
-                WorkspaceMetric(title: "专属会话", value: "📱 微信", icon: "bubble.left.and.bubble.right")
+                WorkspaceMetric(
+                    title: "Telegram",
+                    value: model.telegramConnector.isRunning ? "在线" : (model.config.telegramConnectorEnabled ? "未运行" : "未启用"),
+                    icon: "paperplane"
+                )
+                WorkspaceMetric(title: "专属会话", value: "📱 ✈️", icon: "bubble.left.and.bubble.right")
             }
 
             WorkspacePanel(title: "微信", trailing: model.wechatBridgeProcess != nil ? "在线" : "离线") {
@@ -85,6 +100,54 @@ struct ConnectionsWorkspaceView: View {
                 }
             }
 
+            WorkspacePanel(title: "Telegram", trailing: model.telegramConnector.isRunning ? "在线" : "离线") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle("启用 Telegram Bot", isOn: $tgEnabled)
+                        .toggleStyle(.switch)
+                        .tint(AppTheme.coral)
+
+                    SecureField("Bot token（@BotFather 提供，形如 123456:ABC…）", text: $tgToken)
+                        .textFieldStyle(.roundedBorder)
+                    TextField("允许的 chat_id 白名单（逗号分隔，留空=不限）", text: $tgAllowed)
+                        .textFieldStyle(.roundedBorder)
+
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(model.telegramConnector.isRunning ? Color.green : AppTheme.muted)
+                            .frame(width: 7, height: 7)
+                        Text(model.telegramConnectorStatus)
+                            .font(.caption2)
+                            .foregroundStyle(AppTheme.muted)
+                            .lineLimit(2)
+                            .textSelection(.enabled)
+                        Spacer()
+                        Button {
+                            Task {
+                                tgSaving = true
+                                var draft = HerAppConfigDraft(config: model.config)
+                                draft.telegramConnectorEnabled = tgEnabled
+                                draft.telegramBotToken = tgToken
+                                draft.telegramAllowedChatIDs = tgAllowed
+                                await model.saveConfiguration(draft)
+                                syncFromConfig()
+                                tgSaving = false
+                            }
+                        } label: {
+                            Label(tgSaving ? "保存中" : "保存并应用", systemImage: "checkmark.circle")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(AppTheme.coral)
+                        .controlSize(.small)
+                        .disabled(tgSaving || !tgDirty)
+                    }
+
+                    Text("在 Telegram 里找 @BotFather → /newbot 建一个 bot，把它给的 token 填进来即可。消息进入侧栏「✈️ Telegram」会话——可绑角色卡、单独选模型。首次给 bot 发 /start 会回你的 chat_id，填进白名单只让自己用。")
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             WorkspacePanel(title: "更多平台", trailing: "规划中") {
                 VStack(spacing: 8) {
                     EmptyWorkspaceLine(icon: "gamecontroller", text: "Discord — 即将支持")
@@ -101,5 +164,8 @@ struct ConnectionsWorkspaceView: View {
         bridgeDirectory = model.config.wechatBridgeDirectory
         botNames = model.config.wechatBotNames
         groupMode = model.config.wechatGroupMode
+        tgEnabled = model.config.telegramConnectorEnabled
+        tgToken = model.config.telegramBotToken
+        tgAllowed = model.config.telegramAllowedChatIDs
     }
 }
