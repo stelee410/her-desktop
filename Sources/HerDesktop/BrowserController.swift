@@ -136,7 +136,7 @@ final class BrowserController: ObservableObject, BrowserBridging {
     private func launch() async throws {
         // SwiftPM's .process flattens Resources into the bundle root, so
         // resolve the sidecar script by name rather than by subdirectory.
-        guard let sidecar = Bundle.module.url(forResource: "server", withExtension: "py"),
+        guard let sidecar = Bundle.herResources.url(forResource: "server", withExtension: "py"),
               FileManager.default.fileExists(atPath: sidecar.path) else {
             phase = .failed("sidecar missing")
             throw BrowserError.sidecarMissing

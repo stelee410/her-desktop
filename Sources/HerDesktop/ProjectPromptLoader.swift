@@ -60,7 +60,7 @@ enum ProjectPromptLoader {
     }
 
     private static func bundledResources(named name: String, extension ext: String) -> [PromptDocumentCandidate] {
-        guard let url = Bundle.module.url(forResource: name, withExtension: ext) else { return [] }
+        guard let url = Bundle.herResources.url(forResource: name, withExtension: ext) else { return [] }
         return [candidate(url, source: "bundled/\(name).\(ext)")]
     }
 

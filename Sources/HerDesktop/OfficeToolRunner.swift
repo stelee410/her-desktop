@@ -55,7 +55,7 @@ actor OfficeToolRunner {
     /// 返回脚本 stdout 的 JSON 对象字节（调用方自行解析）。
     func run(tool: String, payloadJSON: Data, timeout: TimeInterval = 90) async throws -> Data {
         try await ensureReady()
-        guard let script = Bundle.module.url(forResource: "office_tool", withExtension: "py") else {
+        guard let script = Bundle.herResources.url(forResource: "office_tool", withExtension: "py") else {
             throw OfficeError.scriptMissing
         }
         let payloadFile = FileManager.default.temporaryDirectory

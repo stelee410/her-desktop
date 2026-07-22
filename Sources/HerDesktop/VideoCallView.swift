@@ -224,7 +224,7 @@ private struct CallWebView: NSViewRepresentable {
         webView.uiDelegate = context.coordinator
         webView.navigationDelegate = context.coordinator
         webView.setValue(false, forKey: "drawsBackground")
-        if let url = Bundle.module.url(forResource: "vidu-call", withExtension: "html"),
+        if let url = Bundle.herResources.url(forResource: "vidu-call", withExtension: "html"),
            let html = try? String(contentsOf: url, encoding: .utf8) {
             // 假 https 源：让页面拿到 secure context，否则 getUserMedia 不可用。
             webView.loadHTMLString(html, baseURL: URL(string: "https://vidu-call.her.local/"))

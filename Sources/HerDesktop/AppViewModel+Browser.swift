@@ -129,7 +129,7 @@ extension AppViewModel {
         for name in names {
             let base = (name as NSString).deletingPathExtension
             let ext = (name as NSString).pathExtension
-            guard let source = Bundle.module.url(forResource: base, withExtension: ext) else { continue }
+            guard let source = Bundle.herResources.url(forResource: base, withExtension: ext) else { continue }
             let target = destination.appendingPathComponent(name)
             try? FileManager.default.removeItem(at: target)
             try? FileManager.default.copyItem(at: source, to: target)

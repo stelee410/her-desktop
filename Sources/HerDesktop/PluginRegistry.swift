@@ -211,7 +211,7 @@ final class PluginRegistry {
     }
 
     private func bundledBuiltInPlugins() -> [PluginManifest] {
-        if let directory = Bundle.module.url(
+        if let directory = Bundle.herResources.url(
             forResource: "BuiltinPlugins",
             withExtension: nil
         ) {
@@ -229,7 +229,7 @@ final class PluginRegistry {
     }
 
     private func bundledFlatPluginManifests() -> [PluginManifest] {
-        let urls = Bundle.module.urls(forResourcesWithExtension: "json", subdirectory: nil) ?? []
+        let urls = Bundle.herResources.urls(forResourcesWithExtension: "json", subdirectory: nil) ?? []
         return decodePluginManifests(from: urls)
     }
 
@@ -272,9 +272,9 @@ final class PluginRegistry {
         if let dot = name.lastIndex(of: ".") {
             let base = String(name[..<dot])
             let ext = String(name[name.index(after: dot)...])
-            url = Bundle.module.url(forResource: base, withExtension: ext)
+            url = Bundle.herResources.url(forResource: base, withExtension: ext)
         } else {
-            url = Bundle.module.url(forResource: name, withExtension: nil)
+            url = Bundle.herResources.url(forResource: name, withExtension: nil)
         }
         guard let url else { return nil }
         return try? String(contentsOf: url, encoding: .utf8)
