@@ -1,10 +1,39 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// Thin JSON container so SwiftUI's `.fileExporter` can write the settings
+/// document the user picks a location for.
+struct SettingsBackupDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.json] }
+
+    var data: Data
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let contents = configuration.file.regularFileContents else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        data = contents
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var model: AppViewModel
     @State private var draft = HerAppConfigDraft(config: .empty)
     @State private var isSaving = false
+    @State private var isExporting = false
+    @State private var isImporting = false
+    @State private var exportDocument: SettingsBackupDocument?
+    @State private var exportFilename = "Her-Settings.json"
+    @State private var portabilityNote: String?
+    @State private var portabilityIsError = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -60,7 +89,34 @@ struct SettingsView: View {
                     .textSelection(.enabled)
             }
 
+            if let portabilityNote {
+                Label(portabilityNote, systemImage: portabilityIsError ? "exclamationmark.triangle" : "checkmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(portabilityIsError ? AppTheme.coral : .green)
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+            }
+
             HStack {
+                Menu {
+                    Button {
+                        beginExport()
+                    } label: {
+                        Label("导出设置…", systemImage: "square.and.arrow.up")
+                    }
+                    Button {
+                        isImporting = true
+                    } label: {
+                        Label("导入设置…", systemImage: "square.and.arrow.down")
+                    }
+                } label: {
+                    Label("备份", systemImage: "arrow.up.arrow.down")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .disabled(isSaving)
+                .help("导出当前设置为文件，或从另一台电脑导出的文件导入。文件含 API 密钥，请妥善保管。")
+
                 Button {
                     draft = HerAppConfigDraft(config: model.config)
                 } label: {
@@ -102,6 +158,68 @@ struct SettingsView: View {
         .onChange(of: model.config) { _, newConfig in
             draft = HerAppConfigDraft(config: newConfig)
         }
+        .fileExporter(
+            isPresented: $isExporting,
+            document: exportDocument,
+            contentType: .json,
+            defaultFilename: exportFilename
+        ) { result in
+            switch result {
+            case .success:
+                setPortabilityNote("设置已导出。文件含 API 密钥，请妥善保管。", isError: false)
+            case .failure(let error):
+                setPortabilityNote("导出失败：\(error.localizedDescription)", isError: true)
+            }
+            exportDocument = nil
+        }
+        .fileImporter(
+            isPresented: $isImporting,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
+            handleImport(result)
+        }
+    }
+
+    /// Snapshot the live config into a document and open the save panel.
+    private func beginExport() {
+        let now = Date()
+        do {
+            let data = try SettingsPortability.exportData(config: model.config, exportedAt: now)
+            exportDocument = SettingsBackupDocument(data: data)
+            exportFilename = SettingsPortability.suggestedFilename(for: now)
+            portabilityNote = nil
+            isExporting = true
+        } catch {
+            setPortabilityNote("导出失败：\(error.localizedDescription)", isError: true)
+        }
+    }
+
+    private func handleImport(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result, let url = urls.first else {
+            if case .failure(let error) = result {
+                setPortabilityNote("导入失败：\(error.localizedDescription)", isError: true)
+            }
+            return
+        }
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let data = try Data(contentsOf: url)
+            let imported = try SettingsPortability.importConfig(from: data)
+            Task {
+                await model.saveConfiguration(HerAppConfigDraft(config: imported))
+                draft = HerAppConfigDraft(config: model.config)
+                setPortabilityNote("设置已导入并应用。", isError: false)
+            }
+        } catch {
+            setPortabilityNote("导入失败：\(error.localizedDescription)", isError: true)
+        }
+    }
+
+    private func setPortabilityNote(_ text: String, isError: Bool) {
+        portabilityNote = text
+        portabilityIsError = isError
     }
 
     private var statusIcon: String {
