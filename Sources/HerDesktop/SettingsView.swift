@@ -77,6 +77,8 @@ struct SettingsView: View {
                     HerConfigurationFields(draft: $draft, presentation: .settings)
                     Divider()
                     VoiceprintSettingsSection()
+                    Divider()
+                    AppUpdateSettingsSection()
                 }
                 .padding(.trailing, 8)
             }
@@ -301,6 +303,108 @@ private struct VoiceprintSettingsSection: View {
                     .foregroundStyle(AppTheme.muted)
             }
             Text("轻量过滤，不属于安全认证，无法防止他人播放你的录音。首次匹配会带来约 1.5 秒延迟。")
+                .font(.caption2)
+                .foregroundStyle(AppTheme.muted)
+        }
+    }
+}
+
+/// 关于与更新：显示当前版本、检查 GitHub 上的最新发布、一键下载并安装。
+private struct AppUpdateSettingsSection: View {
+    @EnvironmentObject private var model: AppViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("关于与更新", systemImage: "arrow.triangle.2.circlepath")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppTheme.ink)
+
+            HStack(spacing: 8) {
+                Text("当前版本 v\(model.currentAppVersion)")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.muted)
+                Spacer()
+                Button {
+                    Task { await model.checkForUpdates(userInitiated: true) }
+                } label: {
+                    Label("检查更新", systemImage: "arrow.clockwise")
+                }
+                .controlSize(.small)
+                .disabled(isBusy)
+            }
+
+            statusView
+        }
+    }
+
+    private var isBusy: Bool {
+        switch model.updateState {
+        case .checking, .downloading, .installing: return true
+        default: return false
+        }
+    }
+
+    @ViewBuilder
+    private var statusView: some View {
+        switch model.updateState {
+        case .idle:
+            EmptyView()
+        case .checking:
+            Label("正在检查…", systemImage: "hourglass")
+                .font(.caption2)
+                .foregroundStyle(AppTheme.muted)
+        case .upToDate(let version):
+            Label("已是最新版本（v\(version)）", systemImage: "checkmark.circle")
+                .font(.caption2)
+                .foregroundStyle(.green)
+        case .available(let release):
+            availableView(release)
+        case .downloading(let fraction):
+            VStack(alignment: .leading, spacing: 4) {
+                ProgressView(value: fraction)
+                Text("正在下载 \(Int(fraction * 100))%…")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.muted)
+            }
+        case .installing:
+            Label("正在安装，应用即将自动重启…", systemImage: "gearshape.2")
+                .font(.caption2)
+                .foregroundStyle(AppTheme.muted)
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.triangle")
+                .font(.caption2)
+                .foregroundStyle(AppTheme.coral)
+                .textSelection(.enabled)
+        }
+    }
+
+    @ViewBuilder
+    private func availableView(_ release: AppUpdater.Release) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Label("发现新版本 v\(release.version)", systemImage: "sparkles")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(AppTheme.coral)
+                Link("发布说明", destination: release.htmlURL)
+                    .font(.caption2)
+                Spacer()
+                Button {
+                    Task { await model.downloadAndInstallUpdate() }
+                } label: {
+                    Label("下载并安装", systemImage: "square.and.arrow.down")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppTheme.coral)
+                .controlSize(.small)
+            }
+            if !release.notes.isEmpty {
+                Text(release.notes)
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.muted)
+                    .lineLimit(4)
+                    .textSelection(.enabled)
+            }
+            Text("将自动下载官方签名安装包、校验后替换当前应用并重启。")
                 .font(.caption2)
                 .foregroundStyle(AppTheme.muted)
         }

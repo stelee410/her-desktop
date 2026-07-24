@@ -247,6 +247,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
     @Published var wechatConnectorStatus = "未启用"
     lazy var telegramConnector = TelegramConnector(session: urlSession)
     @Published var telegramConnectorStatus = "未启用"
+    @Published var updateState: AppUpdateState = .idle
     let voiceprintStore: VoiceprintProfileStore
     let voiceprintEnrollmentService = VoiceprintEnrollmentService()
     @Published var voiceprintProfile: VoiceprintProfile?
@@ -502,6 +503,7 @@ final class AppViewModel: ObservableObject, AuditRecording {
         startTelegramConnectorIfEnabled()
         await reloadPlugins()
         await refreshServiceHealth()
+        Task { await checkForUpdates(userInitiated: false) }
     }
 
     func saveConfiguration(_ draft: HerAppConfigDraft) async {
